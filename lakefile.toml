@@ -1,6 +1,6 @@
 name = "«lean4-scalar-arrays»"
 version = "1.0.0"
-defaultTargets = ["ScalarArray"]
+defaultTargets = ["ScalarArray", "ScalarArrayTest"]
 testDriver = "ScalarArrayTest"
 
 [[lean_lib]]
@@ -9,3 +9,8 @@ name = "ScalarArray"
 [[lean_lib]]
 name = "ScalarArrayTest"
 precompileModules = true
+
+[[require]]
+name = "batteries"
+git = "https://github.com/leanprover-community/batteries"
+rev = "main"

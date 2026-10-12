@@ -1,6 +1,6 @@
 # Lean 4 / Scalar Arrays
 
-[![CI](https://github.com/fgdorais/lean4-scalar-arrays/actions/workflows/lean_action_ci.yml/badge.svg)](https://github.com/fgdorais/lean4-scalar-arrays/actions/workflows/lean_action_ci.yml)
+[![CI](https://github.com/fgdorais/lean4-scalar-arrays/actions/workflows/cd-pipeline.yml/badge.svg)](https://github.com/fgdorais/lean4-scalar-arrays/actions/workflows/cd-pipeline.yml)
 
 Compact, unboxed arrays of machine integers and floats for Lean 4.
 
@@ -30,8 +30,9 @@ in-place updates, and have a simple `Array`-based model for proofs.
 
 ## Installation
 
-The library uses the Lean module system and needs the toolchain pinned in `lean-toolchain`
-(currently `v4.35.0-rc4`) or later. Add it to your `lakefile.toml`:
+The library is a Batteries cell: the `main` branch follows the Lean toolchain of Batteries `main`,
+and the `nightly-testing` branch follows Batteries `nightly-testing` and the latest Lean nightly,
+so it can be used together with Batteries. Add it to your `lakefile.toml`:
 
 ```toml
 [[require]]
@@ -105,7 +106,8 @@ lake build
 lake test
 ```
 
-The tests in `ScalarArrayTest` are `#guard` checks that run when the test library is built. The
+The tests in `ScalarArrayTest` are `#guard` checks that run when the test library is built, so
+`lake build` runs them as well, and CI builds with `--wfail`. The
 library uses `precompileModules`, so the checks call the compiled C implementation rather than
 evaluating the Lean model. They cover every operation, sharing (writes to a shared array must
 not affect other references to it), indices beyond 16 bits, huge `Nat` indices, the runtime
