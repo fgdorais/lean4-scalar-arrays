@@ -1,0 +1,11 @@
+name = "«lean4-scalar-arrays»"
+version = "1.0.0"
+defaultTargets = ["ScalarArray"]
+testDriver = "ScalarArrayTest"
+
+[[lean_lib]]
+name = "ScalarArray"
+
+[[lean_lib]]
+name = "ScalarArrayTest"
+precompileModules = true
