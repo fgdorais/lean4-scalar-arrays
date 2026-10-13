@@ -827,6 +827,19 @@ public def _root_.Std.Iter.toInt8Array {α : Type} [Std.Iterator α Id Int8]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int8) : Int8Array :=
   it.fold (·.push ·) empty
 
+/--
+Collects the values emitted by an iterator into a new array that starts with room for `capacity`
+elements, like `Std.Iter.toInt8Array`.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toInt8ArrayWithCapacity {α : Type} [Std.Iterator α Id Int8]
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int8) (capacity : Nat) : Int8Array :=
+  it.fold (·.push ·) (emptyWithCapacity capacity)
+
+@[simp] public theorem _root_.Std.Iter.toInt8ArrayWithCapacity_eq {α : Type}
+    [Std.Iterator α Id Int8] [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int8)
+    (capacity : Nat) : it.toInt8ArrayWithCapacity capacity = it.toInt8Array := rfl
+
 @[simp] public theorem size_mk (a : Array Int8) : (mk a).size = a.size := rfl
 
 @[simp] public theorem data_mk (a : Array Int8) : (mk a).data = a := rfl

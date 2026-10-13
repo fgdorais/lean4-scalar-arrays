@@ -562,3 +562,5 @@ example (s : Int16Array.Slice) : s.copy.size = s.size := by simp
   let xs := (Array.range 100000).map Nat.toInt16
   ((Int16Array.mk xs).iter.map (· + 1)).toInt16Array.data == xs.map (· + 1)
 #guard rawElemSize ((Int16Array.mk #[1]).iter.toInt16Array) == (2 : UInt32)
+#guard ((Int16Array.mk #[1, 2, 3]).iter.toInt16ArrayWithCapacity 100) == Int16Array.mk #[1, 2, 3]
+#guard rawCapacity ((Int16Array.mk #[1, 2, 3]).iter.toInt16ArrayWithCapacity 100) ≥ 100
