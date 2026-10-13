@@ -72,10 +72,10 @@ private unsafe def mkWithCapacityImpl (a : Array Float32) (capacity : Nat := a.s
   let cap := toUSizeChecked capacity
   let sz := toUSizeChecked a.size
   let r : Float32Array := unsafeCast <| ScalarArray.allocate 4 sz (max sz cap) lcProof
-  loop r 0
+  loop sz r 0
 where
-  loop (r : Float32Array) (i : Nat) : Float32Array :=
-    if h : i < a.size then loop (setFloat32Unsafe r i.toUSize a[i]) (i + 1) else r
+  loop (sz : USize) (r : Float32Array) (i : USize) : Float32Array :=
+    if i < sz then loop sz (setFloat32Unsafe r i (a.uget i lcProof)) (i + 1) else r
 
 private unsafe def mkImpl (a : Array Float32) : Float32Array :=
   mkWithCapacityImpl a a.size
@@ -83,10 +83,10 @@ private unsafe def mkImpl (a : Array Float32) : Float32Array :=
 attribute [implemented_by mkImpl] Float32Array.mk
 
 private unsafe def dataImpl (a : @& Float32Array) : Array Float32 :=
-  loop 0 (Array.emptyWithCapacity a.size)
+  loop a.usize 0 (Array.replicate a.size default)
 where
-  loop (i : USize) (r : Array Float32) : Array Float32 :=
-    if h : i.toNat < a.size then loop (i + 1) (r.push (a.uget i h)) else r
+  loop (sz i : USize) (r : Array Float32) : Array Float32 :=
+    if i < sz then loop sz (i + 1) (r.uset i (a.uget i lcProof) lcProof) else r
 
 /-- The elements of `a` as an `Array Float32`. -/
 @[implemented_by dataImpl, expose]
