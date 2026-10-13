@@ -108,8 +108,9 @@ directly, without building an `Array`.
 `ofFloatArray` and `FloatArray.toFloat64Array` (`import ScalarArray.Conversions`). These conversions
 never copy, so core's functions can be used directly on these arrays and vice versa.
 
-Slices are `Std.Slice`s, like core's `Subarray`, so they work with the generic slice API. Taking a
-slice never copies the array; `Slice.copy` makes a new array with a single `memcpy`.
+Slices are `Std.Slice`s, like core's `Subarray`, so they work with the generic slice API and core's
+range notation `a[i...j]` (the older `a[i:j]` notation only applies to `Array`). Taking a slice
+never copies the array; `Slice.copy` makes a new array with a single `memcpy`.
 
 Arrays and slices also have iterators, so the `Std.Iterators` combinators cover operations that
 don't have their own function here, and `Std.Iter.toXArray` turns the result back into an array:
@@ -124,9 +125,6 @@ a.iter.length                                -- size
 
 `Std.Iter.toXArrayWithCapacity` allocates up front when the number of elements is known or
 bounded, for example `(a.iter.map f).toUInt32ArrayWithCapacity a.size`.
-
-Slices use core's range notation, `a[i...j]`. The older `a[i:j]` notation is specific to `Array`
-and doesn't apply to these arrays.
 
 Equality on the integer types compares the arrays' memory with `memcmp`, and their hash agrees
 with the hash of `data`. `Float32Array` and `Float64Array` compare elements with floating-point
