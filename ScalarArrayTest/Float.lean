@@ -13,9 +13,11 @@ def float32Specials : Array Float32 :=
   #[0.0, -0.0, 0.0 / 0.0, -(0.0 / 0.0), 1.0 / 0.0, -1.0 / 0.0, 1.0e-45, 3.4028235e38, 0.1]
 
 def float64Specials : Array Float :=
-  #[0.0, -0.0, 0.0 / 0.0, -(0.0 / 0.0), 1.0 / 0.0, -1.0 / 0.0, 5.0e-324, 1.7976931348623157e308, 0.1]
+  #[0.0, -0.0, 0.0 / 0.0, -(0.0 / 0.0), 1.0 / 0.0, -1.0 / 0.0, 5.0e-324, 1.7976931348623157e308,
+    0.1]
 
-#guard (Float32Array.mk float32Specials).data.map Float32.toBits == float32Specials.map Float32.toBits
+#guard (Float32Array.mk float32Specials).data.map Float32.toBits ==
+  float32Specials.map Float32.toBits
 #guard (Float64Array.mk float64Specials).data.map Float.toBits == float64Specials.map Float.toBits
 
 #guard Id.run do
@@ -42,4 +44,5 @@ def float64Specials : Array Float :=
 #guard Float64Array.mk #[0.0] == Float64Array.mk #[-0.0]
 #guard !(Float32Array.mk #[0.0 / 0.0]).contains (0.0 / 0.0)
 #guard !(Float64Array.mk #[0.0 / 0.0]).contains (0.0 / 0.0)
-#guard (Float64Array.mk #[1.0, 2.0] == Float64Array.mk #[1.0, 2.0]) == (#[(1.0 : Float), 2.0] == #[1.0, 2.0])
+#guard (Float64Array.mk #[1.0, 2.0] == Float64Array.mk #[1.0, 2.0]) ==
+  (#[(1.0 : Float), 2.0] == #[1.0, 2.0])

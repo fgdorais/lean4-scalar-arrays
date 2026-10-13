@@ -10,13 +10,13 @@ public import Std.Data.Iterators
 /-!
 # Arrays of `Float`
 
-`ScalarArray.Float64Array` stores `Float` values unboxed, 8 bytes per element, in a Lean runtime
-scalar array. Its logical model is `Array Float`: `Float64Array.mk` and `Float64Array.data` convert
-between the two, and every operation is specified by its effect on the model.
+`ScalarArray.Float64Array` stores `Float` values unboxed in a Lean runtime scalar array,
+8 bytes per element. Its logical model is `Array Float`: `Float64Array.mk` and
+`Float64Array.data` convert between the two, and every operation is specified by its effect on
+the model.
 
-The runtime representation is a `ScalarArray` with element size 8. Reads and in-place writes
-are inline C. `uset`, `set` and `push` update the array in place when it is not shared and copy
-it otherwise, like `Array` and `ByteArray`.
+Reads and in-place writes are inline C. `uset`, `set` and `push` update the array in place when it
+is not shared and copy it otherwise, like `Array` and `ByteArray`.
 
 `Float64Array` has the same runtime representation as the core `FloatArray`, with the same API
 as the other arrays in this library.
@@ -25,7 +25,7 @@ as the other arrays in this library.
 namespace ScalarArray
 
 /--
-Arrays of `Float` values, stored unboxed in a scalar array with element size 8.
+Arrays of `Float` values, stored unboxed in a scalar array, 8 bytes per element.
 
 The logical model is an `Array Float`. At runtime a `Float64Array` is a `ScalarArray`, so every
 function that looks inside the constructor must be `extern` or `implemented_by`.
@@ -49,12 +49,13 @@ public def usize (a : @& Float64Array) : USize :=
   a.size.toUSize
 
 @[extern c inline "((double*)lean_sarray_cptr(#1))[#2]", expose]
-public def uget : (a : @& Float64Array) → (i : USize) → (h : i.toNat < a.size := by get_elem_tactic) →
-    Float
+public def uget :
+    (a : @& Float64Array) → (i : USize) → (h : i.toNat < a.size := by get_elem_tactic) → Float
   | mk a, i, h => a.uget i h
 
 @[expose]
-public def get : (a : @& Float64Array) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → Float
+public def get :
+    (a : @& Float64Array) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → Float
   | mk a, i, h => a[i]
 
 @[inline]
@@ -71,10 +72,15 @@ private unsafe def setFloat64Unsafe : Float64Array → USize → Float → Float
 private unsafe def toUSizeChecked (n : Nat) : USize :=
   if n < USize.size >>> 1 then n.toUSize else panic! "out of memory"
 
-private unsafe def mkWithCapacityImpl (a : Array Float) (capacity : Nat := a.size) : Float64Array :=
+/-- A new array of size `size` with room for `capacity` elements. Requires `size ≤ capacity`. -/
+private unsafe def allocUnsafe (size capacity : USize) : Float64Array :=
+  unsafeCast <| ScalarArray.allocate 8 size capacity lcProof
+
+private unsafe def mkWithCapacityImpl (a : Array Float) (capacity : Nat := a.size) :
+    Float64Array :=
   let cap := toUSizeChecked capacity
   let sz := toUSizeChecked a.size
-  let r : Float64Array := unsafeCast <| ScalarArray.allocate 8 sz (max sz cap) lcProof
+  let r := allocUnsafe sz (max sz cap)
   loop sz r 0
 where
   loop (sz : USize) (r : Float64Array) (i : USize) : Float64Array :=
@@ -112,8 +118,8 @@ public instance : Inhabited Float64Array := ⟨empty⟩
 
 @[expose]
 public def uset :
-    (a : Float64Array) → (i : USize) → (v : Float) → (h : i.toNat < a.size := by get_elem_tactic) →
-    Float64Array
+    (a : Float64Array) → (i : USize) → (v : Float) →
+    (h : i.toNat < a.size := by get_elem_tactic) → Float64Array
   | mk a, i, v, h => mk (a.uset i v h)
 
 private unsafe def usetImpl : type_of% @uset :=
@@ -171,13 +177,14 @@ public def push : Float64Array → Float → Float64Array
   | mk a, v => mk (a.push v)
 
 /--
-Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting at
-byte `destOff`. Only valid when `dest` is exclusive and both ranges are within the capacities.
+Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting
+at byte `destOff`. Only valid when `dest` is exclusive and both ranges are within the capacities.
 -/
 -- TODO: core has no runtime function that copies a slice of a scalar array with any element size;
 -- `lean_byte_array_copy_slice` only works for bytes. Replace this once core has one.
 @[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + #4, lean_sarray_cptr(#2) + #3, #5)"]
-private unsafe def memcpyUnsafe : Float64Array → @& Float64Array → (srcOff destOff n : USize) → Float64Array
+private unsafe def memcpyUnsafe :
+    Float64Array → @& Float64Array → (srcOff destOff n : USize) → Float64Array
   | dest, _, _, _, _ => dest
 
 /--
@@ -187,8 +194,8 @@ exclusive, has capacity for `destOff + n` elements, and is not the same object a
 `destOff ≤ dest.size` and `srcOff + n ≤ src.size`.
 -/
 @[inline]
-private unsafe def copySliceUnsafe (dest : Float64Array) (src : @& Float64Array) (srcOff destOff n : USize) :
-    Float64Array :=
+private unsafe def copySliceUnsafe (dest : Float64Array) (src : @& Float64Array)
+    (srcOff destOff n : USize) : Float64Array :=
   let esz := (unsafeCast src : ScalarArray).elemSize.toUSize
   let d : ScalarArray := unsafeCast (memcpyUnsafe dest src (srcOff * esz) (destOff * esz) (n * esz))
   unsafeCast (d.resizeUnsafe (max d.size (destOff + n)) lcProof lcProof)
@@ -237,8 +244,8 @@ Copies the elements of `src` from index `srcOff` up to, but not including, `srcO
 is not shared and has room. If `exact` is `false`, the capacity is doubled when `dest` grows.
 -/
 @[implemented_by copySliceImpl, expose]
-public def copySlice (src : @& Float64Array) (srcOff : Nat) (dest : Float64Array) (destOff len : Nat)
-    (exact : Bool := true) : Float64Array :=
+public def copySlice (src : @& Float64Array) (srcOff : Nat) (dest : Float64Array)
+    (destOff len : Nat) (exact : Bool := true) : Float64Array :=
   mk (dest.data.extract 0 destOff ++ src.data.extract srcOff (srcOff + len) ++
     dest.data.extract (destOff + min len (src.data.size - srcOff)) dest.data.size)
 
@@ -262,7 +269,8 @@ public def back? (a : @& Float64Array) : Option Float := a[a.size - 1]?
 
 public def back! (a : @& Float64Array) : Float := a[a.size - 1]!
 
-public def back (a : @& Float64Array) (h : 0 < a.size) : Float := a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
+public def back (a : @& Float64Array) (h : 0 < a.size) : Float :=
+  a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
 
 private def popWhileImpl (p : Float → Bool) (a : Float64Array) : Float64Array :=
   if h : 0 < a.size then
@@ -286,8 +294,7 @@ private unsafe def extractImpl (a : @& Float64Array) (start stop : Nat) : Float6
   let stop := min stop a.size
   if start < stop then
     let n := (stop - start).toUSize
-    let r : Float64Array := unsafeCast <| ScalarArray.allocate 8 0 n lcProof
-    copySliceUnsafe r a start.toUSize 0 n
+    copySliceUnsafe (allocUnsafe 0 n) a start.toUSize 0 n
   else
     empty
 
@@ -343,7 +350,7 @@ public def findIdx? (a : Float64Array) (p : Float → Bool) (start := 0) : Optio
 
 private unsafe def replicateImpl (n : Nat) (v : Float) : Float64Array :=
   let sz := toUSizeChecked n
-  loop sz (unsafeCast <| ScalarArray.allocate 8 sz sz lcProof) 0
+  loop sz (allocUnsafe sz sz) 0
 where
   loop (sz : USize) (r : Float64Array) (i : USize) : Float64Array :=
     if i < sz then loop sz (setFloat64Unsafe r i v) (i + 1) else r
@@ -355,7 +362,7 @@ public def replicate (n : Nat) (v : Float) : Float64Array :=
 
 private unsafe def ofFnImpl {n : Nat} (f : Fin n → Float) : Float64Array :=
   let sz := toUSizeChecked n
-  loop (unsafeCast <| ScalarArray.allocate 8 sz sz lcProof) 0
+  loop (allocUnsafe sz sz) 0
 where
   loop (r : Float64Array) (i : Nat) : Float64Array :=
     if h : i < n then loop (setFloat64Unsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
@@ -548,7 +555,8 @@ public def start (s : Float64Array.Slice) : Nat := s.internalRepresentation.star
 public def stop (s : Float64Array.Slice) : Nat := s.internalRepresentation.stop
 
 @[inherit_doc SliceData.start_le_stop]
-public theorem start_le_stop (s : Float64Array.Slice) : s.start ≤ s.stop := s.internalRepresentation.start_le_stop
+public theorem start_le_stop (s : Float64Array.Slice) : s.start ≤ s.stop :=
+  s.internalRepresentation.start_le_stop
 
 @[inherit_doc SliceData.stop_le_array_size]
 public theorem stop_le_array_size (s : Float64Array.Slice) : s.stop ≤ s.array.size :=
@@ -561,7 +569,8 @@ public theorem size_eq (s : Float64Array.Slice) : s.size = s.stop - s.start := r
 
 /-- The element at index `i` of the slice, counted from the start of the slice. -/
 @[inline, expose]
-public def get (s : Float64Array.Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) : Float :=
+public def get (s : Float64Array.Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) :
+    Float :=
   s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega)
 
 public instance : GetElem Float64Array.Slice Nat Float fun s i => i < s.size where
@@ -615,7 +624,8 @@ The slice of `a` from index `start` up to, but not including, `stop`. If `start`
 valid bounds, they are clamped to the size of `a`, and `start` is clamped to `stop`.
 -/
 @[expose]
-public def toSlice (a : Float64Array) (start : Nat := 0) (stop : Nat := a.size) : Float64Array.Slice :=
+public def toSlice (a : Float64Array) (start : Nat := 0) (stop : Nat := a.size) :
+    Float64Array.Slice :=
   if h₂ : stop ≤ a.size then
     if h₁ : start ≤ stop then
       ⟨{ array := a, start, stop, start_le_stop := h₁, stop_le_array_size := h₂ }⟩
@@ -664,7 +674,8 @@ namespace Slice
 
 /-- The slice of `s` from index `start` up to, but not including, `stop`, clamped like `toSlice`. -/
 @[expose]
-public def slice (s : Float64Array.Slice) (start : Nat := 0) (stop : Nat := s.size) : Float64Array.Slice :=
+public def slice (s : Float64Array.Slice) (start : Nat := 0) (stop : Nat := s.size) :
+    Float64Array.Slice :=
   s.array.toSlice (s.start + min start s.size) (s.start + min stop s.size)
 
 end Slice
@@ -716,7 +727,8 @@ public instance : Std.Iterator Float64Array.SliceIterator Id Float where
   IsPlausibleStep it step := step = SliceIterator.step it
   step it := pure <| .deflate ⟨SliceIterator.step it, rfl⟩
 
-private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation Float64Array.SliceIterator Id where
+private def SliceIterator.finitenessRelation :
+    Std.Iterators.FinitenessRelation Float64Array.SliceIterator Id where
   Rel := InvImage WellFoundedRelation.rel
     (fun it => it.internalState.xs.stop - it.internalState.xs.start)
   wf := InvImage.wf _ WellFoundedRelation.wf
@@ -737,9 +749,11 @@ private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation 
 public instance : Std.Iterators.Finite Float64Array.SliceIterator Id :=
   .of_finitenessRelation SliceIterator.finitenessRelation
 
-public instance [Monad m] : Std.IteratorLoop Float64Array.SliceIterator Id m := .defaultImplementation
+public instance [Monad m] : Std.IteratorLoop Float64Array.SliceIterator Id m :=
+  .defaultImplementation
 
-public instance : Std.ToIterator (Std.Slice Float64Array.SliceData) Id Float64Array.SliceIterator Float :=
+public instance :
+    Std.ToIterator (Std.Slice Float64Array.SliceData) Id Float64Array.SliceIterator Float :=
   Std.ToIterator.of Float64Array.SliceIterator (⟨⟨·⟩⟩)
 
 public instance [Monad m] : ForIn m Float64Array.Slice Float := inferInstance
@@ -768,7 +782,8 @@ public def foldr {β : Type v} (f : Float → β → β) (init : β) (s : Float6
 
 /-- Runs a monadic action on each element of `s`, from last to first. -/
 @[inline, expose]
-public def forRevM {m : Type v → Type w} [Monad m] (f : Float → m PUnit) (s : Float64Array.Slice) : m PUnit :=
+public def forRevM {m : Type v → Type w} [Monad m] (f : Float → m PUnit)
+    (s : Float64Array.Slice) : m PUnit :=
   s.foldrM (fun x _ => f x) ⟨⟩
 
 /-- The result of the last element of `s` for which `f` returns `some`, searching from the end. -/
@@ -861,7 +876,8 @@ public theorem size_eq_data_size (a : Float64Array) : a.size = a.data.size := by
     (a.set i v h).size = a.size := by
   cases a; exact Array.size_set ..
 
-@[simp] public theorem size_push (a : Float64Array) (v : Float) : (a.push v).size = a.size + 1 := by
+@[simp] public theorem size_push (a : Float64Array) (v : Float) :
+    (a.push v).size = a.size + 1 := by
   cases a; simp [push, size]
 
 @[simp] public theorem data_append (a b : Float64Array) : (a ++ b).data = a.data ++ b.data := by
@@ -901,7 +917,8 @@ public theorem ext_getElem {a b : Float64Array} (h₁ : a.size = b.size)
     (a.set i v h).data = a.data.set i v (size_eq_data_size a ▸ h) := by
   cases a; rfl
 
-@[simp] public theorem data_push (a : Float64Array) (v : Float) : (a.push v).data = a.data.push v := by
+@[simp] public theorem data_push (a : Float64Array) (v : Float) :
+    (a.push v).data = a.data.push v := by
   cases a; rfl
 
 @[simp] public theorem data_pop (a : Float64Array) : a.pop.data = a.data.pop := by
@@ -914,7 +931,8 @@ public theorem ext_getElem {a b : Float64Array} (h₁ : a.size = b.size)
 @[simp] public theorem data_replicate (n : Nat) (v : Float) :
     (replicate n v).data = Array.replicate n v := rfl
 
-@[simp] public theorem data_ofFn {n : Nat} (f : Fin n → Float) : (ofFn f).data = Array.ofFn f := rfl
+@[simp] public theorem data_ofFn {n : Nat} (f : Fin n → Float) :
+    (ofFn f).data = Array.ofFn f := rfl
 
 @[simp] public theorem data_empty : (empty : Float64Array).data = #[] := rfl
 
@@ -965,11 +983,13 @@ public theorem ext_getElem {a b : Float64Array} (h₁ : a.size = b.size)
     (ofFn f)[i]'h = f ⟨i, by simpa using h⟩ := by
   simp [-getElem_data, getElem_eq_getElem_data]
 
-public theorem foldl_eq_foldl_data {β : Type v} (f : β → Float → β) (init : β) (a : Float64Array) :
+public theorem foldl_eq_foldl_data {β : Type v} (f : β → Float → β) (init : β)
+    (a : Float64Array) :
     a.foldl f init = a.data.foldl f init := by
   rfl
 
-public theorem foldr_eq_foldr_data {β : Type v} (f : Float → β → β) (init : β) (a : Float64Array) :
+public theorem foldr_eq_foldr_data {β : Type v} (f : Float → β → β) (init : β)
+    (a : Float64Array) :
     a.foldr f init = a.data.foldr f init := by
   rfl
 
@@ -1057,7 +1077,8 @@ public theorem extract_append_extract (a : Float64Array) (i j k : Nat) :
     a.extract i j ++ a.extract j k = a.extract (min i j) (max j k) := by
   simp [Float64Array.ext_iff]
 
-@[simp] public theorem extract_append_eq_left (a b : Float64Array) : (a ++ b).extract 0 a.size = a := by
+@[simp] public theorem extract_append_eq_left (a b : Float64Array) :
+    (a ++ b).extract 0 a.size = a := by
   simp [Float64Array.ext_iff]
 
 @[simp] public theorem extract_append_eq_right (a b : Float64Array) :

@@ -10,19 +10,19 @@ public import Std.Data.Iterators
 /-!
 # Arrays of `USize`
 
-`ScalarArray.USizeArray` stores `USize` values unboxed, one machine word per element, in a Lean runtime
-scalar array. Its logical model is `Array USize`: `USizeArray.mk` and `USizeArray.data` convert
-between the two, and every operation is specified by its effect on the model.
+`ScalarArray.USizeArray` stores `USize` values unboxed in a Lean runtime scalar array,
+one machine word per element. Its logical model is `Array USize`: `USizeArray.mk` and
+`USizeArray.data` convert between the two, and every operation is specified by its effect on
+the model.
 
-The runtime representation is a `ScalarArray` with element size `System.Platform.numBits / 8`. Reads and in-place writes
-are inline C. `uset`, `set` and `push` update the array in place when it is not shared and copy
-it otherwise, like `Array` and `ByteArray`.
+Reads and in-place writes are inline C. `uset`, `set` and `push` update the array in place when it
+is not shared and copy it otherwise, like `Array` and `ByteArray`.
 -/
 
 namespace ScalarArray
 
 /--
-Arrays of `USize` values, stored unboxed in a scalar array with element size `System.Platform.numBits / 8`.
+Arrays of `USize` values, stored unboxed in a scalar array, one machine word per element.
 
 The logical model is an `Array USize`. At runtime a `USizeArray` is a `ScalarArray`, so every
 function that looks inside the constructor must be `extern` or `implemented_by`.
@@ -46,12 +46,13 @@ public def usize (a : @& USizeArray) : USize :=
   a.size.toUSize
 
 @[extern c inline "((size_t*)lean_sarray_cptr(#1))[#2]", expose]
-public def uget : (a : @& USizeArray) → (i : USize) → (h : i.toNat < a.size := by get_elem_tactic) →
-    USize
+public def uget :
+    (a : @& USizeArray) → (i : USize) → (h : i.toNat < a.size := by get_elem_tactic) → USize
   | mk a, i, h => a.uget i h
 
 @[expose]
-public def get : (a : @& USizeArray) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → USize
+public def get :
+    (a : @& USizeArray) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → USize
   | mk a, i, h => a[i]
 
 @[inline]
@@ -68,10 +69,15 @@ private unsafe def setUSizeUnsafe : USizeArray → USize → USize → USizeArra
 private unsafe def toUSizeChecked (n : Nat) : USize :=
   if n < USize.size >>> 1 then n.toUSize else panic! "out of memory"
 
-private unsafe def mkWithCapacityImpl (a : Array USize) (capacity : Nat := a.size) : USizeArray :=
+/-- A new array of size `size` with room for `capacity` elements. Requires `size ≤ capacity`. -/
+private unsafe def allocUnsafe (size capacity : USize) : USizeArray :=
+  unsafeCast <| ScalarArray.allocate (System.Platform.numBits / 8).toUInt32 size capacity lcProof
+
+private unsafe def mkWithCapacityImpl (a : Array USize) (capacity : Nat := a.size) :
+    USizeArray :=
   let cap := toUSizeChecked capacity
   let sz := toUSizeChecked a.size
-  let r : USizeArray := unsafeCast <| ScalarArray.allocate (System.Platform.numBits / 8).toUInt32 sz (max sz cap) lcProof
+  let r := allocUnsafe sz (max sz cap)
   loop sz r 0
 where
   loop (sz : USize) (r : USizeArray) (i : USize) : USizeArray :=
@@ -109,8 +115,8 @@ public instance : Inhabited USizeArray := ⟨empty⟩
 
 @[expose]
 public def uset :
-    (a : USizeArray) → (i : USize) → (v : USize) → (h : i.toNat < a.size := by get_elem_tactic) →
-    USizeArray
+    (a : USizeArray) → (i : USize) → (v : USize) →
+    (h : i.toNat < a.size := by get_elem_tactic) → USizeArray
   | mk a, i, v, h => mk (a.uset i v h)
 
 private unsafe def usetImpl : type_of% @uset :=
@@ -168,13 +174,14 @@ public def push : USizeArray → USize → USizeArray
   | mk a, v => mk (a.push v)
 
 /--
-Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting at
-byte `destOff`. Only valid when `dest` is exclusive and both ranges are within the capacities.
+Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting
+at byte `destOff`. Only valid when `dest` is exclusive and both ranges are within the capacities.
 -/
 -- TODO: core has no runtime function that copies a slice of a scalar array with any element size;
 -- `lean_byte_array_copy_slice` only works for bytes. Replace this once core has one.
 @[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + #4, lean_sarray_cptr(#2) + #3, #5)"]
-private unsafe def memcpyUnsafe : USizeArray → @& USizeArray → (srcOff destOff n : USize) → USizeArray
+private unsafe def memcpyUnsafe :
+    USizeArray → @& USizeArray → (srcOff destOff n : USize) → USizeArray
   | dest, _, _, _, _ => dest
 
 /--
@@ -184,8 +191,8 @@ exclusive, has capacity for `destOff + n` elements, and is not the same object a
 `destOff ≤ dest.size` and `srcOff + n ≤ src.size`.
 -/
 @[inline]
-private unsafe def copySliceUnsafe (dest : USizeArray) (src : @& USizeArray) (srcOff destOff n : USize) :
-    USizeArray :=
+private unsafe def copySliceUnsafe (dest : USizeArray) (src : @& USizeArray)
+    (srcOff destOff n : USize) : USizeArray :=
   let esz := (unsafeCast src : ScalarArray).elemSize.toUSize
   let d : ScalarArray := unsafeCast (memcpyUnsafe dest src (srcOff * esz) (destOff * esz) (n * esz))
   unsafeCast (d.resizeUnsafe (max d.size (destOff + n)) lcProof lcProof)
@@ -234,8 +241,8 @@ Copies the elements of `src` from index `srcOff` up to, but not including, `srcO
 is not shared and has room. If `exact` is `false`, the capacity is doubled when `dest` grows.
 -/
 @[implemented_by copySliceImpl, expose]
-public def copySlice (src : @& USizeArray) (srcOff : Nat) (dest : USizeArray) (destOff len : Nat)
-    (exact : Bool := true) : USizeArray :=
+public def copySlice (src : @& USizeArray) (srcOff : Nat) (dest : USizeArray)
+    (destOff len : Nat) (exact : Bool := true) : USizeArray :=
   mk (dest.data.extract 0 destOff ++ src.data.extract srcOff (srcOff + len) ++
     dest.data.extract (destOff + min len (src.data.size - srcOff)) dest.data.size)
 
@@ -259,7 +266,8 @@ public def back? (a : @& USizeArray) : Option USize := a[a.size - 1]?
 
 public def back! (a : @& USizeArray) : USize := a[a.size - 1]!
 
-public def back (a : @& USizeArray) (h : 0 < a.size) : USize := a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
+public def back (a : @& USizeArray) (h : 0 < a.size) : USize :=
+  a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
 
 private def popWhileImpl (p : USize → Bool) (a : USizeArray) : USizeArray :=
   if h : 0 < a.size then
@@ -283,8 +291,7 @@ private unsafe def extractImpl (a : @& USizeArray) (start stop : Nat) : USizeArr
   let stop := min stop a.size
   if start < stop then
     let n := (stop - start).toUSize
-    let r : USizeArray := unsafeCast <| ScalarArray.allocate (System.Platform.numBits / 8).toUInt32 0 n lcProof
-    copySliceUnsafe r a start.toUSize 0 n
+    copySliceUnsafe (allocUnsafe 0 n) a start.toUSize 0 n
   else
     empty
 
@@ -340,7 +347,7 @@ public def findIdx? (a : USizeArray) (p : USize → Bool) (start := 0) : Option 
 
 private unsafe def replicateImpl (n : Nat) (v : USize) : USizeArray :=
   let sz := toUSizeChecked n
-  loop sz (unsafeCast <| ScalarArray.allocate (System.Platform.numBits / 8).toUInt32 sz sz lcProof) 0
+  loop sz (allocUnsafe sz sz) 0
 where
   loop (sz : USize) (r : USizeArray) (i : USize) : USizeArray :=
     if i < sz then loop sz (setUSizeUnsafe r i v) (i + 1) else r
@@ -352,7 +359,7 @@ public def replicate (n : Nat) (v : USize) : USizeArray :=
 
 private unsafe def ofFnImpl {n : Nat} (f : Fin n → USize) : USizeArray :=
   let sz := toUSizeChecked n
-  loop (unsafeCast <| ScalarArray.allocate (System.Platform.numBits / 8).toUInt32 sz sz lcProof) 0
+  loop (allocUnsafe sz sz) 0
 where
   loop (r : USizeArray) (i : Nat) : USizeArray :=
     if h : i < n then loop (setUSizeUnsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
@@ -543,7 +550,8 @@ public def start (s : USizeArray.Slice) : Nat := s.internalRepresentation.start
 public def stop (s : USizeArray.Slice) : Nat := s.internalRepresentation.stop
 
 @[inherit_doc SliceData.start_le_stop]
-public theorem start_le_stop (s : USizeArray.Slice) : s.start ≤ s.stop := s.internalRepresentation.start_le_stop
+public theorem start_le_stop (s : USizeArray.Slice) : s.start ≤ s.stop :=
+  s.internalRepresentation.start_le_stop
 
 @[inherit_doc SliceData.stop_le_array_size]
 public theorem stop_le_array_size (s : USizeArray.Slice) : s.stop ≤ s.array.size :=
@@ -556,7 +564,8 @@ public theorem size_eq (s : USizeArray.Slice) : s.size = s.stop - s.start := rfl
 
 /-- The element at index `i` of the slice, counted from the start of the slice. -/
 @[inline, expose]
-public def get (s : USizeArray.Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) : USize :=
+public def get (s : USizeArray.Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) :
+    USize :=
   s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega)
 
 public instance : GetElem USizeArray.Slice Nat USize fun s i => i < s.size where
@@ -610,7 +619,8 @@ The slice of `a` from index `start` up to, but not including, `stop`. If `start`
 valid bounds, they are clamped to the size of `a`, and `start` is clamped to `stop`.
 -/
 @[expose]
-public def toSlice (a : USizeArray) (start : Nat := 0) (stop : Nat := a.size) : USizeArray.Slice :=
+public def toSlice (a : USizeArray) (start : Nat := 0) (stop : Nat := a.size) :
+    USizeArray.Slice :=
   if h₂ : stop ≤ a.size then
     if h₁ : start ≤ stop then
       ⟨{ array := a, start, stop, start_le_stop := h₁, stop_le_array_size := h₂ }⟩
@@ -659,7 +669,8 @@ namespace Slice
 
 /-- The slice of `s` from index `start` up to, but not including, `stop`, clamped like `toSlice`. -/
 @[expose]
-public def slice (s : USizeArray.Slice) (start : Nat := 0) (stop : Nat := s.size) : USizeArray.Slice :=
+public def slice (s : USizeArray.Slice) (start : Nat := 0) (stop : Nat := s.size) :
+    USizeArray.Slice :=
   s.array.toSlice (s.start + min start s.size) (s.start + min stop s.size)
 
 end Slice
@@ -711,7 +722,8 @@ public instance : Std.Iterator USizeArray.SliceIterator Id USize where
   IsPlausibleStep it step := step = SliceIterator.step it
   step it := pure <| .deflate ⟨SliceIterator.step it, rfl⟩
 
-private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation USizeArray.SliceIterator Id where
+private def SliceIterator.finitenessRelation :
+    Std.Iterators.FinitenessRelation USizeArray.SliceIterator Id where
   Rel := InvImage WellFoundedRelation.rel
     (fun it => it.internalState.xs.stop - it.internalState.xs.start)
   wf := InvImage.wf _ WellFoundedRelation.wf
@@ -732,9 +744,11 @@ private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation 
 public instance : Std.Iterators.Finite USizeArray.SliceIterator Id :=
   .of_finitenessRelation SliceIterator.finitenessRelation
 
-public instance [Monad m] : Std.IteratorLoop USizeArray.SliceIterator Id m := .defaultImplementation
+public instance [Monad m] : Std.IteratorLoop USizeArray.SliceIterator Id m :=
+  .defaultImplementation
 
-public instance : Std.ToIterator (Std.Slice USizeArray.SliceData) Id USizeArray.SliceIterator USize :=
+public instance :
+    Std.ToIterator (Std.Slice USizeArray.SliceData) Id USizeArray.SliceIterator USize :=
   Std.ToIterator.of USizeArray.SliceIterator (⟨⟨·⟩⟩)
 
 public instance [Monad m] : ForIn m USizeArray.Slice USize := inferInstance
@@ -763,7 +777,8 @@ public def foldr {β : Type v} (f : USize → β → β) (init : β) (s : USizeA
 
 /-- Runs a monadic action on each element of `s`, from last to first. -/
 @[inline, expose]
-public def forRevM {m : Type v → Type w} [Monad m] (f : USize → m PUnit) (s : USizeArray.Slice) : m PUnit :=
+public def forRevM {m : Type v → Type w} [Monad m] (f : USize → m PUnit)
+    (s : USizeArray.Slice) : m PUnit :=
   s.foldrM (fun x _ => f x) ⟨⟩
 
 /-- The result of the last element of `s` for which `f` returns `some`, searching from the end. -/
@@ -856,7 +871,8 @@ public theorem size_eq_data_size (a : USizeArray) : a.size = a.data.size := by c
     (a.set i v h).size = a.size := by
   cases a; exact Array.size_set ..
 
-@[simp] public theorem size_push (a : USizeArray) (v : USize) : (a.push v).size = a.size + 1 := by
+@[simp] public theorem size_push (a : USizeArray) (v : USize) :
+    (a.push v).size = a.size + 1 := by
   cases a; simp [push, size]
 
 @[simp] public theorem data_append (a b : USizeArray) : (a ++ b).data = a.data ++ b.data := by
@@ -896,7 +912,8 @@ public theorem ext_getElem {a b : USizeArray} (h₁ : a.size = b.size)
     (a.set i v h).data = a.data.set i v (size_eq_data_size a ▸ h) := by
   cases a; rfl
 
-@[simp] public theorem data_push (a : USizeArray) (v : USize) : (a.push v).data = a.data.push v := by
+@[simp] public theorem data_push (a : USizeArray) (v : USize) :
+    (a.push v).data = a.data.push v := by
   cases a; rfl
 
 @[simp] public theorem data_pop (a : USizeArray) : a.pop.data = a.data.pop := by
@@ -909,7 +926,8 @@ public theorem ext_getElem {a b : USizeArray} (h₁ : a.size = b.size)
 @[simp] public theorem data_replicate (n : Nat) (v : USize) :
     (replicate n v).data = Array.replicate n v := rfl
 
-@[simp] public theorem data_ofFn {n : Nat} (f : Fin n → USize) : (ofFn f).data = Array.ofFn f := rfl
+@[simp] public theorem data_ofFn {n : Nat} (f : Fin n → USize) :
+    (ofFn f).data = Array.ofFn f := rfl
 
 @[simp] public theorem data_empty : (empty : USizeArray).data = #[] := rfl
 
@@ -960,11 +978,13 @@ public theorem ext_getElem {a b : USizeArray} (h₁ : a.size = b.size)
     (ofFn f)[i]'h = f ⟨i, by simpa using h⟩ := by
   simp [-getElem_data, getElem_eq_getElem_data]
 
-public theorem foldl_eq_foldl_data {β : Type v} (f : β → USize → β) (init : β) (a : USizeArray) :
+public theorem foldl_eq_foldl_data {β : Type v} (f : β → USize → β) (init : β)
+    (a : USizeArray) :
     a.foldl f init = a.data.foldl f init := by
   rfl
 
-public theorem foldr_eq_foldr_data {β : Type v} (f : USize → β → β) (init : β) (a : USizeArray) :
+public theorem foldr_eq_foldr_data {β : Type v} (f : USize → β → β) (init : β)
+    (a : USizeArray) :
     a.foldr f init = a.data.foldr f init := by
   rfl
 
@@ -1052,7 +1072,8 @@ public theorem extract_append_extract (a : USizeArray) (i j k : Nat) :
     a.extract i j ++ a.extract j k = a.extract (min i j) (max j k) := by
   simp [USizeArray.ext_iff]
 
-@[simp] public theorem extract_append_eq_left (a b : USizeArray) : (a ++ b).extract 0 a.size = a := by
+@[simp] public theorem extract_append_eq_left (a b : USizeArray) :
+    (a ++ b).extract 0 a.size = a := by
   simp [USizeArray.ext_iff]
 
 @[simp] public theorem extract_append_eq_right (a b : USizeArray) :

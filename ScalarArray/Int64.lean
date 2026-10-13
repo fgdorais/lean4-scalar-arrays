@@ -10,19 +10,19 @@ public import Std.Data.Iterators
 /-!
 # Arrays of `Int64`
 
-`ScalarArray.Int64Array` stores `Int64` values unboxed, 8 bytes per element, in a Lean runtime
-scalar array. Its logical model is `Array Int64`: `Int64Array.mk` and `Int64Array.data` convert
-between the two, and every operation is specified by its effect on the model.
+`ScalarArray.Int64Array` stores `Int64` values unboxed in a Lean runtime scalar array,
+8 bytes per element. Its logical model is `Array Int64`: `Int64Array.mk` and
+`Int64Array.data` convert between the two, and every operation is specified by its effect on
+the model.
 
-The runtime representation is a `ScalarArray` with element size 8. Reads and in-place writes
-are inline C. `uset`, `set` and `push` update the array in place when it is not shared and copy
-it otherwise, like `Array` and `ByteArray`.
+Reads and in-place writes are inline C. `uset`, `set` and `push` update the array in place when it
+is not shared and copy it otherwise, like `Array` and `ByteArray`.
 -/
 
 namespace ScalarArray
 
 /--
-Arrays of `Int64` values, stored unboxed in a scalar array with element size 8.
+Arrays of `Int64` values, stored unboxed in a scalar array, 8 bytes per element.
 
 The logical model is an `Array Int64`. At runtime a `Int64Array` is a `ScalarArray`, so every
 function that looks inside the constructor must be `extern` or `implemented_by`.
@@ -46,12 +46,13 @@ public def usize (a : @& Int64Array) : USize :=
   a.size.toUSize
 
 @[extern c inline "((uint64_t*)lean_sarray_cptr(#1))[#2]", expose]
-public def uget : (a : @& Int64Array) → (i : USize) → (h : i.toNat < a.size := by get_elem_tactic) →
-    Int64
+public def uget :
+    (a : @& Int64Array) → (i : USize) → (h : i.toNat < a.size := by get_elem_tactic) → Int64
   | mk a, i, h => a.uget i h
 
 @[expose]
-public def get : (a : @& Int64Array) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → Int64
+public def get :
+    (a : @& Int64Array) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → Int64
   | mk a, i, h => a[i]
 
 @[inline]
@@ -68,10 +69,15 @@ private unsafe def setInt64Unsafe : Int64Array → USize → Int64 → Int64Arra
 private unsafe def toUSizeChecked (n : Nat) : USize :=
   if n < USize.size >>> 1 then n.toUSize else panic! "out of memory"
 
-private unsafe def mkWithCapacityImpl (a : Array Int64) (capacity : Nat := a.size) : Int64Array :=
+/-- A new array of size `size` with room for `capacity` elements. Requires `size ≤ capacity`. -/
+private unsafe def allocUnsafe (size capacity : USize) : Int64Array :=
+  unsafeCast <| ScalarArray.allocate 8 size capacity lcProof
+
+private unsafe def mkWithCapacityImpl (a : Array Int64) (capacity : Nat := a.size) :
+    Int64Array :=
   let cap := toUSizeChecked capacity
   let sz := toUSizeChecked a.size
-  let r : Int64Array := unsafeCast <| ScalarArray.allocate 8 sz (max sz cap) lcProof
+  let r := allocUnsafe sz (max sz cap)
   loop sz r 0
 where
   loop (sz : USize) (r : Int64Array) (i : USize) : Int64Array :=
@@ -109,8 +115,8 @@ public instance : Inhabited Int64Array := ⟨empty⟩
 
 @[expose]
 public def uset :
-    (a : Int64Array) → (i : USize) → (v : Int64) → (h : i.toNat < a.size := by get_elem_tactic) →
-    Int64Array
+    (a : Int64Array) → (i : USize) → (v : Int64) →
+    (h : i.toNat < a.size := by get_elem_tactic) → Int64Array
   | mk a, i, v, h => mk (a.uset i v h)
 
 private unsafe def usetImpl : type_of% @uset :=
@@ -168,13 +174,14 @@ public def push : Int64Array → Int64 → Int64Array
   | mk a, v => mk (a.push v)
 
 /--
-Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting at
-byte `destOff`. Only valid when `dest` is exclusive and both ranges are within the capacities.
+Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting
+at byte `destOff`. Only valid when `dest` is exclusive and both ranges are within the capacities.
 -/
 -- TODO: core has no runtime function that copies a slice of a scalar array with any element size;
 -- `lean_byte_array_copy_slice` only works for bytes. Replace this once core has one.
 @[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + #4, lean_sarray_cptr(#2) + #3, #5)"]
-private unsafe def memcpyUnsafe : Int64Array → @& Int64Array → (srcOff destOff n : USize) → Int64Array
+private unsafe def memcpyUnsafe :
+    Int64Array → @& Int64Array → (srcOff destOff n : USize) → Int64Array
   | dest, _, _, _, _ => dest
 
 /--
@@ -184,8 +191,8 @@ exclusive, has capacity for `destOff + n` elements, and is not the same object a
 `destOff ≤ dest.size` and `srcOff + n ≤ src.size`.
 -/
 @[inline]
-private unsafe def copySliceUnsafe (dest : Int64Array) (src : @& Int64Array) (srcOff destOff n : USize) :
-    Int64Array :=
+private unsafe def copySliceUnsafe (dest : Int64Array) (src : @& Int64Array)
+    (srcOff destOff n : USize) : Int64Array :=
   let esz := (unsafeCast src : ScalarArray).elemSize.toUSize
   let d : ScalarArray := unsafeCast (memcpyUnsafe dest src (srcOff * esz) (destOff * esz) (n * esz))
   unsafeCast (d.resizeUnsafe (max d.size (destOff + n)) lcProof lcProof)
@@ -234,8 +241,8 @@ Copies the elements of `src` from index `srcOff` up to, but not including, `srcO
 is not shared and has room. If `exact` is `false`, the capacity is doubled when `dest` grows.
 -/
 @[implemented_by copySliceImpl, expose]
-public def copySlice (src : @& Int64Array) (srcOff : Nat) (dest : Int64Array) (destOff len : Nat)
-    (exact : Bool := true) : Int64Array :=
+public def copySlice (src : @& Int64Array) (srcOff : Nat) (dest : Int64Array)
+    (destOff len : Nat) (exact : Bool := true) : Int64Array :=
   mk (dest.data.extract 0 destOff ++ src.data.extract srcOff (srcOff + len) ++
     dest.data.extract (destOff + min len (src.data.size - srcOff)) dest.data.size)
 
@@ -259,7 +266,8 @@ public def back? (a : @& Int64Array) : Option Int64 := a[a.size - 1]?
 
 public def back! (a : @& Int64Array) : Int64 := a[a.size - 1]!
 
-public def back (a : @& Int64Array) (h : 0 < a.size) : Int64 := a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
+public def back (a : @& Int64Array) (h : 0 < a.size) : Int64 :=
+  a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
 
 private def popWhileImpl (p : Int64 → Bool) (a : Int64Array) : Int64Array :=
   if h : 0 < a.size then
@@ -283,8 +291,7 @@ private unsafe def extractImpl (a : @& Int64Array) (start stop : Nat) : Int64Arr
   let stop := min stop a.size
   if start < stop then
     let n := (stop - start).toUSize
-    let r : Int64Array := unsafeCast <| ScalarArray.allocate 8 0 n lcProof
-    copySliceUnsafe r a start.toUSize 0 n
+    copySliceUnsafe (allocUnsafe 0 n) a start.toUSize 0 n
   else
     empty
 
@@ -340,7 +347,7 @@ public def findIdx? (a : Int64Array) (p : Int64 → Bool) (start := 0) : Option 
 
 private unsafe def replicateImpl (n : Nat) (v : Int64) : Int64Array :=
   let sz := toUSizeChecked n
-  loop sz (unsafeCast <| ScalarArray.allocate 8 sz sz lcProof) 0
+  loop sz (allocUnsafe sz sz) 0
 where
   loop (sz : USize) (r : Int64Array) (i : USize) : Int64Array :=
     if i < sz then loop sz (setInt64Unsafe r i v) (i + 1) else r
@@ -352,7 +359,7 @@ public def replicate (n : Nat) (v : Int64) : Int64Array :=
 
 private unsafe def ofFnImpl {n : Nat} (f : Fin n → Int64) : Int64Array :=
   let sz := toUSizeChecked n
-  loop (unsafeCast <| ScalarArray.allocate 8 sz sz lcProof) 0
+  loop (allocUnsafe sz sz) 0
 where
   loop (r : Int64Array) (i : Nat) : Int64Array :=
     if h : i < n then loop (setInt64Unsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
@@ -543,7 +550,8 @@ public def start (s : Int64Array.Slice) : Nat := s.internalRepresentation.start
 public def stop (s : Int64Array.Slice) : Nat := s.internalRepresentation.stop
 
 @[inherit_doc SliceData.start_le_stop]
-public theorem start_le_stop (s : Int64Array.Slice) : s.start ≤ s.stop := s.internalRepresentation.start_le_stop
+public theorem start_le_stop (s : Int64Array.Slice) : s.start ≤ s.stop :=
+  s.internalRepresentation.start_le_stop
 
 @[inherit_doc SliceData.stop_le_array_size]
 public theorem stop_le_array_size (s : Int64Array.Slice) : s.stop ≤ s.array.size :=
@@ -556,7 +564,8 @@ public theorem size_eq (s : Int64Array.Slice) : s.size = s.stop - s.start := rfl
 
 /-- The element at index `i` of the slice, counted from the start of the slice. -/
 @[inline, expose]
-public def get (s : Int64Array.Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) : Int64 :=
+public def get (s : Int64Array.Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) :
+    Int64 :=
   s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega)
 
 public instance : GetElem Int64Array.Slice Nat Int64 fun s i => i < s.size where
@@ -610,7 +619,8 @@ The slice of `a` from index `start` up to, but not including, `stop`. If `start`
 valid bounds, they are clamped to the size of `a`, and `start` is clamped to `stop`.
 -/
 @[expose]
-public def toSlice (a : Int64Array) (start : Nat := 0) (stop : Nat := a.size) : Int64Array.Slice :=
+public def toSlice (a : Int64Array) (start : Nat := 0) (stop : Nat := a.size) :
+    Int64Array.Slice :=
   if h₂ : stop ≤ a.size then
     if h₁ : start ≤ stop then
       ⟨{ array := a, start, stop, start_le_stop := h₁, stop_le_array_size := h₂ }⟩
@@ -659,7 +669,8 @@ namespace Slice
 
 /-- The slice of `s` from index `start` up to, but not including, `stop`, clamped like `toSlice`. -/
 @[expose]
-public def slice (s : Int64Array.Slice) (start : Nat := 0) (stop : Nat := s.size) : Int64Array.Slice :=
+public def slice (s : Int64Array.Slice) (start : Nat := 0) (stop : Nat := s.size) :
+    Int64Array.Slice :=
   s.array.toSlice (s.start + min start s.size) (s.start + min stop s.size)
 
 end Slice
@@ -711,7 +722,8 @@ public instance : Std.Iterator Int64Array.SliceIterator Id Int64 where
   IsPlausibleStep it step := step = SliceIterator.step it
   step it := pure <| .deflate ⟨SliceIterator.step it, rfl⟩
 
-private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation Int64Array.SliceIterator Id where
+private def SliceIterator.finitenessRelation :
+    Std.Iterators.FinitenessRelation Int64Array.SliceIterator Id where
   Rel := InvImage WellFoundedRelation.rel
     (fun it => it.internalState.xs.stop - it.internalState.xs.start)
   wf := InvImage.wf _ WellFoundedRelation.wf
@@ -732,9 +744,11 @@ private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation 
 public instance : Std.Iterators.Finite Int64Array.SliceIterator Id :=
   .of_finitenessRelation SliceIterator.finitenessRelation
 
-public instance [Monad m] : Std.IteratorLoop Int64Array.SliceIterator Id m := .defaultImplementation
+public instance [Monad m] : Std.IteratorLoop Int64Array.SliceIterator Id m :=
+  .defaultImplementation
 
-public instance : Std.ToIterator (Std.Slice Int64Array.SliceData) Id Int64Array.SliceIterator Int64 :=
+public instance :
+    Std.ToIterator (Std.Slice Int64Array.SliceData) Id Int64Array.SliceIterator Int64 :=
   Std.ToIterator.of Int64Array.SliceIterator (⟨⟨·⟩⟩)
 
 public instance [Monad m] : ForIn m Int64Array.Slice Int64 := inferInstance
@@ -763,7 +777,8 @@ public def foldr {β : Type v} (f : Int64 → β → β) (init : β) (s : Int64A
 
 /-- Runs a monadic action on each element of `s`, from last to first. -/
 @[inline, expose]
-public def forRevM {m : Type v → Type w} [Monad m] (f : Int64 → m PUnit) (s : Int64Array.Slice) : m PUnit :=
+public def forRevM {m : Type v → Type w} [Monad m] (f : Int64 → m PUnit)
+    (s : Int64Array.Slice) : m PUnit :=
   s.foldrM (fun x _ => f x) ⟨⟩
 
 /-- The result of the last element of `s` for which `f` returns `some`, searching from the end. -/
@@ -856,7 +871,8 @@ public theorem size_eq_data_size (a : Int64Array) : a.size = a.data.size := by c
     (a.set i v h).size = a.size := by
   cases a; exact Array.size_set ..
 
-@[simp] public theorem size_push (a : Int64Array) (v : Int64) : (a.push v).size = a.size + 1 := by
+@[simp] public theorem size_push (a : Int64Array) (v : Int64) :
+    (a.push v).size = a.size + 1 := by
   cases a; simp [push, size]
 
 @[simp] public theorem data_append (a b : Int64Array) : (a ++ b).data = a.data ++ b.data := by
@@ -896,7 +912,8 @@ public theorem ext_getElem {a b : Int64Array} (h₁ : a.size = b.size)
     (a.set i v h).data = a.data.set i v (size_eq_data_size a ▸ h) := by
   cases a; rfl
 
-@[simp] public theorem data_push (a : Int64Array) (v : Int64) : (a.push v).data = a.data.push v := by
+@[simp] public theorem data_push (a : Int64Array) (v : Int64) :
+    (a.push v).data = a.data.push v := by
   cases a; rfl
 
 @[simp] public theorem data_pop (a : Int64Array) : a.pop.data = a.data.pop := by
@@ -909,7 +926,8 @@ public theorem ext_getElem {a b : Int64Array} (h₁ : a.size = b.size)
 @[simp] public theorem data_replicate (n : Nat) (v : Int64) :
     (replicate n v).data = Array.replicate n v := rfl
 
-@[simp] public theorem data_ofFn {n : Nat} (f : Fin n → Int64) : (ofFn f).data = Array.ofFn f := rfl
+@[simp] public theorem data_ofFn {n : Nat} (f : Fin n → Int64) :
+    (ofFn f).data = Array.ofFn f := rfl
 
 @[simp] public theorem data_empty : (empty : Int64Array).data = #[] := rfl
 
@@ -960,11 +978,13 @@ public theorem ext_getElem {a b : Int64Array} (h₁ : a.size = b.size)
     (ofFn f)[i]'h = f ⟨i, by simpa using h⟩ := by
   simp [-getElem_data, getElem_eq_getElem_data]
 
-public theorem foldl_eq_foldl_data {β : Type v} (f : β → Int64 → β) (init : β) (a : Int64Array) :
+public theorem foldl_eq_foldl_data {β : Type v} (f : β → Int64 → β) (init : β)
+    (a : Int64Array) :
     a.foldl f init = a.data.foldl f init := by
   rfl
 
-public theorem foldr_eq_foldr_data {β : Type v} (f : Int64 → β → β) (init : β) (a : Int64Array) :
+public theorem foldr_eq_foldr_data {β : Type v} (f : Int64 → β → β) (init : β)
+    (a : Int64Array) :
     a.foldr f init = a.data.foldr f init := by
   rfl
 
@@ -1052,7 +1072,8 @@ public theorem extract_append_extract (a : Int64Array) (i j k : Nat) :
     a.extract i j ++ a.extract j k = a.extract (min i j) (max j k) := by
   simp [Int64Array.ext_iff]
 
-@[simp] public theorem extract_append_eq_left (a b : Int64Array) : (a ++ b).extract 0 a.size = a := by
+@[simp] public theorem extract_append_eq_left (a b : Int64Array) :
+    (a ++ b).extract 0 a.size = a := by
   simp [Int64Array.ext_iff]
 
 @[simp] public theorem extract_append_eq_right (a b : Int64Array) :

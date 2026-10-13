@@ -16,20 +16,23 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 WORD = '(System.Platform.numBits / 8).toUInt32'
 # Each entry: type name, element type, C element type, element size expression, element size in
-# prose (twice), a large test value, and the `Nat` conversion function.
+# prose, a large test value, and the `Nat` conversion function.
+WORD_PROSE = 'one machine word per element'
+BIG = '18446744073709551615'
+SMALL = '-9223372036854775808'
 types = [
-  ('UInt8',  'UInt8',  'uint8_t',  '1', '1 byte per element',  'element size 1', '255', 'toUInt8'),
-  ('UInt16', 'UInt16', 'uint16_t', '2', '2 bytes per element', 'element size 2', '65535', 'toUInt16'),
-  ('UInt32', 'UInt32', 'uint32_t', '4', '4 bytes per element', 'element size 4', '4294967295', 'toUInt32'),
-  ('UInt64', 'UInt64', 'uint64_t', '8', '8 bytes per element', 'element size 8', '18446744073709551615', 'toUInt64'),
-  ('USize',  'USize',  'size_t',   WORD, 'one machine word per element', 'element size `System.Platform.numBits / 8`', '18446744073709551615', 'toUSize'),
-  ('Int8',   'Int8',   'uint8_t',  '1', '1 byte per element',  'element size 1', '-128', 'toInt8'),
-  ('Int16',  'Int16',  'uint16_t', '2', '2 bytes per element', 'element size 2', '-32768', 'toInt16'),
-  ('Int32',  'Int32',  'uint32_t', '4', '4 bytes per element', 'element size 4', '-2147483648', 'toInt32'),
-  ('Int64',  'Int64',  'uint64_t', '8', '8 bytes per element', 'element size 8', '-9223372036854775808', 'toInt64'),
-  ('ISize',  'ISize',  'size_t',   WORD, 'one machine word per element', 'element size `System.Platform.numBits / 8`', '-9223372036854775808', 'toISize'),
-  ('Float32','Float32','float',    '4', '4 bytes per element', 'element size 4', '-1.5e38', 'toFloat32'),
-  ('Float64','Float',  'double',   '8', '8 bytes per element', 'element size 8', '-1.5e300', 'toFloat'),
+  ('UInt8',   'UInt8',   'uint8_t',  '1',  '1 byte per element',  '255',         'toUInt8'),
+  ('UInt16',  'UInt16',  'uint16_t', '2',  '2 bytes per element', '65535',       'toUInt16'),
+  ('UInt32',  'UInt32',  'uint32_t', '4',  '4 bytes per element', '4294967295',  'toUInt32'),
+  ('UInt64',  'UInt64',  'uint64_t', '8',  '8 bytes per element', BIG,           'toUInt64'),
+  ('USize',   'USize',   'size_t',   WORD, WORD_PROSE,            BIG,           'toUSize'),
+  ('Int8',    'Int8',    'uint8_t',  '1',  '1 byte per element',  '-128',        'toInt8'),
+  ('Int16',   'Int16',   'uint16_t', '2',  '2 bytes per element', '-32768',      'toInt16'),
+  ('Int32',   'Int32',   'uint32_t', '4',  '4 bytes per element', '-2147483648', 'toInt32'),
+  ('Int64',   'Int64',   'uint64_t', '8',  '8 bytes per element', SMALL,         'toInt64'),
+  ('ISize',   'ISize',   'size_t',   WORD, WORD_PROSE,            SMALL,         'toISize'),
+  ('Float32', 'Float32', 'float',    '4',  '4 bytes per element', '-1.5e38',     'toFloat32'),
+  ('Float64', 'Float',   'double',   '8',  '8 bytes per element', '-1.5e300',    'toFloat'),
 ]
 
 # The float types have no `DecidableEq` or `Hashable`: they get a `BEq` instance instead.
@@ -71,9 +74,9 @@ public instance : BEq UInt16Array := ⟨beq⟩
 """
 FLOAT_TEST_OLD = """/-! Decidable equality and hashing -/
 
-#guard decide (UInt16Array.mk #[1, 2, 65535] = UInt16Array.mk #[1, 2, 65535])
-#guard !decide (UInt16Array.mk #[1, 2, 65535] = UInt16Array.mk #[1, 2, 0])
-#guard hash (UInt16Array.mk #[1, 2, 65535]) == hash #[(1 : UInt16), 2, 65535]
+#guard decide (UInt16Array.mk #[1, 2, big] = UInt16Array.mk #[1, 2, big])
+#guard !decide (UInt16Array.mk #[1, 2, big] = UInt16Array.mk #[1, 2, 0])
+#guard hash (UInt16Array.mk #[1, 2, big]) == hash #[(1 : UInt16), 2, big]
 #guard hash (UInt16Array.empty) == hash (#[] : Array UInt16)
 #guard hash ((UInt16Array.emptyWithCapacity 100).push 1) == hash (UInt16Array.mk #[1])
 
@@ -92,7 +95,7 @@ def generate():
     src = (ROOT / 'ScalarArray/UInt16.lean').read_text()
     tst = (ROOT / 'ScalarArrayTest/UInt16.lean').read_text()
     files = {}
-    for name, elem, ctype, alloc, per_elem, elem_size, big, conv in types:
+    for name, elem, ctype, alloc, per_elem, big, conv in types:
         is_float = name.startswith('Float')
         s = src
         if is_float:
@@ -103,23 +106,23 @@ def generate():
             ('setUInt16Unsafe', f'set{name}Unsafe'),
             ('allocate 2 ', f'allocate {alloc} '),
             ('2 bytes per element', per_elem),
-            ('element size 2', elem_size),
             ('uint16_t', ctype),
             ('UInt16', elem),
         ])
         if name == 'Float64':
             s = sub(s, [('it otherwise, like `Array` and `ByteArray`.\n',
                          'it otherwise, like `Array` and `ByteArray`.\n\n'
-                         '`Float64Array` has the same runtime representation as the core `FloatArray`, '
-                         'with the same API\nas the other arrays in this library.\n')])
+                         '`Float64Array` has the same runtime representation as the core '
+                         '`FloatArray`, with the same API\n'
+                         'as the other arrays in this library.\n')])
         files[f'ScalarArray/{name}.lean'] = s
         t = sub(tst, [(FLOAT_TEST_OLD, '')]) if is_float else tst
         t = sub(t, [
             ('import ScalarArray.UInt16', 'import ScalarArray.' + name),
-            ('(2 : UInt32)', f'({alloc} : UInt32)'),
+            ('elemSize : UInt32 := 2', f'elemSize : UInt32 := {alloc}'),
             ('UInt16Array', name + 'Array'),
             ('toUInt16', conv),
-            ('65535', f'({big})' if big.startswith('-') else big),
+            ('big : UInt16 := 65535', f'big : UInt16 := {big}'),
             ('UInt16', elem),
         ])
         files[f'ScalarArrayTest/{name}.lean'] = t

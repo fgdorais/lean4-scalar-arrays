@@ -7,40 +7,47 @@ import ScalarArrayTest.Util
 
 open ScalarArray ScalarArrayTest
 
+/-- A test value at the edge of the element type's range. -/
+private abbrev big : UInt8 := 255
+
+/-- The size of an element in bytes. -/
+private abbrev elemSize : UInt32 := 1
+
 /-! Construction and conversion -/
 
-#guard (UInt8Array.mk #[1, 2, 3, 255]).data == #[1, 2, 3, 255]
-#guard (UInt8Array.mk #[1, 2, 3, 255]).toList == [1, 2, 3, 255]
+#guard (UInt8Array.mk #[1, 2, 3, big]).data == #[1, 2, 3, big]
+#guard (UInt8Array.mk #[1, 2, 3, big]).toList == [1, 2, 3, big]
 #guard (UInt8Array.mk #[]).data == #[]
 #guard UInt8Array.empty.data == #[]
 #guard (∅ : UInt8Array).data == #[]
 #guard (default : UInt8Array).data == #[]
 #guard (UInt8Array.emptyWithCapacity 100).data == #[]
-#guard (UInt8Array.mk (Array.range 1000 |>.map Nat.toUInt8)).data == (Array.range 1000).map Nat.toUInt8
+#guard (UInt8Array.mk (Array.range 1000 |>.map Nat.toUInt8)).data ==
+  (Array.range 1000).map Nat.toUInt8
 
 /-! Size -/
 
-#guard (UInt8Array.mk #[1, 2, 3, 255]).size == 4
-#guard (UInt8Array.mk #[1, 2, 3, 255]).usize == 4
+#guard (UInt8Array.mk #[1, 2, 3, big]).size == 4
+#guard (UInt8Array.mk #[1, 2, 3, big]).usize == 4
 #guard UInt8Array.empty.size == 0
 #guard (UInt8Array.emptyWithCapacity 100).size == 0
 
 /-! Reading -/
 
-#guard (UInt8Array.mk #[1, 2, 3, 255])[0] == 1
-#guard (UInt8Array.mk #[1, 2, 3, 255])[3] == 255
-#guard (UInt8Array.mk #[1, 2, 3, 255])[(2 : USize)] == 3
-#guard (UInt8Array.mk #[1, 2, 3, 255]).get! 1 == 2
-#guard (UInt8Array.mk #[1, 2, 3, 255]).getD 2 7 == 3
-#guard (UInt8Array.mk #[1, 2, 3, 255]).getD 4 7 == 7
-#guard (UInt8Array.mk #[1, 2, 3, 255])[4]? == none
-#guard (UInt8Array.mk #[1, 2, 3, 255])[1]? == some 2
+#guard (UInt8Array.mk #[1, 2, 3, big])[0] == 1
+#guard (UInt8Array.mk #[1, 2, 3, big])[3] == big
+#guard (UInt8Array.mk #[1, 2, 3, big])[(2 : USize)] == 3
+#guard (UInt8Array.mk #[1, 2, 3, big]).get! 1 == 2
+#guard (UInt8Array.mk #[1, 2, 3, big]).getD 2 7 == 3
+#guard (UInt8Array.mk #[1, 2, 3, big]).getD 4 7 == 7
+#guard (UInt8Array.mk #[1, 2, 3, big])[4]? == none
+#guard (UInt8Array.mk #[1, 2, 3, big])[1]? == some 2
 
 /-! Writing -/
 
 #guard ((UInt8Array.mk #[1, 2, 3]).set 1 42 (by decide)).data == #[1, 42, 3]
 #guard ((UInt8Array.mk #[1, 2, 3]).uset 2 42 (by simp)).data == #[1, 2, 42]
-#guard ((UInt8Array.mk #[1, 2, 3]).set! 0 255).data == #[255, 2, 3]
+#guard ((UInt8Array.mk #[1, 2, 3]).set! 0 big).data == #[big, 2, 3]
 
 -- Writing to a shared array must leave the original unchanged. The result is checked first so
 -- that it is computed while the original is still live.
@@ -92,16 +99,16 @@ open ScalarArray ScalarArrayTest
 
 /-! Writes don't touch neighbouring elements -/
 
-#guard ((UInt8Array.mk #[0, 0, 0]).set! 1 255).data == #[0, 255, 0]
-#guard ((UInt8Array.mk #[255, 255, 255]).set! 1 0).data == #[255, 0, 255]
-#guard ((UInt8Array.mk #[0, 0, 0]).push 255 |>.push 0).data == #[0, 0, 0, 255, 0]
+#guard ((UInt8Array.mk #[0, 0, 0]).set! 1 big).data == #[0, big, 0]
+#guard ((UInt8Array.mk #[big, big, big]).set! 1 0).data == #[big, 0, big]
+#guard ((UInt8Array.mk #[0, 0, 0]).push big |>.push 0).data == #[0, 0, 0, big, 0]
 
 /-! Indices beyond 16 bits, and huge `Nat` indices -/
 
 #guard
-  let a := (UInt8Array.mk (Array.replicate 100000 0)).set! 99999 255 |>.set! 70000 1
-  a.size == 100000 && a[99999]! == 255 && a[70000]! == 1 && a[99998]! == 0 &&
-    a[70000 % 65536]! == 0 && a.data[99999]! == 255 && a.data[70000]! == 1 &&
+  let a := (UInt8Array.mk (Array.replicate 100000 0)).set! 99999 big |>.set! 70000 1
+  a.size == 100000 && a[99999]! == big && a[70000]! == 1 && a[99998]! == 0 &&
+    a[70000 % 65536]! == 0 && a.data[99999]! == big && a.data[70000]! == 1 &&
     (if h : (70000 : USize).toNat < a.size then a[(70000 : USize)] == 1 else false)
 
 #guard (UInt8Array.mk #[1, 2, 3])[2 ^ 70]? == none
@@ -123,20 +130,20 @@ open ScalarArray ScalarArrayTest
 
 #guard
   let a := #[(1 : UInt8), 2, 3]
-  let b := (UInt8Array.mk a).set! 0 255
-  b.data == #[255, 2, 3] && a == #[1, 2, 3]
+  let b := (UInt8Array.mk a).set! 0 big
+  b.data == #[big, 2, 3] && a == #[1, 2, 3]
 
 #guard
   let a := UInt8Array.mk #[1, 2, 3]
-  let d := a.data.set! 0 255
-  d == #[255, 2, 3] && a.data == #[1, 2, 3]
+  let d := a.data.set! 0 big
+  d == #[big, 2, 3] && a.data == #[1, 2, 3]
 
 /-! Runtime representation -/
 
-#guard rawElemSize (UInt8Array.mk #[1, 2, 3]) == (1 : UInt32)
-#guard rawElemSize (UInt8Array.emptyWithCapacity 10) == (1 : UInt32)
-#guard rawElemSize (UInt8Array.empty.push 1) == (1 : UInt32)
-#guard rawElemSize ((UInt8Array.mk #[1]).push 2) == (1 : UInt32)
+#guard rawElemSize (UInt8Array.mk #[1, 2, 3]) == elemSize
+#guard rawElemSize (UInt8Array.emptyWithCapacity 10) == elemSize
+#guard rawElemSize (UInt8Array.empty.push 1) == elemSize
+#guard rawElemSize ((UInt8Array.mk #[1]).push 2) == elemSize
 #guard rawCapacity (UInt8Array.emptyWithCapacity 100) ≥ 100
 #guard rawCapacity (UInt8Array.mk #[1, 2, 3]) ≥ 3
 -- Growth is geometric, so pushing is amortized constant time.
@@ -145,13 +152,13 @@ open ScalarArray ScalarArrayTest
 
 /-! Appending -/
 
-#guard (UInt8Array.mk #[1, 2] ++ UInt8Array.mk #[3, 255]).data == #[1, 2, 3, 255]
+#guard (UInt8Array.mk #[1, 2] ++ UInt8Array.mk #[3, big]).data == #[1, 2, 3, big]
 #guard ((UInt8Array.mk #[1, 2]).append (UInt8Array.mk #[3])).data == #[1, 2, 3]
 #guard (UInt8Array.mk #[1, 2] ++ UInt8Array.empty).data == #[1, 2]
 #guard (UInt8Array.empty ++ UInt8Array.mk #[1, 2]).data == #[1, 2]
 #guard (UInt8Array.empty ++ UInt8Array.empty).data == #[]
-#guard (UInt8Array.mk #[0, 0] ++ UInt8Array.mk #[255] ++ UInt8Array.mk #[0]).data ==
-  #[0, 0, 255, 0]
+#guard (UInt8Array.mk #[0, 0] ++ UInt8Array.mk #[big] ++ UInt8Array.mk #[0]).data ==
+  #[0, 0, big, 0]
 
 -- Appending an array to itself, with and without room.
 #guard
@@ -186,8 +193,8 @@ open ScalarArray ScalarArrayTest
   let mut a := UInt8Array.empty
   let mut r : Array UInt8 := #[]
   for i in [0:1000] do
-    a := a ++ UInt8Array.mk #[i.toUInt8, (i * 7).toUInt8, 255]
-    r := r ++ #[i.toUInt8, (i * 7).toUInt8, 255]
+    a := a ++ UInt8Array.mk #[i.toUInt8, (i * 7).toUInt8, big]
+    r := r ++ #[i.toUInt8, (i * 7).toUInt8, big]
   return a.data == r
 
 -- Large arrays on both sides.
@@ -216,46 +223,46 @@ open ScalarArray ScalarArrayTest
 #guard rawCapacity ((UInt8Array.emptyWithCapacity 10).push 1 ++ UInt8Array.mk #[2, 3]) ≥ 10
 #guard rawCapacity (UInt8Array.mk #[1, 2, 3, 4] ++ UInt8Array.mk #[5]) ≥ 8
 #guard rawCapacity (UInt8Array.mk #[1] ++ UInt8Array.mk (Array.replicate 10 0)) ≥ 11
-#guard rawElemSize (UInt8Array.mk #[1] ++ UInt8Array.mk #[2]) == (1 : UInt32)
+#guard rawElemSize (UInt8Array.mk #[1] ++ UInt8Array.mk #[2]) == elemSize
 
 /-! Equality -/
 
-#guard UInt8Array.mk #[1, 2, 255] == UInt8Array.mk #[1, 2, 255]
-#guard UInt8Array.mk #[1, 2, 255] != UInt8Array.mk #[1, 2, 0]
+#guard UInt8Array.mk #[1, 2, big] == UInt8Array.mk #[1, 2, big]
+#guard UInt8Array.mk #[1, 2, big] != UInt8Array.mk #[1, 2, 0]
 #guard UInt8Array.mk #[1, 2] != UInt8Array.mk #[1, 2, 0]
 #guard UInt8Array.mk #[1, 2, 0] != UInt8Array.mk #[1, 2]
 #guard UInt8Array.empty == UInt8Array.emptyWithCapacity 10
-#guard (UInt8Array.mk #[1, 2] ++ UInt8Array.mk #[255]) == UInt8Array.mk #[1, 2, 255]
+#guard (UInt8Array.mk #[1, 2] ++ UInt8Array.mk #[big]) == UInt8Array.mk #[1, 2, big]
 -- Capacity and leftover memory past the size don't matter.
 #guard (UInt8Array.emptyWithCapacity 100).push 1 == UInt8Array.mk #[1]
 #guard (UInt8Array.mk #[1, 2, 3]).pop == UInt8Array.mk #[1, 2]
-#guard (UInt8Array.mk (Array.replicate 100000 0)).set! 99999 255 !=
+#guard (UInt8Array.mk (Array.replicate 100000 0)).set! 99999 big !=
   UInt8Array.mk (Array.replicate 100000 0)
 
 /-! Decidable equality and hashing -/
 
-#guard decide (UInt8Array.mk #[1, 2, 255] = UInt8Array.mk #[1, 2, 255])
-#guard !decide (UInt8Array.mk #[1, 2, 255] = UInt8Array.mk #[1, 2, 0])
-#guard hash (UInt8Array.mk #[1, 2, 255]) == hash #[(1 : UInt8), 2, 255]
+#guard decide (UInt8Array.mk #[1, 2, big] = UInt8Array.mk #[1, 2, big])
+#guard !decide (UInt8Array.mk #[1, 2, big] = UInt8Array.mk #[1, 2, 0])
+#guard hash (UInt8Array.mk #[1, 2, big]) == hash #[(1 : UInt8), 2, big]
 #guard hash (UInt8Array.empty) == hash (#[] : Array UInt8)
 #guard hash ((UInt8Array.emptyWithCapacity 100).push 1) == hash (UInt8Array.mk #[1])
 
 /-! Iteration -/
 
-#guard (UInt8Array.mk #[1, 2, 255]).foldl (fun acc x => x :: acc) [] == [255, 2, 1]
-#guard (UInt8Array.mk #[1, 2, 255]).foldr (fun x acc => x :: acc) [] == [1, 2, 255]
+#guard (UInt8Array.mk #[1, 2, big]).foldl (fun acc x => x :: acc) [] == [big, 2, 1]
+#guard (UInt8Array.mk #[1, 2, big]).foldr (fun x acc => x :: acc) [] == [1, 2, big]
 #guard UInt8Array.empty.foldl (fun acc x => x :: acc) [] == []
 #guard UInt8Array.empty.foldr (fun x acc => x :: acc) [] == []
-#guard (UInt8Array.mk #[1, 2, 255]).foldlM (m := Option)
+#guard (UInt8Array.mk #[1, 2, big]).foldlM (m := Option)
   (fun acc x => if x == 2 then none else some (x :: acc)) [] == none
-#guard (UInt8Array.mk #[1, 255]).foldrM (m := Option) (fun x acc => some (x :: acc)) [] ==
-  some [1, 255]
+#guard (UInt8Array.mk #[1, big]).foldrM (m := Option) (fun x acc => some (x :: acc)) [] ==
+  some [1, big]
 
 #guard Id.run do
   let mut r : List UInt8 := []
-  for x in UInt8Array.mk #[1, 2, 255] do
+  for x in UInt8Array.mk #[1, 2, big] do
     r := x :: r
-  return r == [255, 2, 1]
+  return r == [big, 2, 1]
 
 #guard Id.run do
   let mut r : List UInt8 := []
@@ -265,34 +272,34 @@ open ScalarArray ScalarArrayTest
   return r == [2, 1]
 
 #guard
-  let r : StateM (List UInt8) Unit := (UInt8Array.mk #[1, 2, 255]).forM fun x => modify (x :: ·)
-  (r.run []).2 == [255, 2, 1]
+  let r : StateM (List UInt8) Unit := (UInt8Array.mk #[1, 2, big]).forM fun x => modify (x :: ·)
+  (r.run []).2 == [big, 2, 1]
 
 #guard
   let xs := (Array.range 100000).map Nat.toUInt8
   let f := fun (acc : List UInt8) x => if x == 0 then x :: acc else acc
   (UInt8Array.mk xs).foldl f [] == xs.foldl f []
 
-#guard (UInt8Array.mk #[1, 2, 255]).any (· == 255)
-#guard !(UInt8Array.mk #[1, 2, 3]).any (· == 255)
-#guard (UInt8Array.mk #[1, 2, 3]).all (· != 255)
-#guard !(UInt8Array.mk #[1, 255, 3]).all (· != 255)
+#guard (UInt8Array.mk #[1, 2, big]).any (· == big)
+#guard !(UInt8Array.mk #[1, 2, 3]).any (· == big)
+#guard (UInt8Array.mk #[1, 2, 3]).all (· != big)
+#guard !(UInt8Array.mk #[1, big, 3]).all (· != big)
 #guard !UInt8Array.empty.any (fun _ => true) && UInt8Array.empty.all (fun _ => false)
-#guard (UInt8Array.mk #[1, 2, 255]).contains 255
-#guard !(UInt8Array.mk #[1, 2, 3]).contains 255
-#guard (UInt8Array.mk (Array.replicate 100000 0) |>.set! 99999 255).contains 255
+#guard (UInt8Array.mk #[1, 2, big]).contains big
+#guard !(UInt8Array.mk #[1, 2, 3]).contains big
+#guard (UInt8Array.mk (Array.replicate 100000 0) |>.set! 99999 big).contains big
 
 /-! Removing elements -/
 
 #guard UInt8Array.empty.isEmpty && !(UInt8Array.mk #[1]).isEmpty
 #guard (UInt8Array.mk #[1]).pop.isEmpty
-#guard (UInt8Array.mk #[1, 2, 255]).pop.data == #[1, 2]
+#guard (UInt8Array.mk #[1, 2, big]).pop.data == #[1, 2]
 #guard UInt8Array.empty.pop.data == #[]
-#guard ((UInt8Array.mk #[1, 2, 3]).pop.push 255).data == #[1, 2, 255]
-#guard (UInt8Array.mk #[1, 2, 255]).back? == some 255
+#guard ((UInt8Array.mk #[1, 2, 3]).pop.push big).data == #[1, 2, big]
+#guard (UInt8Array.mk #[1, 2, big]).back? == some big
 #guard UInt8Array.empty.back? == none
-#guard (UInt8Array.mk #[1, 2, 255]).back! == 255
-#guard (UInt8Array.mk #[1, 2, 255]).back (by decide) == 255
+#guard (UInt8Array.mk #[1, 2, big]).back! == big
+#guard (UInt8Array.mk #[1, 2, big]).back (by decide) == big
 
 -- Popping from a shared array must leave the original unchanged.
 #guard
@@ -309,8 +316,8 @@ open ScalarArray ScalarArrayTest
 
 #guard UInt8Array.popsInPlace 1
 
-#guard (UInt8Array.mk #[1, 0, 255, 0, 0]).popWhile (· == 0) == UInt8Array.mk #[1, 0, 255]
-#guard (UInt8Array.mk #[1, 0, 255]).popWhile (· == 0) == UInt8Array.mk #[1, 0, 255]
+#guard (UInt8Array.mk #[1, 0, big, 0, 0]).popWhile (· == 0) == UInt8Array.mk #[1, 0, big]
+#guard (UInt8Array.mk #[1, 0, big]).popWhile (· == 0) == UInt8Array.mk #[1, 0, big]
 #guard (UInt8Array.mk #[0, 0]).popWhile (· == 0) == UInt8Array.empty
 #guard UInt8Array.empty.popWhile (· == 0) == UInt8Array.empty
 
@@ -325,8 +332,8 @@ open ScalarArray ScalarArrayTest
 
 example (p : UInt8 → Bool) (a : UInt8Array) : (a.popWhile p).data = a.data.popWhile p := by simp
 
-#guard ((UInt8Array.mk #[1, 2, 3, 255]).extract 1 3).data == #[2, 3]
-#guard ((UInt8Array.mk #[1, 2, 3, 255]).extract 2 100).data == #[3, 255]
+#guard ((UInt8Array.mk #[1, 2, 3, big]).extract 1 3).data == #[2, 3]
+#guard ((UInt8Array.mk #[1, 2, 3, big]).extract 2 100).data == #[3, big]
 #guard ((UInt8Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
 #guard ((UInt8Array.mk #[1, 2, 3]).extract 2 1).data == #[]
 #guard ((UInt8Array.mk #[1, 2, 3]).extract 5 9).data == #[]
@@ -335,28 +342,28 @@ example (p : UInt8 → Bool) (a : UInt8Array) : (a.popWhile p).data = a.data.pop
 #guard
   let xs := (Array.range 100000).map Nat.toUInt8
   ((UInt8Array.mk xs).extract 70000 70010).data == xs.extract 70000 70010
-#guard rawElemSize ((UInt8Array.mk #[1, 2, 3]).extract 1 2) == (1 : UInt32)
+#guard rawElemSize ((UInt8Array.mk #[1, 2, 3]).extract 1 2) == elemSize
 
 -- The extracted array is independent of the original.
 #guard
   let a := UInt8Array.mk #[1, 2, 3]
-  let b := (a.extract 0 2).set! 0 255
-  b.data == #[255, 2] && a.data == #[1, 2, 3]
+  let b := (a.extract 0 2).set! 0 big
+  b.data == #[big, 2] && a.data == #[1, 2, 3]
 
 /-! Building arrays -/
 
-#guard (UInt8Array.replicate 3 255).data == #[255, 255, 255]
+#guard (UInt8Array.replicate 3 big).data == #[big, big, big]
 #guard (UInt8Array.replicate 0 1).data == #[]
-#guard (UInt8Array.replicate 100000 255).data == Array.replicate 100000 255
+#guard (UInt8Array.replicate 100000 big).data == Array.replicate 100000 big
 #guard (UInt8Array.ofFn (n := 4) fun i => i.val.toUInt8).data == #[0, 1, 2, 3]
 #guard (UInt8Array.ofFn (n := 0) fun i => i.val.toUInt8).data == #[]
-#guard rawElemSize (UInt8Array.replicate 2 1) == (1 : UInt32)
-#guard rawElemSize (UInt8Array.ofFn (n := 2) fun _ => 1) == (1 : UInt32)
+#guard rawElemSize (UInt8Array.replicate 2 1) == elemSize
+#guard rawElemSize (UInt8Array.ofFn (n := 2) fun _ => 1) == elemSize
 
 /-! Lemmas -/
 
 example (a : UInt8Array) (v : UInt8) : (a.push v).pop = a := by simp [UInt8Array.ext_iff]
-example : (UInt8Array.replicate 3 255)[1] = 255 := by simp
+example : (UInt8Array.replicate 3 big)[1] = big := by simp
 example (a b : UInt8Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
 example (a : UInt8Array) (i : Nat) (v : UInt8) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
@@ -366,44 +373,44 @@ example (a : UInt8Array) (v : UInt8) : (a.push v).pop = a :=
 
 /-! Default bounds proofs -/
 
-#guard (UInt8Array.mk #[1, 2, 255]).get 2 == 255
-#guard (UInt8Array.mk #[1, 2, 255]).uget 2 == 255
-#guard ((UInt8Array.mk #[1, 2, 3]).set 1 255).data == #[1, 255, 3]
-#guard ((UInt8Array.mk #[1, 2, 3]).uset 1 255).data == #[1, 255, 3]
+#guard (UInt8Array.mk #[1, 2, big]).get 2 == big
+#guard (UInt8Array.mk #[1, 2, big]).uget 2 == big
+#guard ((UInt8Array.mk #[1, 2, 3]).set 1 big).data == #[1, big, 3]
+#guard ((UInt8Array.mk #[1, 2, 3]).uset 1 big).data == #[1, big, 3]
 
 /-! `set!` leaves the array unchanged when the index is out of bounds, like `ByteArray.set!`. -/
 
-#guard ((UInt8Array.mk #[1, 2, 3]).set! 3 255).data == #[1, 2, 3]
-#guard ((UInt8Array.mk #[1, 2, 3]).set! (2 ^ 70) 255).data == #[1, 2, 3]
+#guard ((UInt8Array.mk #[1, 2, 3]).set! 3 big).data == #[1, 2, 3]
+#guard ((UInt8Array.mk #[1, 2, 3]).set! (2 ^ 70) big).data == #[1, 2, 3]
 
 /-! Folds over part of an array -/
 
-#guard (UInt8Array.mk #[1, 2, 3, 255]).foldl (fun acc x => x :: acc) [] 1 3 == [3, 2]
-#guard (UInt8Array.mk #[1, 2, 3, 255]).foldl (fun acc x => x :: acc) [] 2 == [255, 3]
-#guard (UInt8Array.mk #[1, 2, 3, 255]).foldl (fun acc x => x :: acc) [] 1 100 == [255, 3, 2]
-#guard (UInt8Array.mk #[1, 2, 3, 255]).foldl (fun acc x => x :: acc) [] 3 1 == []
-#guard (UInt8Array.mk #[1, 2, 3, 255]).foldl (fun acc x => x :: acc) [] 9 12 == []
+#guard (UInt8Array.mk #[1, 2, 3, big]).foldl (fun acc x => x :: acc) [] 1 3 == [3, 2]
+#guard (UInt8Array.mk #[1, 2, 3, big]).foldl (fun acc x => x :: acc) [] 2 == [big, 3]
+#guard (UInt8Array.mk #[1, 2, 3, big]).foldl (fun acc x => x :: acc) [] 1 100 == [big, 3, 2]
+#guard (UInt8Array.mk #[1, 2, 3, big]).foldl (fun acc x => x :: acc) [] 3 1 == []
+#guard (UInt8Array.mk #[1, 2, 3, big]).foldl (fun acc x => x :: acc) [] 9 12 == []
 #guard (UInt8Array.mk #[1, 2, 3]).foldlM (m := Option)
   (fun acc x => if x == 1 then none else some (x :: acc)) [] 1 == some [3, 2]
 
 /-! Copying slices -/
 
 #guard
-  let src := UInt8Array.mk #[10, 11, 12, 255]
+  let src := UInt8Array.mk #[10, 11, 12, big]
   let dest := UInt8Array.mk #[1, 2, 3, 4, 5]
   (src.copySlice 1 dest 2 2).data == #[1, 2, 11, 12, 5] &&
-  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, 255] &&
+  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, big] &&
   (src.copySlice 0 dest 9 2).data == #[1, 2, 3, 4, 5, 10, 11] &&
   (src.copySlice 9 dest 1 2).data == #[1, 2, 3, 4, 5] &&
-  (src.copySlice 2 dest 0 10).data == #[12, 255, 3, 4, 5] &&
+  (src.copySlice 2 dest 0 10).data == #[12, big, 3, 4, 5] &&
   (src.copySlice 0 dest 0 0).data == #[1, 2, 3, 4, 5] &&
-  (src.copySlice 0 UInt8Array.empty 0 4).data == #[10, 11, 12, 255] &&
-  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, 255]
+  (src.copySlice 0 UInt8Array.empty 0 4).data == #[10, 11, 12, big] &&
+  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, big]
 
 -- Copying from an array into itself.
 #guard
-  let a := UInt8Array.mk #[1, 2, 3, 255]
-  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, 255]
+  let a := UInt8Array.mk #[1, 2, 3, big]
+  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, big]
 
 #guard
   let xs := (Array.range 100000).map Nat.toUInt8
@@ -411,13 +418,13 @@ example (a : UInt8Array) (v : UInt8) : (a.push v).pop = a :=
   (a.copySlice 70000 (UInt8Array.replicate 10 0) 5 10).data ==
     Array.replicate 5 0 ++ xs.extract 70000 70010
 
-#guard rawElemSize ((UInt8Array.mk #[1]).copySlice 0 UInt8Array.empty 0 1) == (1 : UInt32)
+#guard rawElemSize ((UInt8Array.mk #[1]).copySlice 0 UInt8Array.empty 0 1) == elemSize
 
 @[noinline] def UInt8Array.copiesSliceInPlace (x : UInt8) : Bool :=
   let dest := (UInt8Array.emptyWithCapacity 10).push x |>.push x |>.push x
   let p := rawAddr dest
-  let dest := (UInt8Array.mk #[255, 255]).copySlice 0 dest 1 2
-  rawAddr dest == p && dest.data == #[x, 255, 255]
+  let dest := (UInt8Array.mk #[big, big]).copySlice 0 dest 1 2
+  rawAddr dest == p && dest.data == #[x, big, big]
 
 @[noinline] def UInt8Array.copySliceGrowth (x : UInt8) : Bool :=
   let dest := (UInt8Array.mk #[x, x, x, x])
@@ -429,25 +436,25 @@ example (a : UInt8Array) (v : UInt8) : (a.push v).pop = a :=
 
 /-! Linearity markers -/
 
-#guard ((UInt8Array.mk #[1, 2]).markLinear.push 255).data == #[1, 2, 255]
-#guard ((UInt8Array.mk #[1]).propagateMark (UInt8Array.mk #[2, 255])).data == #[2, 255]
+#guard ((UInt8Array.mk #[1, 2]).markLinear.push big).data == #[1, 2, big]
+#guard ((UInt8Array.mk #[1]).propagateMark (UInt8Array.mk #[2, big])).data == #[2, big]
 
 /-! Search -/
 
-#guard (UInt8Array.mk #[1, 2, 255, 2]).findIdx? (· == 2) == some 1
-#guard (UInt8Array.mk #[1, 2, 255, 2]).findIdx? (· == 2) 2 == some 3
-#guard (UInt8Array.mk #[1, 2, 255, 2]).findIdx? (· == 3) == none
-#guard (UInt8Array.mk #[1, 2, 255, 2]).findIdx? (· == 1) 9 == none
-#guard ((UInt8Array.mk #[1, 2, 255, 2]).findFinIdx? (· == 255)).map (·.val) == some 2
+#guard (UInt8Array.mk #[1, 2, big, 2]).findIdx? (· == 2) == some 1
+#guard (UInt8Array.mk #[1, 2, big, 2]).findIdx? (· == 2) 2 == some 3
+#guard (UInt8Array.mk #[1, 2, big, 2]).findIdx? (· == 3) == none
+#guard (UInt8Array.mk #[1, 2, big, 2]).findIdx? (· == 1) 9 == none
+#guard ((UInt8Array.mk #[1, 2, big, 2]).findFinIdx? (· == big)).map (·.val) == some 2
 
 /-! Lists -/
 
-#guard (UInt8Array.ofList [1, 2, 255]).data == #[1, 2, 255]
+#guard (UInt8Array.ofList [1, 2, big]).data == #[1, 2, big]
 #guard (UInt8Array.ofList []).data == #[]
-#guard [1, 2, 255].toUInt8Array == UInt8Array.mk #[1, 2, 255]
+#guard [1, 2, big].toUInt8Array == UInt8Array.mk #[1, 2, big]
 #guard (UInt8Array.ofList ((List.range 100000).map Nat.toUInt8)).data ==
   (Array.range 100000).map Nat.toUInt8
-#guard rawElemSize (UInt8Array.ofList [1, 2]) == (1 : UInt32)
+#guard rawElemSize (UInt8Array.ofList [1, 2]) == elemSize
 
 /-! More lemmas -/
 
@@ -461,50 +468,50 @@ example (a : UInt8Array) : UInt8Array.ofList a.toList = a := by simp
 /-! Slices -/
 
 #guard
-  let a := UInt8Array.mk #[1, 2, 3, 255]
+  let a := UInt8Array.mk #[1, 2, 3, big]
   let s := a[1...3]
   s.size == 2 && s[0]! == 2 && s[1]! == 3 && s.getD 2 7 == 7 && s.copy == UInt8Array.mk #[2, 3] &&
     s.toList == [2, 3] && s.toArray == #[2, 3]
 
 #guard
-  let a := UInt8Array.mk #[1, 2, 3, 255]
-  a[1...=3].toList == [2, 3, 255] && a[*...2].toList == [1, 2] && a[2...*].toList == [3, 255] &&
-    a[*...*].toList == [1, 2, 3, 255] && a[0<...2].toList == [2] &&
-    a[0<...=2].toList == [2, 3] && a[*...=1].toList == [1, 2] && a[1<...*].toList == [3, 255]
+  let a := UInt8Array.mk #[1, 2, 3, big]
+  a[1...=3].toList == [2, 3, big] && a[*...2].toList == [1, 2] && a[2...*].toList == [3, big] &&
+    a[*...*].toList == [1, 2, 3, big] && a[0<...2].toList == [2] &&
+    a[0<...=2].toList == [2, 3] && a[*...=1].toList == [1, 2] && a[1<...*].toList == [3, big]
 
 -- Bounds are clamped.
 #guard
-  let a := UInt8Array.mk #[1, 2, 3, 255]
-  a[2...100].toList == [3, 255] && a[3...1].size == 0 && a[9...12].size == 0 &&
-    (a.toSlice 1 (2 ^ 70)).toList == [2, 3, 255]
+  let a := UInt8Array.mk #[1, 2, 3, big]
+  a[2...100].toList == [3, big] && a[3...1].size == 0 && a[9...12].size == 0 &&
+    (a.toSlice 1 (2 ^ 70)).toList == [2, 3, big]
 
 -- Slices of slices.
 #guard
-  let s := (UInt8Array.mk #[1, 2, 3, 255])[1...4]
-  s[1...2].toList == [3] && s[0...100].toList == [2, 3, 255] && s[*...*].toList == [2, 3, 255] &&
-    s[2...*].toList == [255] && s[5...6].size == 0
+  let s := (UInt8Array.mk #[1, 2, 3, big])[1...4]
+  s[1...2].toList == [3] && s[0...100].toList == [2, 3, big] && s[*...*].toList == [2, 3, big] &&
+    s[2...*].toList == [big] && s[5...6].size == 0
 
 #guard
-  let s := (UInt8Array.mk #[1, 2, 3, 255])[1...4]
-  s.popFront.toList == [3, 255] && s.popFront.popFront.popFront.popFront.size == 0
+  let s := (UInt8Array.mk #[1, 2, 3, big])[1...4]
+  s.popFront.toList == [3, big] && s.popFront.popFront.popFront.popFront.size == 0
 
 #guard (∅ : UInt8Array.Slice).size == 0 && (default : UInt8Array.Slice).toList == []
 
 -- An array coerces to the slice of all its elements.
 #guard
-  let s : UInt8Array.Slice := UInt8Array.mk #[1, 2, 255]
-  s.toList == [1, 2, 255] && s.start == 0
+  let s : UInt8Array.Slice := UInt8Array.mk #[1, 2, big]
+  s.toList == [1, 2, big] && s.start == 0
 
 -- A slice does not coerce back to an array, since that would copy.
 example (s : UInt8Array.Slice) : UInt8Array := s.copy
 
 #guard Id.run do
   let mut r : List UInt8 := []
-  for x in (UInt8Array.mk #[1, 2, 3, 255])[1...*] do
+  for x in (UInt8Array.mk #[1, 2, 3, big])[1...*] do
     r := x :: r
-  return r == [255, 3, 2]
+  return r == [big, 3, 2]
 
-#guard (UInt8Array.mk #[1, 2, 3, 255])[1...*].foldl (fun acc x => x :: acc) [] == [255, 3, 2]
+#guard (UInt8Array.mk #[1, 2, 3, big])[1...*].foldl (fun acc x => x :: acc) [] == [big, 3, 2]
 
 #guard
   let xs := (Array.range 100000).map Nat.toUInt8
@@ -526,41 +533,42 @@ example (s : UInt8Array.Slice) : s.copy.size = s.size := by simp
 /-! Slice API -/
 
 #guard
-  let s := (UInt8Array.mk #[1, 2, 3, 255, 2])[1...5]
-  s.foldr (fun x acc => x :: acc) [] == [2, 3, 255, 2] &&
-    s.foldl (fun acc x => x :: acc) [] == [2, 255, 3, 2] &&
-    s.any (· == 255) && !s.any (· == 1) && s.all (· != 1) && !s.all (· == 2) &&
-    s.contains 255 && !s.contains 1 && s.count (· == 2) == 2 &&
-    s.find? (· > 2) == some 3 && s.findRev? (· != 255) == some 2 && s.findRev? (· == 1) == none
+  let s := (UInt8Array.mk #[1, 2, 3, big, 2])[1...5]
+  s.foldr (fun x acc => x :: acc) [] == [2, 3, big, 2] &&
+    s.foldl (fun acc x => x :: acc) [] == [2, big, 3, 2] &&
+    s.any (· == big) && !s.any (· == 1) && s.all (· != 1) && !s.all (· == 2) &&
+    s.contains big && !s.contains 1 && s.count (· == 2) == 2 &&
+    s.find? (· > 2) == some 3 && s.findRev? (· != big) == some 2 && s.findRev? (· == 1) == none
 
 #guard (UInt8Array.mk #[1, 2, 3])[1...1].foldr (fun x acc => x :: acc) [] == []
 #guard (UInt8Array.mk #[1, 2, 3])[3...*].find? (fun _ => true) == none
 
 #guard
-  let s := (UInt8Array.mk #[1, 2, 3, 255])[1...*]
+  let s := (UInt8Array.mk #[1, 2, 3, big])[1...*]
   let r : StateM (List UInt8) Unit := s.forRevM fun x => modify (x :: ·)
-  (r.run []).2 == [2, 3, 255]
+  (r.run []).2 == [2, 3, big]
 
-#guard Id.run ((UInt8Array.mk #[1, 2, 255])[*...*].findSomeRevM?
+#guard Id.run ((UInt8Array.mk #[1, 2, big])[*...*].findSomeRevM?
   (fun x => pure (if x == 2 then some x else none))) == some 2
 
 /-! The `Std.Iterators` API on arrays and slices -/
 
 #guard (UInt8Array.mk #[1, 2, 3]).iter.toList == [1, 2, 3]
 #guard ((UInt8Array.mk #[1, 2, 3]).iter.map (· * 2)).toUInt8Array == UInt8Array.mk #[2, 4, 6]
-#guard ((UInt8Array.mk #[1, 2, 3, 255]).iter.filter (· != 2)).toUInt8Array ==
-  UInt8Array.mk #[1, 3, 255]
-#guard ((UInt8Array.mk #[1, 2, 3, 255]).iter.take 2).toUInt8Array == UInt8Array.mk #[1, 2]
-#guard ((UInt8Array.mk #[1, 2, 3, 255]).iter.drop 2).toUInt8Array == UInt8Array.mk #[3, 255]
-#guard (((UInt8Array.mk #[1, 2, 3]).iter.zip (UInt8Array.mk #[255, 5]).iter).map
-  fun (x, y) => x + y).toUInt8Array == UInt8Array.mk #[1 + 255, 7]
-#guard ((UInt8Array.mk #[1, 2, 3, 255])[1...3].iter.map (· + 1)).toUInt8Array ==
+#guard ((UInt8Array.mk #[1, 2, 3, big]).iter.filter (· != 2)).toUInt8Array ==
+  UInt8Array.mk #[1, 3, big]
+#guard ((UInt8Array.mk #[1, 2, 3, big]).iter.take 2).toUInt8Array == UInt8Array.mk #[1, 2]
+#guard ((UInt8Array.mk #[1, 2, 3, big]).iter.drop 2).toUInt8Array == UInt8Array.mk #[3, big]
+#guard (((UInt8Array.mk #[1, 2, 3]).iter.zip (UInt8Array.mk #[big, 5]).iter).map
+  fun (x, y) => x + y).toUInt8Array == UInt8Array.mk #[1 + big, 7]
+#guard ((UInt8Array.mk #[1, 2, 3, big])[1...3].iter.map (· + 1)).toUInt8Array ==
   UInt8Array.mk #[3, 4]
 #guard (UInt8Array.mk #[1, 2, 3]).iter.length == 3
 #guard UInt8Array.empty.iter.toUInt8Array == UInt8Array.empty
 #guard
   let xs := (Array.range 100000).map Nat.toUInt8
   ((UInt8Array.mk xs).iter.map (· + 1)).toUInt8Array.data == xs.map (· + 1)
-#guard rawElemSize ((UInt8Array.mk #[1]).iter.toUInt8Array) == (1 : UInt32)
-#guard (UInt8Array.mk #[1, 2, 3]).iter.toUInt8ArrayWithCapacity 100 == UInt8Array.mk #[1, 2, 3]
+#guard rawElemSize ((UInt8Array.mk #[1]).iter.toUInt8Array) == elemSize
+#guard (UInt8Array.mk #[1, 2, 3]).iter.toUInt8ArrayWithCapacity 100 ==
+  UInt8Array.mk #[1, 2, 3]
 #guard rawCapacity ((UInt8Array.mk #[1, 2, 3]).iter.toUInt8ArrayWithCapacity 100) ≥ 100
