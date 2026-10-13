@@ -55,9 +55,9 @@ public def get :
     (a : @& USizeArray) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → USize
   | mk a, i, h => a[i]
 
--- Public, like `mkImpl`, `usetImpl` and `setImpl` below: a private `implemented_by` target
--- attached with a separate `attribute` command is not visible to other modules, so code there
--- that uses `get`, `mk`, `uset` or `set` would fail to compile.
+-- Public, like `mkImpl` and `setImpl` below: a private `implemented_by` target attached with a
+-- separate `attribute` command is not visible to other modules, so code there that uses `get`,
+-- `mk` or `set` would fail to compile.
 @[inline]
 public unsafe def getImpl : type_of% @get :=
   fun a i _ => a.uget i.toUSize lcProof
@@ -116,16 +116,16 @@ public instance : EmptyCollection USizeArray := ⟨empty⟩
 
 public instance : Inhabited USizeArray := ⟨empty⟩
 
-@[expose]
+/--
+Replaces the element at index `i`, in place when `a` is not shared. It compiles to inline C: one
+check that `a` is exclusive, copying it if not, and one store.
+-/
+@[extern c inline "({ lean_object * _a = lean_sarray_ensure_exclusive(#1); \
+((size_t*)lean_sarray_cptr(_a))[#2] = #3; _a; })", expose]
 public def uset :
     (a : USizeArray) → (i : USize) → (v : USize) →
     (h : i.toNat < a.size := by get_elem_tactic) → USizeArray
   | mk a, i, v, h => mk (a.uset i v h)
-
-public unsafe def usetImpl : type_of% @uset :=
-  fun a i v _ => setUSizeUnsafe (unsafeCast <| ScalarArray.ensureExclusive (unsafeCast a)) i v
-
-attribute [implemented_by usetImpl] uset
 
 @[expose]
 public def set :
@@ -133,8 +133,9 @@ public def set :
     USizeArray
   | mk a, i, v, h => mk (a.set i v h)
 
+@[inline]
 public unsafe def setImpl : type_of% @set :=
-  fun a i v _ => usetImpl a i.toUSize v lcProof
+  fun a i v _ => a.uset i.toUSize v lcProof
 
 attribute [implemented_by setImpl] set
 
@@ -1159,6 +1160,21 @@ public theorem copySlice_eq_append (src : USizeArray) (srcOff : Nat) (dest : USi
   rw [← toList_data, data_popWhile, ← Array.toArray_toList (xs := a.data),
     List.popWhile_toArray]
   simp
+
+/-! ### Machine-word indices -/
+
+/--
+`usize` is the size when the size fits in a `USize`, which holds for every array in memory. Loops
+over `USize` indices take this as a hypothesis, since the model `Array` has no bound on its size.
+-/
+public theorem toNat_usize_of_lt (a : USizeArray) (h : a.size < USize.size) :
+    a.usize.toNat = a.size := by
+  simp [Nat.mod_eq_of_lt h]
+
+/-- The guard `i < a.usize` of a loop over `USize` indices bounds the index. -/
+public theorem lt_usize_iff (a : USizeArray) (h : a.size < USize.size) {i : USize} :
+    i < a.usize ↔ i.toNat < a.size := by
+  rw [USize.lt_iff_toNat_lt, toNat_usize_of_lt a h]
 
 /-! ### Last element -/
 
