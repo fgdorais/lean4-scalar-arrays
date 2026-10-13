@@ -31,7 +31,8 @@ public inductive USizeArray : Type
 
 namespace USizeArray
 
-@[extern c inline "lean_box(lean_sarray_size(#1))", tagged_return, expose]
+-- `lean_byte_array_size` reads the size of any scalar array, whatever its element size.
+@[extern "lean_byte_array_size", tagged_return, expose]
 public def size : (a : @& USizeArray) → Nat
   | mk a => a.size
 
@@ -47,7 +48,11 @@ public def usize (a : @& USizeArray) : USize :=
 public def uget : (a : @& USizeArray) → (i : USize) → (i.toNat < a.size) → USize
   | mk a, i, h => a.uget i h
 
-@[extern c inline "((size_t*)lean_sarray_cptr(#1))[lean_unbox(#2)]", expose]
+@[inline]
+private unsafe def getImpl (a : @& USizeArray) (i : @& Nat) (_ : i < a.size) : USize :=
+  a.uget i.toUSize lcProof
+
+@[implemented_by getImpl, expose]
 public def get : (a : @& USizeArray) → (i : @& Nat) → (i < a.size) → USize
   | mk a, i, h => a[i]
 

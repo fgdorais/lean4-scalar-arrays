@@ -34,7 +34,8 @@ public inductive Float64Array : Type
 
 namespace Float64Array
 
-@[extern c inline "lean_box(lean_sarray_size(#1))", tagged_return, expose]
+-- `lean_byte_array_size` reads the size of any scalar array, whatever its element size.
+@[extern "lean_byte_array_size", tagged_return, expose]
 public def size : (a : @& Float64Array) → Nat
   | mk a => a.size
 
@@ -50,7 +51,11 @@ public def usize (a : @& Float64Array) : USize :=
 public def uget : (a : @& Float64Array) → (i : USize) → (i.toNat < a.size) → Float
   | mk a, i, h => a.uget i h
 
-@[extern c inline "((double*)lean_sarray_cptr(#1))[lean_unbox(#2)]", expose]
+@[inline]
+private unsafe def getImpl (a : @& Float64Array) (i : @& Nat) (_ : i < a.size) : Float :=
+  a.uget i.toUSize lcProof
+
+@[implemented_by getImpl, expose]
 public def get : (a : @& Float64Array) → (i : @& Nat) → (i < a.size) → Float
   | mk a, i, h => a[i]
 
