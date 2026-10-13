@@ -58,8 +58,9 @@ public def get :
     (a : @& Float64Array) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → Float
   | mk a, i, h => a[i]
 
--- Public: a private `implemented_by` target attached with a separate `attribute` command is not
--- visible to other modules, so code there that uses `get` would fail to compile.
+-- Public, like `mkImpl`, `usetImpl` and `setImpl` below: a private `implemented_by` target
+-- attached with a separate `attribute` command is not visible to other modules, so code there
+-- that uses `get`, `mk`, `uset` or `set` would fail to compile.
 @[inline]
 public unsafe def getImpl : type_of% @get :=
   fun a i _ => a.uget i.toUSize lcProof
@@ -88,8 +89,6 @@ where
   loop (sz : USize) (r : Float64Array) (i : USize) : Float64Array :=
     if i < sz then loop sz (setFloat64Unsafe r i (a.uget i lcProof)) (i + 1) else r
 
--- Public: a private `implemented_by` target attached with a separate `attribute` command is not
--- visible to other modules, so code there that uses `mk` would fail to compile.
 public unsafe def mkImpl (a : Array Float) : Float64Array :=
   mkWithCapacityImpl a a.size
 
@@ -126,8 +125,6 @@ public def uset :
     (h : i.toNat < a.size := by get_elem_tactic) → Float64Array
   | mk a, i, v, h => mk (a.uset i v h)
 
--- Public: a private `implemented_by` target attached with a separate `attribute` command is not
--- visible to other modules, so code there that uses `uset` would fail to compile.
 public unsafe def usetImpl : type_of% @uset :=
   fun a i v _ => setFloat64Unsafe (unsafeCast <| ScalarArray.ensureExclusive (unsafeCast a)) i v
 
@@ -139,8 +136,6 @@ public def set :
     Float64Array
   | mk a, i, v, h => mk (a.set i v h)
 
--- Public: a private `implemented_by` target attached with a separate `attribute` command is not
--- visible to other modules, so code there that uses `set` would fail to compile.
 public unsafe def setImpl : type_of% @set :=
   fun a i v _ => usetImpl a i.toUSize v lcProof
 
