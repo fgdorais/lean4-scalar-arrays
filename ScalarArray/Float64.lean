@@ -58,19 +58,29 @@ public def get :
     (a : @& Float64Array) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → Float
   | mk a, i, h => a[i]
 
--- Public, like `mkImpl` and `setImpl` below: a private `implemented_by` target attached with a
--- separate `attribute` command is not visible to other modules, so code there that uses `get`,
--- `mk` or `set` would fail to compile.
+-- Public, like `mkImpl`, `usetImpl` and `setImpl` below: a private `implemented_by` target
+-- attached with a separate `attribute` command is not visible to other modules, so code there
+-- that uses `get`, `mk`, `uset` or `set` would fail to compile.
 @[inline]
 public unsafe def getImpl : type_of% @get :=
   fun a i _ => a.uget i.toUSize lcProof
 
 attribute [implemented_by getImpl] get
 
-/-- Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in bounds. -/
+/--
+Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in bounds. Public only
+so that `uset` can be inlined into code in other modules.
+-/
 @[extern c inline "#1;\n((double*)lean_sarray_cptr(#1))[#2] = #3"]
-private unsafe def setFloat64Unsafe : Float64Array → USize → Float → Float64Array
+public unsafe def setFloat64Unsafe : Float64Array → USize → Float → Float64Array
   | .mk a, i, v => .mk <| a.uset i v lcProof
+
+/--
+`a` itself when it is not shared, and a copy otherwise. Public only so that `uset` can be inlined
+into code in other modules.
+-/
+@[extern "lean_sarray_ensure_exclusive"]
+public unsafe def ensureExclusiveUnsafe (a : Float64Array) : Float64Array := a
 
 private unsafe def toUSizeChecked (n : Nat) : USize :=
   if n < USize.size >>> 1 then n.toUSize else panic! "out of memory"
@@ -123,12 +133,18 @@ public instance : Inhabited Float64Array := ⟨empty⟩
 Replaces the element at index `i`, in place when `a` is not shared. It compiles to inline C: one
 check that `a` is exclusive, copying it if not, and one store.
 -/
-@[extern c inline "({ lean_object * _a = lean_sarray_ensure_exclusive(#1); \
-((double*)lean_sarray_cptr(_a))[#2] = #3; _a; })", expose]
+@[expose]
 public def uset :
     (a : Float64Array) → (i : USize) → (v : Float) →
     (h : i.toNat < a.size := by get_elem_tactic) → Float64Array
   | mk a, i, v, h => mk (a.uset i v h)
+
+-- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
+@[inline]
+public unsafe def usetImpl : type_of% @uset :=
+  fun a i v _ => setFloat64Unsafe (ensureExclusiveUnsafe a) i v
+
+attribute [implemented_by usetImpl] uset
 
 @[expose]
 public def set :

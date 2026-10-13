@@ -55,19 +55,29 @@ public def get :
     (a : @& UInt8Array) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → UInt8
   | mk a, i, h => a[i]
 
--- Public, like `mkImpl` and `setImpl` below: a private `implemented_by` target attached with a
--- separate `attribute` command is not visible to other modules, so code there that uses `get`,
--- `mk` or `set` would fail to compile.
+-- Public, like `mkImpl`, `usetImpl` and `setImpl` below: a private `implemented_by` target
+-- attached with a separate `attribute` command is not visible to other modules, so code there
+-- that uses `get`, `mk`, `uset` or `set` would fail to compile.
 @[inline]
 public unsafe def getImpl : type_of% @get :=
   fun a i _ => a.uget i.toUSize lcProof
 
 attribute [implemented_by getImpl] get
 
-/-- Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in bounds. -/
+/--
+Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in bounds. Public only
+so that `uset` can be inlined into code in other modules.
+-/
 @[extern c inline "#1;\n((uint8_t*)lean_sarray_cptr(#1))[#2] = #3"]
-private unsafe def setUInt8Unsafe : UInt8Array → USize → UInt8 → UInt8Array
+public unsafe def setUInt8Unsafe : UInt8Array → USize → UInt8 → UInt8Array
   | .mk a, i, v => .mk <| a.uset i v lcProof
+
+/--
+`a` itself when it is not shared, and a copy otherwise. Public only so that `uset` can be inlined
+into code in other modules.
+-/
+@[extern "lean_sarray_ensure_exclusive"]
+public unsafe def ensureExclusiveUnsafe (a : UInt8Array) : UInt8Array := a
 
 private unsafe def toUSizeChecked (n : Nat) : USize :=
   if n < USize.size >>> 1 then n.toUSize else panic! "out of memory"
@@ -120,12 +130,18 @@ public instance : Inhabited UInt8Array := ⟨empty⟩
 Replaces the element at index `i`, in place when `a` is not shared. It compiles to inline C: one
 check that `a` is exclusive, copying it if not, and one store.
 -/
-@[extern c inline "({ lean_object * _a = lean_sarray_ensure_exclusive(#1); \
-((uint8_t*)lean_sarray_cptr(_a))[#2] = #3; _a; })", expose]
+@[expose]
 public def uset :
     (a : UInt8Array) → (i : USize) → (v : UInt8) →
     (h : i.toNat < a.size := by get_elem_tactic) → UInt8Array
   | mk a, i, v, h => mk (a.uset i v h)
+
+-- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
+@[inline]
+public unsafe def usetImpl : type_of% @uset :=
+  fun a i v _ => setUInt8Unsafe (ensureExclusiveUnsafe a) i v
+
+attribute [implemented_by usetImpl] uset
 
 @[expose]
 public def set :
