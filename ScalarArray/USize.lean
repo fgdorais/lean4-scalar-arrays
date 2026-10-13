@@ -827,10 +827,7 @@ public def _root_.Std.Iter.toUSizeArray {α : Type} [Std.Iterator α Id USize]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) USize) : USizeArray :=
   it.fold (·.push ·) empty
 
-/--
-Collects the values emitted by an iterator into a new array that starts with room for `capacity`
-elements, like `Std.Iter.toUSizeArray`.
--/
+/-- Like `Std.Iter.toUSizeArray`, but the new array starts with room for `capacity` elements. -/
 @[inline, expose]
 public def _root_.Std.Iter.toUSizeArrayWithCapacity {α : Type} [Std.Iterator α Id USize]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) USize) (capacity : Nat) : USizeArray :=
