@@ -135,7 +135,8 @@ def generate():
         test_root.split('import ')[0]
         + ''.join(f'import ScalarArrayTest.{n}\n' for n in names)
         + 'import ScalarArrayTest.Float\n'
-        + 'import ScalarArrayTest.Conversions\n')
+        + 'import ScalarArrayTest.Conversions\n'
+        + 'import ScalarArrayTest.Bignum\n')
     return files
 
 
