@@ -31,13 +31,17 @@ public inductive UInt16Array : Type
 
 namespace UInt16Array
 
-@[extern c inline "lean_box(lean_sarray_size(#1))", expose]
+@[extern c inline "lean_box(lean_sarray_size(#1))", tagged_return, expose]
 public def size : (a : @& UInt16Array) → Nat
   | mk a => a.size
 
-@[extern "lean_sarray_size", expose]
-public def usize : (a : @& UInt16Array) → USize
-  | mk a => a.usize
+/--
+The size of `a` as a `USize`. Since `USize` can address all memory, no array has more elements than
+`USize` can count.
+-/
+@[extern "lean_sarray_size", simp, expose]
+public def usize (a : @& UInt16Array) : USize :=
+  a.size.toUSize
 
 @[extern c inline "((uint16_t*)lean_sarray_cptr(#1))[#2]", expose]
 public def uget : (a : @& UInt16Array) → (i : USize) → (i.toNat < a.size) → UInt16

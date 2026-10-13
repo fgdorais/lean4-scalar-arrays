@@ -31,13 +31,17 @@ public inductive Int64Array : Type
 
 namespace Int64Array
 
-@[extern c inline "lean_box(lean_sarray_size(#1))", expose]
+@[extern c inline "lean_box(lean_sarray_size(#1))", tagged_return, expose]
 public def size : (a : @& Int64Array) → Nat
   | mk a => a.size
 
-@[extern "lean_sarray_size", expose]
-public def usize : (a : @& Int64Array) → USize
-  | mk a => a.usize
+/--
+The size of `a` as a `USize`. Since `USize` can address all memory, no array has more elements than
+`USize` can count.
+-/
+@[extern "lean_sarray_size", simp, expose]
+public def usize (a : @& Int64Array) : USize :=
+  a.size.toUSize
 
 @[extern c inline "((uint64_t*)lean_sarray_cptr(#1))[#2]", expose]
 public def uget : (a : @& Int64Array) → (i : USize) → (i.toNat < a.size) → Int64

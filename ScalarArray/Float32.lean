@@ -31,13 +31,17 @@ public inductive Float32Array : Type
 
 namespace Float32Array
 
-@[extern c inline "lean_box(lean_sarray_size(#1))", expose]
+@[extern c inline "lean_box(lean_sarray_size(#1))", tagged_return, expose]
 public def size : (a : @& Float32Array) → Nat
   | mk a => a.size
 
-@[extern "lean_sarray_size", expose]
-public def usize : (a : @& Float32Array) → USize
-  | mk a => a.usize
+/--
+The size of `a` as a `USize`. Since `USize` can address all memory, no array has more elements than
+`USize` can count.
+-/
+@[extern "lean_sarray_size", simp, expose]
+public def usize (a : @& Float32Array) : USize :=
+  a.size.toUSize
 
 @[extern c inline "((float*)lean_sarray_cptr(#1))[#2]", expose]
 public def uget : (a : @& Float32Array) → (i : USize) → (i.toNat < a.size) → Float32
