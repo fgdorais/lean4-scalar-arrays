@@ -68,14 +68,16 @@ Every type `XArray` with element type `X` has the same API. For `Float64Array`, 
 
 | Group        | Declarations                                                                |
 |--------------|-----------------------------------------------------------------------------|
-| Construction | `mk : Array X → XArray`, `empty`, `emptyWithCapacity`, `{}`                 |
+| Construction | `mk : Array X → XArray`, `empty`, `emptyWithCapacity`, `{}`, `replicate`, `ofFn` |
 | Conversion   | `data : XArray → Array X`, `toList`                                         |
-| Size         | `size : XArray → Nat`, `usize : XArray → USize`                             |
-| Reading      | `get`, `uget`, `get!`, `getD`, and `a[i]`, `a[i]?`, `a[i]!` with `Nat` or `USize` indices |
-| Writing      | `set`, `uset`, `set!`, `push`                                               |
-| Appending    | `append`, `a ++ b`                                                          |
-| Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `Repr`, `ToString`     |
-| Lemmas       | `size_mk`, `data_mk`, `mk_data`, `size_eq_data_size`, `size_uset`, `size_set`, `size_push`, `size_append`, `data_append` |
+| Size         | `size : XArray → Nat`, `usize : XArray → USize`, `isEmpty`                  |
+| Reading      | `get`, `uget`, `get!`, `getD`, `back`, `back?`, `back!`, and `a[i]`, `a[i]?`, `a[i]!` with `Nat` or `USize` indices |
+| Writing      | `set`, `uset`, `set!`, `push`, `pop`                                        |
+| Slicing      | `append`, `a ++ b`, `extract`                                               |
+| Iteration    | `foldl`, `foldr`, `foldlM`, `foldrM`, `forM`, `for x in a`, `any`, `all`, `contains` |
+| Equality     | `a == b`; for integer types also `DecidableEq` and `Hashable`               |
+| Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
+| Lemmas       | `ext`, `ext_getElem`; `data_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; `foldl_eq_foldl_data`, `foldr_eq_foldr_data` |
 
 As with `Array`:
 
@@ -85,7 +87,13 @@ As with `Array`:
 - `get!` and `set!` panic on an out-of-bounds index, while `getD` and `a[i]?` don't.
 
 `a ++ b` copies the elements of `b` with a single `memcpy`, into `a` itself when it is not shared
-and has room.
+and has room, and `extract` copies its slice with a single `memcpy`. Iteration reads the elements
+directly, without building an `Array`.
+
+Equality on the integer types compares the arrays' memory with `memcmp`, and their hash agrees
+with the hash of `data`. `Float32Array` and `Float64Array` compare elements with floating-point
+`==`, like `Array Float`, so they have no `DecidableEq` or `Hashable` instance: `NaN` is not equal
+to itself and `0.0 == -0.0`.
 
 ## How it works
 

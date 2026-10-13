@@ -217,3 +217,133 @@ open ScalarArray ScalarArrayTest
 #guard rawCapacity (ISizeArray.mk #[1, 2, 3, 4] ++ ISizeArray.mk #[5]) ≥ 8
 #guard rawCapacity (ISizeArray.mk #[1] ++ ISizeArray.mk (Array.replicate 10 0)) ≥ 11
 #guard rawElemSize (ISizeArray.mk #[1] ++ ISizeArray.mk #[2]) == ((System.Platform.numBits / 8).toUInt32 : UInt32)
+
+/-! Equality -/
+
+#guard ISizeArray.mk #[1, 2, (-9223372036854775808)] == ISizeArray.mk #[1, 2, (-9223372036854775808)]
+#guard ISizeArray.mk #[1, 2, (-9223372036854775808)] != ISizeArray.mk #[1, 2, 0]
+#guard ISizeArray.mk #[1, 2] != ISizeArray.mk #[1, 2, 0]
+#guard ISizeArray.mk #[1, 2, 0] != ISizeArray.mk #[1, 2]
+#guard ISizeArray.empty == ISizeArray.emptyWithCapacity 10
+#guard (ISizeArray.mk #[1, 2] ++ ISizeArray.mk #[(-9223372036854775808)]) == ISizeArray.mk #[1, 2, (-9223372036854775808)]
+-- Capacity and leftover memory past the size don't matter.
+#guard (ISizeArray.emptyWithCapacity 100).push 1 == ISizeArray.mk #[1]
+#guard (ISizeArray.mk #[1, 2, 3]).pop == ISizeArray.mk #[1, 2]
+#guard (ISizeArray.mk (Array.replicate 100000 0)).set! 99999 (-9223372036854775808) !=
+  ISizeArray.mk (Array.replicate 100000 0)
+
+/-! Decidable equality and hashing -/
+
+#guard decide (ISizeArray.mk #[1, 2, (-9223372036854775808)] = ISizeArray.mk #[1, 2, (-9223372036854775808)])
+#guard !decide (ISizeArray.mk #[1, 2, (-9223372036854775808)] = ISizeArray.mk #[1, 2, 0])
+#guard hash (ISizeArray.mk #[1, 2, (-9223372036854775808)]) == hash #[(1 : ISize), 2, (-9223372036854775808)]
+#guard hash (ISizeArray.empty) == hash (#[] : Array ISize)
+#guard hash ((ISizeArray.emptyWithCapacity 100).push 1) == hash (ISizeArray.mk #[1])
+
+/-! Iteration -/
+
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808)]).foldl (fun acc x => x :: acc) [] == [(-9223372036854775808), 2, 1]
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808)]).foldr (fun x acc => x :: acc) [] == [1, 2, (-9223372036854775808)]
+#guard ISizeArray.empty.foldl (fun acc x => x :: acc) [] == []
+#guard ISizeArray.empty.foldr (fun x acc => x :: acc) [] == []
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808)]).foldlM (m := Option)
+  (fun acc x => if x == 2 then none else some (x :: acc)) [] == none
+#guard (ISizeArray.mk #[1, (-9223372036854775808)]).foldrM (m := Option) (fun x acc => some (x :: acc)) [] ==
+  some [1, (-9223372036854775808)]
+
+#guard Id.run do
+  let mut r : List ISize := []
+  for x in ISizeArray.mk #[1, 2, (-9223372036854775808)] do
+    r := x :: r
+  return r == [(-9223372036854775808), 2, 1]
+
+#guard Id.run do
+  let mut r : List ISize := []
+  for x in ISizeArray.mk #[1, 2, 3, 4] do
+    if x == 3 then break
+    r := x :: r
+  return r == [2, 1]
+
+#guard
+  let r : StateM (List ISize) Unit := (ISizeArray.mk #[1, 2, (-9223372036854775808)]).forM fun x => modify (x :: ·)
+  (r.run []).2 == [(-9223372036854775808), 2, 1]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toISize
+  let f := fun (acc : List ISize) x => if x == 0 then x :: acc else acc
+  (ISizeArray.mk xs).foldl f [] == xs.foldl f []
+
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808)]).any (· == (-9223372036854775808))
+#guard !(ISizeArray.mk #[1, 2, 3]).any (· == (-9223372036854775808))
+#guard (ISizeArray.mk #[1, 2, 3]).all (· != (-9223372036854775808))
+#guard !(ISizeArray.mk #[1, (-9223372036854775808), 3]).all (· != (-9223372036854775808))
+#guard !ISizeArray.empty.any (fun _ => true) && ISizeArray.empty.all (fun _ => false)
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808)]).contains (-9223372036854775808)
+#guard !(ISizeArray.mk #[1, 2, 3]).contains (-9223372036854775808)
+#guard (ISizeArray.mk (Array.replicate 100000 0) |>.set! 99999 (-9223372036854775808)).contains (-9223372036854775808)
+
+/-! Removing elements -/
+
+#guard ISizeArray.empty.isEmpty && !(ISizeArray.mk #[1]).isEmpty
+#guard (ISizeArray.mk #[1]).pop.isEmpty
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808)]).pop.data == #[1, 2]
+#guard ISizeArray.empty.pop.data == #[]
+#guard ((ISizeArray.mk #[1, 2, 3]).pop.push (-9223372036854775808)).data == #[1, 2, (-9223372036854775808)]
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808)]).back? == some (-9223372036854775808)
+#guard ISizeArray.empty.back? == none
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808)]).back! == (-9223372036854775808)
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808)]).back (by decide) == (-9223372036854775808)
+
+-- Popping from a shared array must leave the original unchanged.
+#guard
+  let a := ISizeArray.mk #[1, 2, 3]
+  let b := a.pop
+  b.data == #[1, 2] && a.data == #[1, 2, 3]
+
+-- The array is built from a parameter so that it isn't extracted as a shared closed term.
+@[noinline] def ISizeArray.popsInPlace (x : ISize) : Bool :=
+  let a := (ISizeArray.mk #[x]).push x
+  let p := rawAddr a
+  let a := a.pop
+  rawAddr a == p && a.data == #[x]
+
+#guard ISizeArray.popsInPlace 1
+
+#guard ((ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]).extract 1 3).data == #[2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]).extract 2 100).data == #[3, (-9223372036854775808)]
+#guard ((ISizeArray.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).extract 2 1).data == #[]
+#guard ((ISizeArray.mk #[1, 2, 3]).extract 5 9).data == #[]
+#guard ((ISizeArray.mk #[1, 2, 3]).extract (2 ^ 70) (2 ^ 71)).data == #[]
+#guard ((ISizeArray.mk #[1, 2, 3]).extract 1 (2 ^ 70)).data == #[2, 3]
+#guard
+  let xs := (Array.range 100000).map Nat.toISize
+  ((ISizeArray.mk xs).extract 70000 70010).data == xs.extract 70000 70010
+#guard rawElemSize ((ISizeArray.mk #[1, 2, 3]).extract 1 2) == ((System.Platform.numBits / 8).toUInt32 : UInt32)
+
+-- The extracted array is independent of the original.
+#guard
+  let a := ISizeArray.mk #[1, 2, 3]
+  let b := (a.extract 0 2).set! 0 (-9223372036854775808)
+  b.data == #[(-9223372036854775808), 2] && a.data == #[1, 2, 3]
+
+/-! Building arrays -/
+
+#guard (ISizeArray.replicate 3 (-9223372036854775808)).data == #[(-9223372036854775808), (-9223372036854775808), (-9223372036854775808)]
+#guard (ISizeArray.replicate 0 1).data == #[]
+#guard (ISizeArray.replicate 100000 (-9223372036854775808)).data == Array.replicate 100000 (-9223372036854775808)
+#guard (ISizeArray.ofFn (n := 4) fun i => i.val.toISize).data == #[0, 1, 2, 3]
+#guard (ISizeArray.ofFn (n := 0) fun i => i.val.toISize).data == #[]
+#guard rawElemSize (ISizeArray.replicate 2 1) == ((System.Platform.numBits / 8).toUInt32 : UInt32)
+#guard rawElemSize (ISizeArray.ofFn (n := 2) fun _ => 1) == ((System.Platform.numBits / 8).toUInt32 : UInt32)
+
+/-! Lemmas -/
+
+example (a : ISizeArray) (v : ISize) : (a.push v).pop = a := by simp [ISizeArray.ext_iff]
+example : (ISizeArray.replicate 3 (-9223372036854775808))[1] = (-9223372036854775808) := by simp
+example (a b : ISizeArray) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
+example (a : ISizeArray) (i : Nat) (v : ISize) (h : i < a.size) :
+    (a.set i v h)[i]'(by simpa) = v := by simp
+example (a : ISizeArray) : a.extract 0 a.size = a := by simp [ISizeArray.ext_iff]
+example (a : ISizeArray) (v : ISize) : (a.push v).pop = a :=
+  ISizeArray.ext_getElem (by simp) (by simp_all)
