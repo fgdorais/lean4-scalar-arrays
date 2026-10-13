@@ -820,12 +820,12 @@ end Slice
 /--
 Collects the values emitted by an iterator into a new array. Together with the `Std.Iterators`
 combinators, this gives functions such as `map`, `filter`, `take` and `zipWith`, for example
-`(a.iter.map (· + 1)).toUSizeArray`.
+`(a.iter.map (· + 1)).toUSizeArray`. The new array starts with room for `capacity` elements.
 -/
 @[inline, expose]
 public def _root_.Std.Iter.toUSizeArray {α : Type} [Std.Iterator α Id USize]
-    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) USize) : USizeArray :=
-  it.fold (·.push ·) empty
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) USize) (capacity := 0) : USizeArray :=
+  it.fold (·.push ·) (emptyWithCapacity capacity)
 
 @[simp] public theorem size_mk (a : Array USize) : (mk a).size = a.size := rfl
 

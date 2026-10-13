@@ -820,12 +820,12 @@ end Slice
 /--
 Collects the values emitted by an iterator into a new array. Together with the `Std.Iterators`
 combinators, this gives functions such as `map`, `filter`, `take` and `zipWith`, for example
-`(a.iter.map (· + 1)).toInt64Array`.
+`(a.iter.map (· + 1)).toInt64Array`. The new array starts with room for `capacity` elements.
 -/
 @[inline, expose]
 public def _root_.Std.Iter.toInt64Array {α : Type} [Std.Iterator α Id Int64]
-    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int64) : Int64Array :=
-  it.fold (·.push ·) empty
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int64) (capacity := 0) : Int64Array :=
+  it.fold (·.push ·) (emptyWithCapacity capacity)
 
 @[simp] public theorem size_mk (a : Array Int64) : (mk a).size = a.size := rfl
 

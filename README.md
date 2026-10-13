@@ -118,6 +118,12 @@ a[2...*].copy                                -- drop
 a.iter.length                                -- size
 ```
 
+`Std.Iter.toXArray` takes an optional `capacity` to allocate up front when the number of elements
+is known or bounded, for example `(a.iter.map f).toUInt32Array (capacity := a.size)`.
+
+Slices use core's range notation, `a[i...j]`. The older `a[i:j]` notation is specific to `Array`
+and doesn't apply to these arrays.
+
 Equality on the integer types compares the arrays' memory with `memcmp`, and their hash agrees
 with the hash of `data`. `Float32Array` and `Float64Array` compare elements with floating-point
 `==`, like `Array Float`, so they have no `DecidableEq` or `Hashable` instance: `NaN` is not equal
