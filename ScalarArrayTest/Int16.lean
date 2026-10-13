@@ -490,6 +490,14 @@ example (a : Int16Array) : Int16Array.ofList a.toList = a := by simp
 
 #guard (∅ : Int16Array.Slice).size == 0 && (default : Int16Array.Slice).toList == []
 
+-- An array coerces to the slice of all its elements.
+#guard
+  let s : Int16Array.Slice := Int16Array.mk #[1, 2, (-32768)]
+  s.toList == [1, 2, (-32768)] && s.start == 0
+
+-- A slice does not coerce back to an array, since that would copy.
+example (s : Int16Array.Slice) : Int16Array := s.copy
+
 #guard Id.run do
   let mut r : List Int16 := []
   for x in (Int16Array.mk #[1, 2, 3, (-32768)])[1...*] do

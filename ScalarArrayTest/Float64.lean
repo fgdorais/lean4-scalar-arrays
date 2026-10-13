@@ -482,6 +482,14 @@ example (a : Float64Array) : Float64Array.ofList a.toList = a := by simp
 
 #guard (∅ : Float64Array.Slice).size == 0 && (default : Float64Array.Slice).toList == []
 
+-- An array coerces to the slice of all its elements.
+#guard
+  let s : Float64Array.Slice := Float64Array.mk #[1, 2, (-1.5e300)]
+  s.toList == [1, 2, (-1.5e300)] && s.start == 0
+
+-- A slice does not coerce back to an array, since that would copy.
+example (s : Float64Array.Slice) : Float64Array := s.copy
+
 #guard Id.run do
   let mut r : List Float := []
   for x in (Float64Array.mk #[1, 2, 3, (-1.5e300)])[1...*] do

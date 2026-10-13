@@ -490,6 +490,14 @@ example (a : Int64Array) : Int64Array.ofList a.toList = a := by simp
 
 #guard (∅ : Int64Array.Slice).size == 0 && (default : Int64Array.Slice).toList == []
 
+-- An array coerces to the slice of all its elements.
+#guard
+  let s : Int64Array.Slice := Int64Array.mk #[1, 2, (-9223372036854775808)]
+  s.toList == [1, 2, (-9223372036854775808)] && s.start == 0
+
+-- A slice does not coerce back to an array, since that would copy.
+example (s : Int64Array.Slice) : Int64Array := s.copy
+
 #guard Id.run do
   let mut r : List Int64 := []
   for x in (Int64Array.mk #[1, 2, 3, (-9223372036854775808)])[1...*] do

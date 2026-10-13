@@ -490,6 +490,14 @@ example (a : UInt8Array) : UInt8Array.ofList a.toList = a := by simp
 
 #guard (∅ : UInt8Array.Slice).size == 0 && (default : UInt8Array.Slice).toList == []
 
+-- An array coerces to the slice of all its elements.
+#guard
+  let s : UInt8Array.Slice := UInt8Array.mk #[1, 2, 255]
+  s.toList == [1, 2, 255] && s.start == 0
+
+-- A slice does not coerce back to an array, since that would copy.
+example (s : UInt8Array.Slice) : UInt8Array := s.copy
+
 #guard Id.run do
   let mut r : List UInt8 := []
   for x in (UInt8Array.mk #[1, 2, 3, 255])[1...*] do

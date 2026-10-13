@@ -490,6 +490,14 @@ example (a : ISizeArray) : ISizeArray.ofList a.toList = a := by simp
 
 #guard (∅ : ISizeArray.Slice).size == 0 && (default : ISizeArray.Slice).toList == []
 
+-- An array coerces to the slice of all its elements.
+#guard
+  let s : ISizeArray.Slice := ISizeArray.mk #[1, 2, (-9223372036854775808)]
+  s.toList == [1, 2, (-9223372036854775808)] && s.start == 0
+
+-- A slice does not coerce back to an array, since that would copy.
+example (s : ISizeArray.Slice) : ISizeArray := s.copy
+
 #guard Id.run do
   let mut r : List ISize := []
   for x in (ISizeArray.mk #[1, 2, 3, (-9223372036854775808)])[1...*] do

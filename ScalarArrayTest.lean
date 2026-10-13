@@ -16,4 +16,3 @@ import ScalarArrayTest.Float32
 import ScalarArrayTest.Float64
 import ScalarArrayTest.Float
 import ScalarArrayTest.Conversions
-import ScalarArrayTest.Bignum

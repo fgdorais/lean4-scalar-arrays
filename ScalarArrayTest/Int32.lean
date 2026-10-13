@@ -490,6 +490,14 @@ example (a : Int32Array) : Int32Array.ofList a.toList = a := by simp
 
 #guard (∅ : Int32Array.Slice).size == 0 && (default : Int32Array.Slice).toList == []
 
+-- An array coerces to the slice of all its elements.
+#guard
+  let s : Int32Array.Slice := Int32Array.mk #[1, 2, (-2147483648)]
+  s.toList == [1, 2, (-2147483648)] && s.start == 0
+
+-- A slice does not coerce back to an array, since that would copy.
+example (s : Int32Array.Slice) : Int32Array := s.copy
+
 #guard Id.run do
   let mut r : List Int32 := []
   for x in (Int32Array.mk #[1, 2, 3, (-2147483648)])[1...*] do
