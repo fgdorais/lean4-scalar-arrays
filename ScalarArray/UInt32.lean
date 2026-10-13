@@ -594,8 +594,6 @@ public instance : Inhabited UInt32Array.Slice := ⟨Slice.empty⟩
 public def copy (s : UInt32Array.Slice) : UInt32Array :=
   s.array.extract s.start s.stop
 
-public instance : Coe UInt32Array.Slice UInt32Array := ⟨copy⟩
-
 public theorem getElem_eq (s : UInt32Array.Slice) (i : Nat) (h : i < s.size) :
     s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega) := rfl
 
@@ -626,6 +624,9 @@ public def toSlice (a : UInt32Array) (start : Nat := 0) (stop : Nat := a.size) :
     else
       ⟨{ array := a, start := a.size, stop := a.size, start_le_stop := Nat.le_refl _,
          stop_le_array_size := Nat.le_refl _ }⟩
+
+/-- Arrays coerce to slices, which is free. Slices don't coerce back, since that copies. -/
+public instance : Coe UInt32Array UInt32Array.Slice := ⟨(·.toSlice)⟩
 
 public instance : Std.Rcc.Sliceable UInt32Array Nat UInt32Array.Slice where
   mkSlice a range := a.toSlice range.lower (range.upper + 1)

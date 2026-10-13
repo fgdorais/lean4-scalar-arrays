@@ -77,10 +77,10 @@ open ScalarArrayTest Bignum
 #guard (ofNat 1).toList == [1]
 #guard (ofNat (2 ^ 32)).toList == [0, 1]
 #guard (ofNat (2 ^ 64 - 1)).toList == [4294967295, 4294967295]
-#guard [0, 1, 2 ^ 32 - 1, 2 ^ 32, 2 ^ 100 + 7, 10 ^ 50].all fun n => toNat (ofNat n).toSlice == n
+#guard [0, 1, 2 ^ 32 - 1, 2 ^ 32, 2 ^ 100 + 7, 10 ^ 50].all fun n => toNat (ofNat n) == n
 #guard trim (UInt32Array.mk #[1, 2, 0, 0]) == UInt32Array.mk #[1, 2]
 #guard trim (UInt32Array.mk #[0, 0]) == .empty
-#guard toNat (UInt32Array.mk #[5, 0, 0]).toSlice == 5
+#guard toNat (UInt32Array.mk #[5, 0, 0]) == 5
 
 /-! Test values -/
 
@@ -108,31 +108,31 @@ def values : List Nat := edges ++ samples 40 400
 /-! Addition -/
 
 #guard values.all fun m => values.all fun n =>
-  let r := add (ofNat m).toSlice (ofNat n).toSlice
-  toNat r.toSlice == m + n && isTrimmed r
+  let r := add (ofNat m) (ofNat n)
+  toNat r == m + n && isTrimmed r
 
-#guard add (ofNat (2 ^ 128 - 1)).toSlice (ofNat 1).toSlice == ofNat (2 ^ 128)
-#guard add UInt32Array.empty.toSlice UInt32Array.empty.toSlice == .empty
+#guard add (ofNat (2 ^ 128 - 1)) (ofNat 1) == ofNat (2 ^ 128)
+#guard add UInt32Array.empty UInt32Array.empty == .empty
 
 /-! Multiplication -/
 
 #guard values.all fun m => values.all fun n =>
-  let r := mul (ofNat m).toSlice (ofNat n).toSlice
-  toNat r.toSlice == m * n && isTrimmed r
+  let r := mul (ofNat m) (ofNat n)
+  toNat r == m * n && isTrimmed r
 
-#guard mul (ofNat (2 ^ 128 - 1)).toSlice (ofNat (2 ^ 128 - 1)).toSlice ==
+#guard mul (ofNat (2 ^ 128 - 1)) (ofNat (2 ^ 128 - 1)) ==
   ofNat ((2 ^ 128 - 1) * (2 ^ 128 - 1))
-#guard mul (ofNat 0).toSlice (ofNat (2 ^ 100)).toSlice == .empty
+#guard mul (ofNat 0) (ofNat (2 ^ 100)) == .empty
 
 -- A long computation that reuses each result: 200 factorial.
 #guard
-  let r := (List.range 200).foldl (fun a i => mul a.toSlice (ofNat (i + 1)).toSlice) (ofNat 1)
-  toNat r.toSlice == (List.range 200).foldl (fun a i => a * (i + 1)) 1
+  let r := (List.range 200).foldl (fun a i => mul a (ofNat (i + 1))) (ofNat 1)
+  toNat r == (List.range 200).foldl (fun a i => a * (i + 1)) 1
 
 -- Repeated squaring: 3 ^ (2 ^ 10).
 #guard
-  let r := (List.range 10).foldl (fun a _ => mul a.toSlice a.toSlice) (ofNat 3)
-  toNat r.toSlice == 3 ^ 2 ^ 10
+  let r := (List.range 10).foldl (fun a _ => mul a a) (ofNat 3)
+  toNat r == 3 ^ 2 ^ 10
 
 /-! Slices of limbs -/
 
@@ -143,7 +143,7 @@ def values : List Nat := edges ++ samples 40 400
     let lo := a[*...k]
     let hi := a[k...*]
     toNat lo + toNat hi * 2 ^ (32 * k) == n &&
-    add (shiftLimbs (trim hi) k).toSlice lo == a
+    add (shiftLimbs (trim hi.copy) k) lo == a
 
 -- One step of Karatsuba's algorithm, which multiplies the halves of each operand.
 #guard (samples 20 600).all fun m => (samples 20 600 (seed := 7)).all fun n =>
@@ -152,8 +152,8 @@ def values : List Nat := edges ++ samples 40 400
   let k := (max a.size b.size + 1) / 2
   let z₀ := mul a[*...k] b[*...k]
   let z₂ := mul a[k...*] b[k...*]
-  let z₁ := mul (add a[*...k] a[k...*]).toSlice (add b[*...k] b[k...*]).toSlice
+  let z₁ := mul (add a[*...k] a[k...*]) (add b[*...k] b[k...*])
   -- z₁ - z₀ - z₂ is computed with `Nat` since there is no subtraction here.
-  let mid := ofNat (toNat z₁.toSlice - toNat z₀.toSlice - toNat z₂.toSlice)
-  let r := add (add z₀.toSlice (shiftLimbs mid k).toSlice).toSlice (shiftLimbs z₂ (2 * k)).toSlice
-  r == mul a.toSlice b.toSlice && toNat r.toSlice == m * n
+  let mid := ofNat (toNat z₁ - toNat z₀ - toNat z₂)
+  let r := add (add z₀ (shiftLimbs mid k)) (shiftLimbs z₂ (2 * k))
+  r == mul a b && toNat r == m * n

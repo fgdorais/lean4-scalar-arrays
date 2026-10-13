@@ -594,8 +594,6 @@ public instance : Inhabited Int64Array.Slice := ⟨Slice.empty⟩
 public def copy (s : Int64Array.Slice) : Int64Array :=
   s.array.extract s.start s.stop
 
-public instance : Coe Int64Array.Slice Int64Array := ⟨copy⟩
-
 public theorem getElem_eq (s : Int64Array.Slice) (i : Nat) (h : i < s.size) :
     s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega) := rfl
 
@@ -626,6 +624,9 @@ public def toSlice (a : Int64Array) (start : Nat := 0) (stop : Nat := a.size) : 
     else
       ⟨{ array := a, start := a.size, stop := a.size, start_le_stop := Nat.le_refl _,
          stop_le_array_size := Nat.le_refl _ }⟩
+
+/-- Arrays coerce to slices, which is free. Slices don't coerce back, since that copies. -/
+public instance : Coe Int64Array Int64Array.Slice := ⟨(·.toSlice)⟩
 
 public instance : Std.Rcc.Sliceable Int64Array Nat Int64Array.Slice where
   mkSlice a range := a.toSlice range.lower (range.upper + 1)
