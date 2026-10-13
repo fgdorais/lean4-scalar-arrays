@@ -441,3 +441,60 @@ example (a b : UInt8Array) : (a ++ b).extract 0 a.size = a := by simp
 example (a : UInt8Array) (i : Nat) (v : UInt8) : (a.set! i v).size = a.size := by simp
 example (l : List UInt8) : (UInt8Array.ofList l).toList = l := by simp
 example (a : UInt8Array) : UInt8Array.ofList a.toList = a := by simp
+
+/-! Slices -/
+
+#guard
+  let a := UInt8Array.mk #[1, 2, 3, 255]
+  let s := a[1...3]
+  s.size == 2 && s[0]! == 2 && s[1]! == 3 && s.getD 2 7 == 7 && s.copy == UInt8Array.mk #[2, 3] &&
+    s.toList == [2, 3] && s.toArray == #[2, 3]
+
+#guard
+  let a := UInt8Array.mk #[1, 2, 3, 255]
+  a[1...=3].toList == [2, 3, 255] && a[*...2].toList == [1, 2] && a[2...*].toList == [3, 255] &&
+    a[*...*].toList == [1, 2, 3, 255] && a[0<...2].toList == [2] &&
+    a[0<...=2].toList == [2, 3] && a[*...=1].toList == [1, 2] && a[1<...*].toList == [3, 255]
+
+-- Bounds are clamped.
+#guard
+  let a := UInt8Array.mk #[1, 2, 3, 255]
+  a[2...100].toList == [3, 255] && a[3...1].size == 0 && a[9...12].size == 0 &&
+    (a.toSlice 1 (2 ^ 70)).toList == [2, 3, 255]
+
+-- Slices of slices.
+#guard
+  let s := (UInt8Array.mk #[1, 2, 3, 255])[1...4]
+  s[1...2].toList == [3] && s[0...100].toList == [2, 3, 255] && s[*...*].toList == [2, 3, 255] &&
+    s[2...*].toList == [255] && s[5...6].size == 0
+
+#guard
+  let s := (UInt8Array.mk #[1, 2, 3, 255])[1...4]
+  s.popFront.toList == [3, 255] && s.popFront.popFront.popFront.popFront.size == 0
+
+#guard (∅ : UInt8Array.Slice).size == 0 && (default : UInt8Array.Slice).toList == []
+
+#guard Id.run do
+  let mut r : List UInt8 := []
+  for x in (UInt8Array.mk #[1, 2, 3, 255])[1...*] do
+    r := x :: r
+  return r == [255, 3, 2]
+
+#guard (UInt8Array.mk #[1, 2, 3, 255])[1...*].foldl (fun acc x => x :: acc) [] == [255, 3, 2]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toUInt8
+  let s := (UInt8Array.mk xs)[70000...70010]
+  s.toArray == xs.extract 70000 70010 && s.copy.data == xs.extract 70000 70010
+
+#guard toString (UInt8Array.mk #[1, 2, 3])[1...*] == toString (UInt8Array.mk #[2, 3])
+
+-- Taking a slice doesn't copy the array.
+@[noinline] def UInt8Array.slicesWithoutCopying (x : UInt8) : Bool :=
+  let a := UInt8Array.mk #[x, 2, 3]
+  let p := rawAddr a
+  rawAddr a[1...2].array == p
+
+#guard UInt8Array.slicesWithoutCopying 1
+
+example (s : UInt8Array.Slice) : s.copy.size = s.size := by simp
