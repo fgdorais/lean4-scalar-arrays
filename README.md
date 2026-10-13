@@ -77,7 +77,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Slicing      | `append`, `a ++ b`, `extract`, `copySlice`                                  |
 | Iteration    | `foldl`, `foldr`, `foldlM`, `foldrM`, `forM`, `for x in a`, `any`, `all`, `contains` |
 | Search       | `findIdx?`, `findFinIdx?`                                                   |
-| Iterators    | `iter`/`mkIterator` and `Iterator` with `curr`, `next`, `prev`, `atEnd`, `hasNext`, `hasPrev`, `forward`, `nextn`, `prevn`, `toEnd`, `remaining`, … |
+| Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `get`, `getD`, `get!`, `popFront`, `copy`, `for x in s`, `foldl`, `toArray`, `toList` |
 | Equality     | `a == b`; for integer types also `DecidableEq` and `Hashable`               |
 | Linearity    | `markLinear`, `propagateMark`                                               |
 | Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
@@ -102,6 +102,9 @@ directly, without building an `Array`.
 `ByteArray.toUInt8Array`, and `Float64Array` to and from core's `FloatArray` with `toFloatArray`,
 `ofFloatArray` and `FloatArray.toFloat64Array` (`import ScalarArray.Conversions`). These conversions
 never copy, so core's functions can be used directly on these arrays and vice versa.
+
+Slices are `Std.Slice`s, like core's `Subarray`, so they work with the generic slice API. Taking a
+slice never copies the array; `Slice.copy` makes a new array with a single `memcpy`.
 
 Equality on the integer types compares the arrays' memory with `memcmp`, and their hash agrees
 with the hash of `data`. `Float32Array` and `Float64Array` compare elements with floating-point

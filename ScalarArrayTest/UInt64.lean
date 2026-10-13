@@ -442,40 +442,59 @@ example (a : UInt64Array) (i : Nat) (v : UInt64) : (a.set! i v).size = a.size :=
 example (l : List UInt64) : (UInt64Array.ofList l).toList = l := by simp
 example (a : UInt64Array) : UInt64Array.ofList a.toList = a := by simp
 
-/-! Iterators -/
+/-! Slices -/
 
 #guard
-  let it := (UInt64Array.mk #[1, 2, 18446744073709551615]).iter
-  it.curr == 1 && it.pos == 0 && !it.atEnd && it.hasNext && !it.hasPrev && it.remaining == 3 &&
-    it.next.curr == 2 && it.next.hasPrev && it.next.next.curr == 18446744073709551615 &&
-    it.next.next.next.atEnd && !it.next.next.next.hasNext && it.next.next.next.remaining == 0 &&
-    it.toEnd.atEnd && it.toEnd.pos == 3 && it.toEnd.prev.curr == 18446744073709551615 &&
-    (it.forward 2).curr == 18446744073709551615 && (it.nextn 1).curr == 2 && (it.toEnd.prevn 2).curr == 2 &&
-    (it.toEnd.prevn 10).pos == 0 && it.prev.pos == 0
+  let a := UInt64Array.mk #[1, 2, 3, 18446744073709551615]
+  let s := a[1...3]
+  s.size == 2 && s[0]! == 2 && s[1]! == 3 && s.getD 2 7 == 7 && s.copy == UInt64Array.mk #[2, 3] &&
+    s.toList == [2, 3] && s.toArray == #[2, 3]
 
--- An invalid position gives the default element.
-#guard (UInt64Array.mk #[1]).iter.next.curr == default
-#guard ((UInt64Array.mk #[1, 2]).iter.forward 5).curr == default
-#guard UInt64Array.empty.iter.atEnd && UInt64Array.empty.iter.curr == default
+#guard
+  let a := UInt64Array.mk #[1, 2, 3, 18446744073709551615]
+  a[1...=3].toList == [2, 3, 18446744073709551615] && a[*...2].toList == [1, 2] && a[2...*].toList == [3, 18446744073709551615] &&
+    a[*...*].toList == [1, 2, 3, 18446744073709551615] && a[0<...2].toList == [2] &&
+    a[0<...=2].toList == [2, 3] && a[*...=1].toList == [1, 2] && a[1<...*].toList == [3, 18446744073709551615]
 
-#guard (UInt64Array.mk #[1, 18446744073709551615]).iter.curr' (by decide) == 1
-#guard ((UInt64Array.mk #[1, 18446744073709551615]).iter.next' (by decide)).curr == 18446744073709551615
+-- Bounds are clamped.
+#guard
+  let a := UInt64Array.mk #[1, 2, 3, 18446744073709551615]
+  a[2...100].toList == [3, 18446744073709551615] && a[3...1].size == 0 && a[9...12].size == 0 &&
+    (a.toSlice 1 (2 ^ 70)).toList == [2, 3, 18446744073709551615]
+
+-- Slices of slices.
+#guard
+  let s := (UInt64Array.mk #[1, 2, 3, 18446744073709551615])[1...4]
+  s[1...2].toList == [3] && s[0...100].toList == [2, 3, 18446744073709551615] && s[*...*].toList == [2, 3, 18446744073709551615] &&
+    s[2...*].toList == [18446744073709551615] && s[5...6].size == 0
+
+#guard
+  let s := (UInt64Array.mk #[1, 2, 3, 18446744073709551615])[1...4]
+  s.popFront.toList == [3, 18446744073709551615] && s.popFront.popFront.popFront.popFront.size == 0
+
+#guard (∅ : UInt64Array.Slice).size == 0 && (default : UInt64Array.Slice).toList == []
 
 #guard Id.run do
-  let mut it := (UInt64Array.mk #[1, 2, 18446744073709551615]).iter
   let mut r : List UInt64 := []
-  while it.hasNext do
-    r := it.curr :: r
-    it := it.next
-  return r == [18446744073709551615, 2, 1]
+  for x in (UInt64Array.mk #[1, 2, 3, 18446744073709551615])[1...*] do
+    r := x :: r
+  return r == [18446744073709551615, 3, 2]
 
-#guard Id.run do
-  let mut it := (UInt64Array.mk #[1, 2, 18446744073709551615]).iter.toEnd
-  let mut r : List UInt64 := []
-  while it.hasPrev do
-    it := it.prev
-    r := it.curr :: r
-  return r == [1, 2, 18446744073709551615]
+#guard (UInt64Array.mk #[1, 2, 3, 18446744073709551615])[1...*].foldl (fun acc x => x :: acc) [] == [18446744073709551615, 3, 2]
 
-example (it : UInt64Array.Iterator) : sizeOf it = it.array.size - it.idx :=
-  UInt64Array.Iterator.sizeOf_eq it
+#guard
+  let xs := (Array.range 100000).map Nat.toUInt64
+  let s := (UInt64Array.mk xs)[70000...70010]
+  s.toArray == xs.extract 70000 70010 && s.copy.data == xs.extract 70000 70010
+
+#guard toString (UInt64Array.mk #[1, 2, 3])[1...*] == toString (UInt64Array.mk #[2, 3])
+
+-- Taking a slice doesn't copy the array.
+@[noinline] def UInt64Array.slicesWithoutCopying (x : UInt64) : Bool :=
+  let a := UInt64Array.mk #[x, 2, 3]
+  let p := rawAddr a
+  rawAddr a[1...2].array == p
+
+#guard UInt64Array.slicesWithoutCopying 1
+
+example (s : UInt64Array.Slice) : s.copy.size = s.size := by simp

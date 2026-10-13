@@ -442,40 +442,59 @@ example (a : Int16Array) (i : Nat) (v : Int16) : (a.set! i v).size = a.size := b
 example (l : List Int16) : (Int16Array.ofList l).toList = l := by simp
 example (a : Int16Array) : Int16Array.ofList a.toList = a := by simp
 
-/-! Iterators -/
+/-! Slices -/
 
 #guard
-  let it := (Int16Array.mk #[1, 2, (-32768)]).iter
-  it.curr == 1 && it.pos == 0 && !it.atEnd && it.hasNext && !it.hasPrev && it.remaining == 3 &&
-    it.next.curr == 2 && it.next.hasPrev && it.next.next.curr == (-32768) &&
-    it.next.next.next.atEnd && !it.next.next.next.hasNext && it.next.next.next.remaining == 0 &&
-    it.toEnd.atEnd && it.toEnd.pos == 3 && it.toEnd.prev.curr == (-32768) &&
-    (it.forward 2).curr == (-32768) && (it.nextn 1).curr == 2 && (it.toEnd.prevn 2).curr == 2 &&
-    (it.toEnd.prevn 10).pos == 0 && it.prev.pos == 0
+  let a := Int16Array.mk #[1, 2, 3, (-32768)]
+  let s := a[1...3]
+  s.size == 2 && s[0]! == 2 && s[1]! == 3 && s.getD 2 7 == 7 && s.copy == Int16Array.mk #[2, 3] &&
+    s.toList == [2, 3] && s.toArray == #[2, 3]
 
--- An invalid position gives the default element.
-#guard (Int16Array.mk #[1]).iter.next.curr == default
-#guard ((Int16Array.mk #[1, 2]).iter.forward 5).curr == default
-#guard Int16Array.empty.iter.atEnd && Int16Array.empty.iter.curr == default
+#guard
+  let a := Int16Array.mk #[1, 2, 3, (-32768)]
+  a[1...=3].toList == [2, 3, (-32768)] && a[*...2].toList == [1, 2] && a[2...*].toList == [3, (-32768)] &&
+    a[*...*].toList == [1, 2, 3, (-32768)] && a[0<...2].toList == [2] &&
+    a[0<...=2].toList == [2, 3] && a[*...=1].toList == [1, 2] && a[1<...*].toList == [3, (-32768)]
 
-#guard (Int16Array.mk #[1, (-32768)]).iter.curr' (by decide) == 1
-#guard ((Int16Array.mk #[1, (-32768)]).iter.next' (by decide)).curr == (-32768)
+-- Bounds are clamped.
+#guard
+  let a := Int16Array.mk #[1, 2, 3, (-32768)]
+  a[2...100].toList == [3, (-32768)] && a[3...1].size == 0 && a[9...12].size == 0 &&
+    (a.toSlice 1 (2 ^ 70)).toList == [2, 3, (-32768)]
+
+-- Slices of slices.
+#guard
+  let s := (Int16Array.mk #[1, 2, 3, (-32768)])[1...4]
+  s[1...2].toList == [3] && s[0...100].toList == [2, 3, (-32768)] && s[*...*].toList == [2, 3, (-32768)] &&
+    s[2...*].toList == [(-32768)] && s[5...6].size == 0
+
+#guard
+  let s := (Int16Array.mk #[1, 2, 3, (-32768)])[1...4]
+  s.popFront.toList == [3, (-32768)] && s.popFront.popFront.popFront.popFront.size == 0
+
+#guard (∅ : Int16Array.Slice).size == 0 && (default : Int16Array.Slice).toList == []
 
 #guard Id.run do
-  let mut it := (Int16Array.mk #[1, 2, (-32768)]).iter
   let mut r : List Int16 := []
-  while it.hasNext do
-    r := it.curr :: r
-    it := it.next
-  return r == [(-32768), 2, 1]
+  for x in (Int16Array.mk #[1, 2, 3, (-32768)])[1...*] do
+    r := x :: r
+  return r == [(-32768), 3, 2]
 
-#guard Id.run do
-  let mut it := (Int16Array.mk #[1, 2, (-32768)]).iter.toEnd
-  let mut r : List Int16 := []
-  while it.hasPrev do
-    it := it.prev
-    r := it.curr :: r
-  return r == [1, 2, (-32768)]
+#guard (Int16Array.mk #[1, 2, 3, (-32768)])[1...*].foldl (fun acc x => x :: acc) [] == [(-32768), 3, 2]
 
-example (it : Int16Array.Iterator) : sizeOf it = it.array.size - it.idx :=
-  Int16Array.Iterator.sizeOf_eq it
+#guard
+  let xs := (Array.range 100000).map Nat.toInt16
+  let s := (Int16Array.mk xs)[70000...70010]
+  s.toArray == xs.extract 70000 70010 && s.copy.data == xs.extract 70000 70010
+
+#guard toString (Int16Array.mk #[1, 2, 3])[1...*] == toString (Int16Array.mk #[2, 3])
+
+-- Taking a slice doesn't copy the array.
+@[noinline] def Int16Array.slicesWithoutCopying (x : Int16) : Bool :=
+  let a := Int16Array.mk #[x, 2, 3]
+  let p := rawAddr a
+  rawAddr a[1...2].array == p
+
+#guard Int16Array.slicesWithoutCopying 1
+
+example (s : Int16Array.Slice) : s.copy.size = s.size := by simp

@@ -434,40 +434,59 @@ example (a : Float64Array) (i : Nat) (v : Float) : (a.set! i v).size = a.size :=
 example (l : List Float) : (Float64Array.ofList l).toList = l := by simp
 example (a : Float64Array) : Float64Array.ofList a.toList = a := by simp
 
-/-! Iterators -/
+/-! Slices -/
 
 #guard
-  let it := (Float64Array.mk #[1, 2, (-1.5e300)]).iter
-  it.curr == 1 && it.pos == 0 && !it.atEnd && it.hasNext && !it.hasPrev && it.remaining == 3 &&
-    it.next.curr == 2 && it.next.hasPrev && it.next.next.curr == (-1.5e300) &&
-    it.next.next.next.atEnd && !it.next.next.next.hasNext && it.next.next.next.remaining == 0 &&
-    it.toEnd.atEnd && it.toEnd.pos == 3 && it.toEnd.prev.curr == (-1.5e300) &&
-    (it.forward 2).curr == (-1.5e300) && (it.nextn 1).curr == 2 && (it.toEnd.prevn 2).curr == 2 &&
-    (it.toEnd.prevn 10).pos == 0 && it.prev.pos == 0
+  let a := Float64Array.mk #[1, 2, 3, (-1.5e300)]
+  let s := a[1...3]
+  s.size == 2 && s[0]! == 2 && s[1]! == 3 && s.getD 2 7 == 7 && s.copy == Float64Array.mk #[2, 3] &&
+    s.toList == [2, 3] && s.toArray == #[2, 3]
 
--- An invalid position gives the default element.
-#guard (Float64Array.mk #[1]).iter.next.curr == default
-#guard ((Float64Array.mk #[1, 2]).iter.forward 5).curr == default
-#guard Float64Array.empty.iter.atEnd && Float64Array.empty.iter.curr == default
+#guard
+  let a := Float64Array.mk #[1, 2, 3, (-1.5e300)]
+  a[1...=3].toList == [2, 3, (-1.5e300)] && a[*...2].toList == [1, 2] && a[2...*].toList == [3, (-1.5e300)] &&
+    a[*...*].toList == [1, 2, 3, (-1.5e300)] && a[0<...2].toList == [2] &&
+    a[0<...=2].toList == [2, 3] && a[*...=1].toList == [1, 2] && a[1<...*].toList == [3, (-1.5e300)]
 
-#guard (Float64Array.mk #[1, (-1.5e300)]).iter.curr' (by decide) == 1
-#guard ((Float64Array.mk #[1, (-1.5e300)]).iter.next' (by decide)).curr == (-1.5e300)
+-- Bounds are clamped.
+#guard
+  let a := Float64Array.mk #[1, 2, 3, (-1.5e300)]
+  a[2...100].toList == [3, (-1.5e300)] && a[3...1].size == 0 && a[9...12].size == 0 &&
+    (a.toSlice 1 (2 ^ 70)).toList == [2, 3, (-1.5e300)]
+
+-- Slices of slices.
+#guard
+  let s := (Float64Array.mk #[1, 2, 3, (-1.5e300)])[1...4]
+  s[1...2].toList == [3] && s[0...100].toList == [2, 3, (-1.5e300)] && s[*...*].toList == [2, 3, (-1.5e300)] &&
+    s[2...*].toList == [(-1.5e300)] && s[5...6].size == 0
+
+#guard
+  let s := (Float64Array.mk #[1, 2, 3, (-1.5e300)])[1...4]
+  s.popFront.toList == [3, (-1.5e300)] && s.popFront.popFront.popFront.popFront.size == 0
+
+#guard (∅ : Float64Array.Slice).size == 0 && (default : Float64Array.Slice).toList == []
 
 #guard Id.run do
-  let mut it := (Float64Array.mk #[1, 2, (-1.5e300)]).iter
   let mut r : List Float := []
-  while it.hasNext do
-    r := it.curr :: r
-    it := it.next
-  return r == [(-1.5e300), 2, 1]
+  for x in (Float64Array.mk #[1, 2, 3, (-1.5e300)])[1...*] do
+    r := x :: r
+  return r == [(-1.5e300), 3, 2]
 
-#guard Id.run do
-  let mut it := (Float64Array.mk #[1, 2, (-1.5e300)]).iter.toEnd
-  let mut r : List Float := []
-  while it.hasPrev do
-    it := it.prev
-    r := it.curr :: r
-  return r == [1, 2, (-1.5e300)]
+#guard (Float64Array.mk #[1, 2, 3, (-1.5e300)])[1...*].foldl (fun acc x => x :: acc) [] == [(-1.5e300), 3, 2]
 
-example (it : Float64Array.Iterator) : sizeOf it = it.array.size - it.idx :=
-  Float64Array.Iterator.sizeOf_eq it
+#guard
+  let xs := (Array.range 100000).map Nat.toFloat
+  let s := (Float64Array.mk xs)[70000...70010]
+  s.toArray == xs.extract 70000 70010 && s.copy.data == xs.extract 70000 70010
+
+#guard toString (Float64Array.mk #[1, 2, 3])[1...*] == toString (Float64Array.mk #[2, 3])
+
+-- Taking a slice doesn't copy the array.
+@[noinline] def Float64Array.slicesWithoutCopying (x : Float) : Bool :=
+  let a := Float64Array.mk #[x, 2, 3]
+  let p := rawAddr a
+  rawAddr a[1...2].array == p
+
+#guard Float64Array.slicesWithoutCopying 1
+
+example (s : Float64Array.Slice) : s.copy.size = s.size := by simp
