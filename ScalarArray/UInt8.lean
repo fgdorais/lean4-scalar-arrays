@@ -509,7 +509,8 @@ public def hash (a : @& UInt8Array) : UInt64 :=
 
 public instance : Hashable UInt8Array := ⟨hash⟩
 
-public theorem hash_eq_hash_data (a : UInt8Array) : Hashable.hash a = Hashable.hash a.data := rfl
+public theorem hash_eq_hash_data (a : UInt8Array) : Hashable.hash a = Hashable.hash a.data := by
+  rfl
 
 /-! ## Conversion and printing -/
 
@@ -1377,10 +1378,12 @@ private theorem findFinIdx?_loop_eq (a : UInt8Array) (p : UInt8 → Bool) (i : N
   omega
 
 public theorem Slice.getD_eq (s : UInt8Array.Slice) (i : Nat) (v₀ : UInt8) :
-    s.getD i v₀ = if h : i < s.size then s[i] else v₀ := rfl
+    s.getD i v₀ = if h : i < s.size then s[i] else v₀ := by
+  rw [Slice.getD]
 
 public theorem Slice.get!_eq (s : UInt8Array.Slice) (i : Nat) :
-    s.get! i = if h : i < s.size then s[i] else default := rfl
+    s.get! i = if h : i < s.size then s[i] else default := by
+  rw [Slice.get!, Slice.getD]
 
 private theorem Slice.foldrM_loop_eq {β : Type v} (f : UInt8 → β → β)
     (s : UInt8Array.Slice) (i : Nat) (h : i ≤ s.size) (b : β) :

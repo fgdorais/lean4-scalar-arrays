@@ -1377,10 +1377,12 @@ private theorem findFinIdx?_loop_eq (a : Float32Array) (p : Float32 → Bool) (i
   omega
 
 public theorem Slice.getD_eq (s : Float32Array.Slice) (i : Nat) (v₀ : Float32) :
-    s.getD i v₀ = if h : i < s.size then s[i] else v₀ := rfl
+    s.getD i v₀ = if h : i < s.size then s[i] else v₀ := by
+  rw [Slice.getD]
 
 public theorem Slice.get!_eq (s : Float32Array.Slice) (i : Nat) :
-    s.get! i = if h : i < s.size then s[i] else default := rfl
+    s.get! i = if h : i < s.size then s[i] else default := by
+  rw [Slice.get!, Slice.getD]
 
 private theorem Slice.foldrM_loop_eq {β : Type v} (f : Float32 → β → β)
     (s : Float32Array.Slice) (i : Nat) (h : i ≤ s.size) (b : β) :
