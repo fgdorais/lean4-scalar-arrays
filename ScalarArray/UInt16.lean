@@ -5,6 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 import all ScalarArray.Internal
+public import Std.Data.Iterators
 
 /-!
 # Arrays of `UInt16`
@@ -719,6 +720,94 @@ public instance : Std.ToIterator (Std.Slice SliceData) Id SliceIterator UInt16 :
 
 public instance [Monad m] : ForIn m Slice UInt16 := inferInstance
 
+/-- An iterator over the elements of `a`, for use with the `Std.Iterators` API. -/
+@[inline, expose]
+public def iter (a : UInt16Array) : Std.Iter (α := SliceIterator) UInt16 :=
+  a.toSlice.iter
+
+namespace Slice
+
+/-- Folds a monadic function over the elements of `s`, from last to first. -/
+@[inline, expose]
+public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : UInt16 → β → m β) (init : β)
+    (s : Slice) : m β :=
+  loop s.size (Nat.le_refl _) init
+where
+  @[specialize] loop : (i : Nat) → i ≤ s.size → β → m β
+    | 0, _, b => pure b
+    | i + 1, h, b => do loop i (Nat.le_of_succ_le h) (← f s[i] b)
+
+/-- Folds a function over the elements of `s`, from last to first. -/
+@[inline, expose]
+public def foldr {β : Type v} (f : UInt16 → β → β) (init : β) (s : Slice) : β :=
+  Id.run <| s.foldrM (pure <| f · ·) init
+
+/-- Runs a monadic action on each element of `s`, from last to first. -/
+@[inline, expose]
+public def forRevM {m : Type v → Type w} [Monad m] (f : UInt16 → m PUnit) (s : Slice) : m PUnit :=
+  s.foldrM (fun x _ => f x) ⟨⟩
+
+/-- The result of the last element of `s` for which `f` returns `some`, searching from the end. -/
+@[inline, expose]
+public def findSomeRevM? {β : Type v} {m : Type v → Type w} [Monad m] (s : Slice)
+    (f : UInt16 → m (Option β)) : m (Option β) :=
+  loop s.size (Nat.le_refl _)
+where
+  @[specialize] loop : (i : Nat) → i ≤ s.size → m (Option β)
+    | 0, _ => pure none
+    | i + 1, h => do
+      match ← f s[i] with
+      | some b => pure (some b)
+      | none => loop i (Nat.le_of_succ_le h)
+
+/-- The last element of `s` that satisfies the monadic predicate `p`. -/
+@[inline, expose]
+public def findRevM? {m : Type → Type w} [Monad m] (s : Slice) (p : UInt16 → m Bool) :
+    m (Option UInt16) :=
+  s.findSomeRevM? fun x => return if (← p x) then some x else none
+
+/-- The last element of `s` that satisfies `p`. -/
+@[inline, expose]
+public def findRev? (s : Slice) (p : UInt16 → Bool) : Option UInt16 :=
+  Id.run <| s.findRevM? (pure <| p ·)
+
+/-- The first element of `s` that satisfies `p`. -/
+@[inline, expose]
+public def find? (s : Slice) (p : UInt16 → Bool) : Option UInt16 :=
+  s.iter.find? p
+
+/-- Whether some element of `s` satisfies `p`. -/
+@[inline, expose]
+public def any (s : Slice) (p : UInt16 → Bool) : Bool :=
+  s.iter.any p
+
+/-- Whether every element of `s` satisfies `p`. -/
+@[inline, expose]
+public def all (s : Slice) (p : UInt16 → Bool) : Bool :=
+  s.iter.all p
+
+/-- Whether `v` is an element of `s`. -/
+@[inline, expose]
+public def contains (s : Slice) (v : UInt16) : Bool :=
+  s.any (v == ·)
+
+/-- The number of elements of `s` that satisfy `p`. -/
+@[inline, expose]
+public def count (s : Slice) (p : UInt16 → Bool) : Nat :=
+  s.iter.fold (fun n x => if p x then n + 1 else n) 0
+
+end Slice
+
+/--
+Collects the values emitted by an iterator into a new array. Together with the `Std.Iterators`
+combinators, this gives functions such as `map`, `filter`, `take` and `zipWith`, for example
+`(a.iter.map (· + 1)).toUInt16Array`.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toUInt16Array {α : Type} [Std.Iterator α Id UInt16]
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) UInt16) : UInt16Array :=
+  it.fold (·.push ·) empty
+
 @[simp] public theorem size_mk (a : Array UInt16) : (mk a).size = a.size := rfl
 
 @[simp] public theorem data_mk (a : Array UInt16) : (mk a).data = a := rfl
@@ -955,6 +1044,7 @@ public theorem copySlice_eq_append (src : UInt16Array) (srcOff : Nat) (dest : UI
   have := s.stop_le_array_size
   simp only [Slice.copy, size_extract, Slice.size_eq]
   omega
+
 
 end UInt16Array
 

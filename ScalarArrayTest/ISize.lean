@@ -498,3 +498,43 @@ example (a : ISizeArray) : ISizeArray.ofList a.toList = a := by simp
 #guard ISizeArray.slicesWithoutCopying 1
 
 example (s : ISizeArray.Slice) : s.copy.size = s.size := by simp
+
+/-! Slice API -/
+
+#guard
+  let s := (ISizeArray.mk #[1, 2, 3, (-9223372036854775808), 2])[1...5]
+  s.foldr (fun x acc => x :: acc) [] == [2, 3, (-9223372036854775808), 2] &&
+    s.foldl (fun acc x => x :: acc) [] == [2, (-9223372036854775808), 3, 2] &&
+    s.any (· == (-9223372036854775808)) && !s.any (· == 1) && s.all (· != 1) && !s.all (· == 2) &&
+    s.contains (-9223372036854775808) && !s.contains 1 && s.count (· == 2) == 2 &&
+    s.find? (· > 2) == some 3 && s.findRev? (· != (-9223372036854775808)) == some 2 && s.findRev? (· == 1) == none
+
+#guard (ISizeArray.mk #[1, 2, 3])[1...1].foldr (fun x acc => x :: acc) [] == []
+#guard (ISizeArray.mk #[1, 2, 3])[3...*].find? (fun _ => true) == none
+
+#guard
+  let s := (ISizeArray.mk #[1, 2, 3, (-9223372036854775808)])[1...*]
+  let r : StateM (List ISize) Unit := s.forRevM fun x => modify (x :: ·)
+  (r.run []).2 == [2, 3, (-9223372036854775808)]
+
+#guard Id.run ((ISizeArray.mk #[1, 2, (-9223372036854775808)])[*...*].findSomeRevM?
+  (fun x => pure (if x == 2 then some x else none))) == some 2
+
+/-! The `Std.Iterators` API on arrays and slices -/
+
+#guard (ISizeArray.mk #[1, 2, 3]).iter.toList == [1, 2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).iter.map (· * 2)).toISizeArray == ISizeArray.mk #[2, 4, 6]
+#guard ((ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]).iter.filter (· != 2)).toISizeArray ==
+  ISizeArray.mk #[1, 3, (-9223372036854775808)]
+#guard ((ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]).iter.take 2).toISizeArray == ISizeArray.mk #[1, 2]
+#guard ((ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]).iter.drop 2).toISizeArray == ISizeArray.mk #[3, (-9223372036854775808)]
+#guard (((ISizeArray.mk #[1, 2, 3]).iter.zip (ISizeArray.mk #[(-9223372036854775808), 5]).iter).map
+  fun (x, y) => x + y).toISizeArray == ISizeArray.mk #[1 + (-9223372036854775808), 7]
+#guard ((ISizeArray.mk #[1, 2, 3, (-9223372036854775808)])[1...3].iter.map (· + 1)).toISizeArray ==
+  ISizeArray.mk #[3, 4]
+#guard (ISizeArray.mk #[1, 2, 3]).iter.length == 3
+#guard ISizeArray.empty.iter.toISizeArray == ISizeArray.empty
+#guard
+  let xs := (Array.range 100000).map Nat.toISize
+  ((ISizeArray.mk xs).iter.map (· + 1)).toISizeArray.data == xs.map (· + 1)
+#guard rawElemSize ((ISizeArray.mk #[1]).iter.toISizeArray) == ((System.Platform.numBits / 8).toUInt32 : UInt32)

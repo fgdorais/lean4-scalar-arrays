@@ -5,6 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 import all ScalarArray.Internal
+public import Std.Data.Iterators
 
 /-!
 # Arrays of `ISize`
@@ -719,6 +720,94 @@ public instance : Std.ToIterator (Std.Slice SliceData) Id SliceIterator ISize :=
 
 public instance [Monad m] : ForIn m Slice ISize := inferInstance
 
+/-- An iterator over the elements of `a`, for use with the `Std.Iterators` API. -/
+@[inline, expose]
+public def iter (a : ISizeArray) : Std.Iter (α := SliceIterator) ISize :=
+  a.toSlice.iter
+
+namespace Slice
+
+/-- Folds a monadic function over the elements of `s`, from last to first. -/
+@[inline, expose]
+public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : ISize → β → m β) (init : β)
+    (s : Slice) : m β :=
+  loop s.size (Nat.le_refl _) init
+where
+  @[specialize] loop : (i : Nat) → i ≤ s.size → β → m β
+    | 0, _, b => pure b
+    | i + 1, h, b => do loop i (Nat.le_of_succ_le h) (← f s[i] b)
+
+/-- Folds a function over the elements of `s`, from last to first. -/
+@[inline, expose]
+public def foldr {β : Type v} (f : ISize → β → β) (init : β) (s : Slice) : β :=
+  Id.run <| s.foldrM (pure <| f · ·) init
+
+/-- Runs a monadic action on each element of `s`, from last to first. -/
+@[inline, expose]
+public def forRevM {m : Type v → Type w} [Monad m] (f : ISize → m PUnit) (s : Slice) : m PUnit :=
+  s.foldrM (fun x _ => f x) ⟨⟩
+
+/-- The result of the last element of `s` for which `f` returns `some`, searching from the end. -/
+@[inline, expose]
+public def findSomeRevM? {β : Type v} {m : Type v → Type w} [Monad m] (s : Slice)
+    (f : ISize → m (Option β)) : m (Option β) :=
+  loop s.size (Nat.le_refl _)
+where
+  @[specialize] loop : (i : Nat) → i ≤ s.size → m (Option β)
+    | 0, _ => pure none
+    | i + 1, h => do
+      match ← f s[i] with
+      | some b => pure (some b)
+      | none => loop i (Nat.le_of_succ_le h)
+
+/-- The last element of `s` that satisfies the monadic predicate `p`. -/
+@[inline, expose]
+public def findRevM? {m : Type → Type w} [Monad m] (s : Slice) (p : ISize → m Bool) :
+    m (Option ISize) :=
+  s.findSomeRevM? fun x => return if (← p x) then some x else none
+
+/-- The last element of `s` that satisfies `p`. -/
+@[inline, expose]
+public def findRev? (s : Slice) (p : ISize → Bool) : Option ISize :=
+  Id.run <| s.findRevM? (pure <| p ·)
+
+/-- The first element of `s` that satisfies `p`. -/
+@[inline, expose]
+public def find? (s : Slice) (p : ISize → Bool) : Option ISize :=
+  s.iter.find? p
+
+/-- Whether some element of `s` satisfies `p`. -/
+@[inline, expose]
+public def any (s : Slice) (p : ISize → Bool) : Bool :=
+  s.iter.any p
+
+/-- Whether every element of `s` satisfies `p`. -/
+@[inline, expose]
+public def all (s : Slice) (p : ISize → Bool) : Bool :=
+  s.iter.all p
+
+/-- Whether `v` is an element of `s`. -/
+@[inline, expose]
+public def contains (s : Slice) (v : ISize) : Bool :=
+  s.any (v == ·)
+
+/-- The number of elements of `s` that satisfy `p`. -/
+@[inline, expose]
+public def count (s : Slice) (p : ISize → Bool) : Nat :=
+  s.iter.fold (fun n x => if p x then n + 1 else n) 0
+
+end Slice
+
+/--
+Collects the values emitted by an iterator into a new array. Together with the `Std.Iterators`
+combinators, this gives functions such as `map`, `filter`, `take` and `zipWith`, for example
+`(a.iter.map (· + 1)).toISizeArray`.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toISizeArray {α : Type} [Std.Iterator α Id ISize]
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) ISize) : ISizeArray :=
+  it.fold (·.push ·) empty
+
 @[simp] public theorem size_mk (a : Array ISize) : (mk a).size = a.size := rfl
 
 @[simp] public theorem data_mk (a : Array ISize) : (mk a).data = a := rfl
@@ -955,6 +1044,7 @@ public theorem copySlice_eq_append (src : ISizeArray) (srcOff : Nat) (dest : ISi
   have := s.stop_le_array_size
   simp only [Slice.copy, size_extract, Slice.size_eq]
   omega
+
 
 end ISizeArray
 
