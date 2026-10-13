@@ -309,6 +309,22 @@ open ScalarArray ScalarArrayTest
 
 #guard USizeArray.popsInPlace 1
 
+#guard (USizeArray.mk #[1, 0, 18446744073709551615, 0, 0]).popWhile (· == 0) == USizeArray.mk #[1, 0, 18446744073709551615]
+#guard (USizeArray.mk #[1, 0, 18446744073709551615]).popWhile (· == 0) == USizeArray.mk #[1, 0, 18446744073709551615]
+#guard (USizeArray.mk #[0, 0]).popWhile (· == 0) == USizeArray.empty
+#guard USizeArray.empty.popWhile (· == 0) == USizeArray.empty
+
+-- Popping several elements from an exclusive array.
+@[noinline] def USizeArray.popsWhileInPlace (x : USize) : Bool :=
+  let a := (USizeArray.mk #[x]).push 0 |>.push 0
+  let p := rawAddr a
+  let a := a.popWhile (· == 0)
+  rawAddr a == p && a.data == #[x]
+
+#guard USizeArray.popsWhileInPlace 1
+
+example (p : USize → Bool) (a : USizeArray) : (a.popWhile p).data = a.data.popWhile p := by simp
+
 #guard ((USizeArray.mk #[1, 2, 3, 18446744073709551615]).extract 1 3).data == #[2, 3]
 #guard ((USizeArray.mk #[1, 2, 3, 18446744073709551615]).extract 2 100).data == #[3, 18446744073709551615]
 #guard ((USizeArray.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
@@ -473,6 +489,14 @@ example (a : USizeArray) : USizeArray.ofList a.toList = a := by simp
   s.popFront.toList == [3, 18446744073709551615] && s.popFront.popFront.popFront.popFront.size == 0
 
 #guard (∅ : USizeArray.Slice).size == 0 && (default : USizeArray.Slice).toList == []
+
+-- An array coerces to the slice of all its elements.
+#guard
+  let s : USizeArray.Slice := USizeArray.mk #[1, 2, 18446744073709551615]
+  s.toList == [1, 2, 18446744073709551615] && s.start == 0
+
+-- A slice does not coerce back to an array, since that would copy.
+example (s : USizeArray.Slice) : USizeArray := s.copy
 
 #guard Id.run do
   let mut r : List USize := []

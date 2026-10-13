@@ -261,6 +261,24 @@ public def back! (a : @& USizeArray) : USize := a[a.size - 1]!
 
 public def back (a : @& USizeArray) (h : 0 < a.size) : USize := a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
 
+private def popWhileImpl (p : USize → Bool) (a : USizeArray) : USizeArray :=
+  if h : 0 < a.size then
+    if p (a.back h) then popWhileImpl p a.pop else a
+  else
+    a
+termination_by a.size
+decreasing_by
+  have : a.pop.size = a.size - 1 := by cases a; exact Array.size_pop ..
+  omega
+
+/--
+Removes the longest run of elements at the end of `a` that satisfy `p`, in place when `a` is not
+shared.
+-/
+@[implemented_by popWhileImpl, expose]
+public def popWhile (p : USize → Bool) : USizeArray → USizeArray
+  | mk a => mk (a.popWhile p)
+
 private unsafe def extractImpl (a : @& USizeArray) (start stop : Nat) : USizeArray :=
   let stop := min stop a.size
   if start < stop then
@@ -576,8 +594,6 @@ public instance : Inhabited USizeArray.Slice := ⟨Slice.empty⟩
 public def copy (s : USizeArray.Slice) : USizeArray :=
   s.array.extract s.start s.stop
 
-public instance : Coe USizeArray.Slice USizeArray := ⟨copy⟩
-
 public theorem getElem_eq (s : USizeArray.Slice) (i : Nat) (h : i < s.size) :
     s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega) := rfl
 
@@ -608,6 +624,9 @@ public def toSlice (a : USizeArray) (start : Nat := 0) (stop : Nat := a.size) : 
     else
       ⟨{ array := a, start := a.size, stop := a.size, start_le_stop := Nat.le_refl _,
          stop_le_array_size := Nat.le_refl _ }⟩
+
+/-- Arrays coerce to slices, which is free. Slices don't coerce back, since that copies. -/
+public instance : Coe USizeArray USizeArray.Slice := ⟨(·.toSlice)⟩
 
 public instance : Std.Rcc.Sliceable USizeArray Nat USizeArray.Slice where
   mkSlice a range := a.toSlice range.lower (range.upper + 1)
@@ -910,6 +929,10 @@ public theorem ext_getElem {a b : USizeArray} (h₁ : a.size = b.size)
 @[simp] public theorem getElem_pop (a : USizeArray) (i : Nat) (h) :
     a.pop[i]'h = a[i]'(by simp at h; omega) := by
   simp [-getElem_data, getElem_eq_getElem_data]
+
+@[simp] public theorem data_popWhile (p : USize → Bool) (a : USizeArray) :
+    (a.popWhile p).data = a.data.popWhile p := by
+  cases a; rfl
 
 @[simp] public theorem getElem_append (a b : USizeArray) (i : Nat) (h) :
     (a ++ b)[i]'h = if h' : i < a.size then a[i] else b[i - a.size]'(by simp at h; omega) := by
