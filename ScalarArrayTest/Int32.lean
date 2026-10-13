@@ -7,40 +7,47 @@ import ScalarArrayTest.Util
 
 open ScalarArray ScalarArrayTest
 
+/-- A test value at the edge of the element type's range. -/
+private abbrev big : Int32 := -2147483648
+
+/-- The size of an element in bytes. -/
+private abbrev elemSize : UInt32 := 4
+
 /-! Construction and conversion -/
 
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)]).data == #[1, 2, 3, (-2147483648)]
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)]).toList == [1, 2, 3, (-2147483648)]
+#guard (Int32Array.mk #[1, 2, 3, big]).data == #[1, 2, 3, big]
+#guard (Int32Array.mk #[1, 2, 3, big]).toList == [1, 2, 3, big]
 #guard (Int32Array.mk #[]).data == #[]
 #guard Int32Array.empty.data == #[]
 #guard (∅ : Int32Array).data == #[]
 #guard (default : Int32Array).data == #[]
 #guard (Int32Array.emptyWithCapacity 100).data == #[]
-#guard (Int32Array.mk (Array.range 1000 |>.map Nat.toInt32)).data == (Array.range 1000).map Nat.toInt32
+#guard (Int32Array.mk (Array.range 1000 |>.map Nat.toInt32)).data ==
+  (Array.range 1000).map Nat.toInt32
 
 /-! Size -/
 
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)]).size == 4
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)]).usize == 4
+#guard (Int32Array.mk #[1, 2, 3, big]).size == 4
+#guard (Int32Array.mk #[1, 2, 3, big]).usize == 4
 #guard Int32Array.empty.size == 0
 #guard (Int32Array.emptyWithCapacity 100).size == 0
 
 /-! Reading -/
 
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)])[0] == 1
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)])[3] == (-2147483648)
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)])[(2 : USize)] == 3
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)]).get! 1 == 2
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)]).getD 2 7 == 3
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)]).getD 4 7 == 7
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)])[4]? == none
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)])[1]? == some 2
+#guard (Int32Array.mk #[1, 2, 3, big])[0] == 1
+#guard (Int32Array.mk #[1, 2, 3, big])[3] == big
+#guard (Int32Array.mk #[1, 2, 3, big])[(2 : USize)] == 3
+#guard (Int32Array.mk #[1, 2, 3, big]).get! 1 == 2
+#guard (Int32Array.mk #[1, 2, 3, big]).getD 2 7 == 3
+#guard (Int32Array.mk #[1, 2, 3, big]).getD 4 7 == 7
+#guard (Int32Array.mk #[1, 2, 3, big])[4]? == none
+#guard (Int32Array.mk #[1, 2, 3, big])[1]? == some 2
 
 /-! Writing -/
 
 #guard ((Int32Array.mk #[1, 2, 3]).set 1 42 (by decide)).data == #[1, 42, 3]
 #guard ((Int32Array.mk #[1, 2, 3]).uset 2 42 (by simp)).data == #[1, 2, 42]
-#guard ((Int32Array.mk #[1, 2, 3]).set! 0 (-2147483648)).data == #[(-2147483648), 2, 3]
+#guard ((Int32Array.mk #[1, 2, 3]).set! 0 big).data == #[big, 2, 3]
 
 -- Writing to a shared array must leave the original unchanged. The result is checked first so
 -- that it is computed while the original is still live.
@@ -92,16 +99,16 @@ open ScalarArray ScalarArrayTest
 
 /-! Writes don't touch neighbouring elements -/
 
-#guard ((Int32Array.mk #[0, 0, 0]).set! 1 (-2147483648)).data == #[0, (-2147483648), 0]
-#guard ((Int32Array.mk #[(-2147483648), (-2147483648), (-2147483648)]).set! 1 0).data == #[(-2147483648), 0, (-2147483648)]
-#guard ((Int32Array.mk #[0, 0, 0]).push (-2147483648) |>.push 0).data == #[0, 0, 0, (-2147483648), 0]
+#guard ((Int32Array.mk #[0, 0, 0]).set! 1 big).data == #[0, big, 0]
+#guard ((Int32Array.mk #[big, big, big]).set! 1 0).data == #[big, 0, big]
+#guard ((Int32Array.mk #[0, 0, 0]).push big |>.push 0).data == #[0, 0, 0, big, 0]
 
 /-! Indices beyond 16 bits, and huge `Nat` indices -/
 
 #guard
-  let a := (Int32Array.mk (Array.replicate 100000 0)).set! 99999 (-2147483648) |>.set! 70000 1
-  a.size == 100000 && a[99999]! == (-2147483648) && a[70000]! == 1 && a[99998]! == 0 &&
-    a[70000 % 65536]! == 0 && a.data[99999]! == (-2147483648) && a.data[70000]! == 1 &&
+  let a := (Int32Array.mk (Array.replicate 100000 0)).set! 99999 big |>.set! 70000 1
+  a.size == 100000 && a[99999]! == big && a[70000]! == 1 && a[99998]! == 0 &&
+    a[70000 % 65536]! == 0 && a.data[99999]! == big && a.data[70000]! == 1 &&
     (if h : (70000 : USize).toNat < a.size then a[(70000 : USize)] == 1 else false)
 
 #guard (Int32Array.mk #[1, 2, 3])[2 ^ 70]? == none
@@ -123,20 +130,20 @@ open ScalarArray ScalarArrayTest
 
 #guard
   let a := #[(1 : Int32), 2, 3]
-  let b := (Int32Array.mk a).set! 0 (-2147483648)
-  b.data == #[(-2147483648), 2, 3] && a == #[1, 2, 3]
+  let b := (Int32Array.mk a).set! 0 big
+  b.data == #[big, 2, 3] && a == #[1, 2, 3]
 
 #guard
   let a := Int32Array.mk #[1, 2, 3]
-  let d := a.data.set! 0 (-2147483648)
-  d == #[(-2147483648), 2, 3] && a.data == #[1, 2, 3]
+  let d := a.data.set! 0 big
+  d == #[big, 2, 3] && a.data == #[1, 2, 3]
 
 /-! Runtime representation -/
 
-#guard rawElemSize (Int32Array.mk #[1, 2, 3]) == (4 : UInt32)
-#guard rawElemSize (Int32Array.emptyWithCapacity 10) == (4 : UInt32)
-#guard rawElemSize (Int32Array.empty.push 1) == (4 : UInt32)
-#guard rawElemSize ((Int32Array.mk #[1]).push 2) == (4 : UInt32)
+#guard rawElemSize (Int32Array.mk #[1, 2, 3]) == elemSize
+#guard rawElemSize (Int32Array.emptyWithCapacity 10) == elemSize
+#guard rawElemSize (Int32Array.empty.push 1) == elemSize
+#guard rawElemSize ((Int32Array.mk #[1]).push 2) == elemSize
 #guard rawCapacity (Int32Array.emptyWithCapacity 100) ≥ 100
 #guard rawCapacity (Int32Array.mk #[1, 2, 3]) ≥ 3
 -- Growth is geometric, so pushing is amortized constant time.
@@ -145,13 +152,13 @@ open ScalarArray ScalarArrayTest
 
 /-! Appending -/
 
-#guard (Int32Array.mk #[1, 2] ++ Int32Array.mk #[3, (-2147483648)]).data == #[1, 2, 3, (-2147483648)]
+#guard (Int32Array.mk #[1, 2] ++ Int32Array.mk #[3, big]).data == #[1, 2, 3, big]
 #guard ((Int32Array.mk #[1, 2]).append (Int32Array.mk #[3])).data == #[1, 2, 3]
 #guard (Int32Array.mk #[1, 2] ++ Int32Array.empty).data == #[1, 2]
 #guard (Int32Array.empty ++ Int32Array.mk #[1, 2]).data == #[1, 2]
 #guard (Int32Array.empty ++ Int32Array.empty).data == #[]
-#guard (Int32Array.mk #[0, 0] ++ Int32Array.mk #[(-2147483648)] ++ Int32Array.mk #[0]).data ==
-  #[0, 0, (-2147483648), 0]
+#guard (Int32Array.mk #[0, 0] ++ Int32Array.mk #[big] ++ Int32Array.mk #[0]).data ==
+  #[0, 0, big, 0]
 
 -- Appending an array to itself, with and without room.
 #guard
@@ -186,8 +193,8 @@ open ScalarArray ScalarArrayTest
   let mut a := Int32Array.empty
   let mut r : Array Int32 := #[]
   for i in [0:1000] do
-    a := a ++ Int32Array.mk #[i.toInt32, (i * 7).toInt32, (-2147483648)]
-    r := r ++ #[i.toInt32, (i * 7).toInt32, (-2147483648)]
+    a := a ++ Int32Array.mk #[i.toInt32, (i * 7).toInt32, big]
+    r := r ++ #[i.toInt32, (i * 7).toInt32, big]
   return a.data == r
 
 -- Large arrays on both sides.
@@ -216,46 +223,46 @@ open ScalarArray ScalarArrayTest
 #guard rawCapacity ((Int32Array.emptyWithCapacity 10).push 1 ++ Int32Array.mk #[2, 3]) ≥ 10
 #guard rawCapacity (Int32Array.mk #[1, 2, 3, 4] ++ Int32Array.mk #[5]) ≥ 8
 #guard rawCapacity (Int32Array.mk #[1] ++ Int32Array.mk (Array.replicate 10 0)) ≥ 11
-#guard rawElemSize (Int32Array.mk #[1] ++ Int32Array.mk #[2]) == (4 : UInt32)
+#guard rawElemSize (Int32Array.mk #[1] ++ Int32Array.mk #[2]) == elemSize
 
 /-! Equality -/
 
-#guard Int32Array.mk #[1, 2, (-2147483648)] == Int32Array.mk #[1, 2, (-2147483648)]
-#guard Int32Array.mk #[1, 2, (-2147483648)] != Int32Array.mk #[1, 2, 0]
+#guard Int32Array.mk #[1, 2, big] == Int32Array.mk #[1, 2, big]
+#guard Int32Array.mk #[1, 2, big] != Int32Array.mk #[1, 2, 0]
 #guard Int32Array.mk #[1, 2] != Int32Array.mk #[1, 2, 0]
 #guard Int32Array.mk #[1, 2, 0] != Int32Array.mk #[1, 2]
 #guard Int32Array.empty == Int32Array.emptyWithCapacity 10
-#guard (Int32Array.mk #[1, 2] ++ Int32Array.mk #[(-2147483648)]) == Int32Array.mk #[1, 2, (-2147483648)]
+#guard (Int32Array.mk #[1, 2] ++ Int32Array.mk #[big]) == Int32Array.mk #[1, 2, big]
 -- Capacity and leftover memory past the size don't matter.
 #guard (Int32Array.emptyWithCapacity 100).push 1 == Int32Array.mk #[1]
 #guard (Int32Array.mk #[1, 2, 3]).pop == Int32Array.mk #[1, 2]
-#guard (Int32Array.mk (Array.replicate 100000 0)).set! 99999 (-2147483648) !=
+#guard (Int32Array.mk (Array.replicate 100000 0)).set! 99999 big !=
   Int32Array.mk (Array.replicate 100000 0)
 
 /-! Decidable equality and hashing -/
 
-#guard decide (Int32Array.mk #[1, 2, (-2147483648)] = Int32Array.mk #[1, 2, (-2147483648)])
-#guard !decide (Int32Array.mk #[1, 2, (-2147483648)] = Int32Array.mk #[1, 2, 0])
-#guard hash (Int32Array.mk #[1, 2, (-2147483648)]) == hash #[(1 : Int32), 2, (-2147483648)]
+#guard decide (Int32Array.mk #[1, 2, big] = Int32Array.mk #[1, 2, big])
+#guard !decide (Int32Array.mk #[1, 2, big] = Int32Array.mk #[1, 2, 0])
+#guard hash (Int32Array.mk #[1, 2, big]) == hash #[(1 : Int32), 2, big]
 #guard hash (Int32Array.empty) == hash (#[] : Array Int32)
 #guard hash ((Int32Array.emptyWithCapacity 100).push 1) == hash (Int32Array.mk #[1])
 
 /-! Iteration -/
 
-#guard (Int32Array.mk #[1, 2, (-2147483648)]).foldl (fun acc x => x :: acc) [] == [(-2147483648), 2, 1]
-#guard (Int32Array.mk #[1, 2, (-2147483648)]).foldr (fun x acc => x :: acc) [] == [1, 2, (-2147483648)]
+#guard (Int32Array.mk #[1, 2, big]).foldl (fun acc x => x :: acc) [] == [big, 2, 1]
+#guard (Int32Array.mk #[1, 2, big]).foldr (fun x acc => x :: acc) [] == [1, 2, big]
 #guard Int32Array.empty.foldl (fun acc x => x :: acc) [] == []
 #guard Int32Array.empty.foldr (fun x acc => x :: acc) [] == []
-#guard (Int32Array.mk #[1, 2, (-2147483648)]).foldlM (m := Option)
+#guard (Int32Array.mk #[1, 2, big]).foldlM (m := Option)
   (fun acc x => if x == 2 then none else some (x :: acc)) [] == none
-#guard (Int32Array.mk #[1, (-2147483648)]).foldrM (m := Option) (fun x acc => some (x :: acc)) [] ==
-  some [1, (-2147483648)]
+#guard (Int32Array.mk #[1, big]).foldrM (m := Option) (fun x acc => some (x :: acc)) [] ==
+  some [1, big]
 
 #guard Id.run do
   let mut r : List Int32 := []
-  for x in Int32Array.mk #[1, 2, (-2147483648)] do
+  for x in Int32Array.mk #[1, 2, big] do
     r := x :: r
-  return r == [(-2147483648), 2, 1]
+  return r == [big, 2, 1]
 
 #guard Id.run do
   let mut r : List Int32 := []
@@ -265,34 +272,34 @@ open ScalarArray ScalarArrayTest
   return r == [2, 1]
 
 #guard
-  let r : StateM (List Int32) Unit := (Int32Array.mk #[1, 2, (-2147483648)]).forM fun x => modify (x :: ·)
-  (r.run []).2 == [(-2147483648), 2, 1]
+  let r : StateM (List Int32) Unit := (Int32Array.mk #[1, 2, big]).forM fun x => modify (x :: ·)
+  (r.run []).2 == [big, 2, 1]
 
 #guard
   let xs := (Array.range 100000).map Nat.toInt32
   let f := fun (acc : List Int32) x => if x == 0 then x :: acc else acc
   (Int32Array.mk xs).foldl f [] == xs.foldl f []
 
-#guard (Int32Array.mk #[1, 2, (-2147483648)]).any (· == (-2147483648))
-#guard !(Int32Array.mk #[1, 2, 3]).any (· == (-2147483648))
-#guard (Int32Array.mk #[1, 2, 3]).all (· != (-2147483648))
-#guard !(Int32Array.mk #[1, (-2147483648), 3]).all (· != (-2147483648))
+#guard (Int32Array.mk #[1, 2, big]).any (· == big)
+#guard !(Int32Array.mk #[1, 2, 3]).any (· == big)
+#guard (Int32Array.mk #[1, 2, 3]).all (· != big)
+#guard !(Int32Array.mk #[1, big, 3]).all (· != big)
 #guard !Int32Array.empty.any (fun _ => true) && Int32Array.empty.all (fun _ => false)
-#guard (Int32Array.mk #[1, 2, (-2147483648)]).contains (-2147483648)
-#guard !(Int32Array.mk #[1, 2, 3]).contains (-2147483648)
-#guard (Int32Array.mk (Array.replicate 100000 0) |>.set! 99999 (-2147483648)).contains (-2147483648)
+#guard (Int32Array.mk #[1, 2, big]).contains big
+#guard !(Int32Array.mk #[1, 2, 3]).contains big
+#guard (Int32Array.mk (Array.replicate 100000 0) |>.set! 99999 big).contains big
 
 /-! Removing elements -/
 
 #guard Int32Array.empty.isEmpty && !(Int32Array.mk #[1]).isEmpty
 #guard (Int32Array.mk #[1]).pop.isEmpty
-#guard (Int32Array.mk #[1, 2, (-2147483648)]).pop.data == #[1, 2]
+#guard (Int32Array.mk #[1, 2, big]).pop.data == #[1, 2]
 #guard Int32Array.empty.pop.data == #[]
-#guard ((Int32Array.mk #[1, 2, 3]).pop.push (-2147483648)).data == #[1, 2, (-2147483648)]
-#guard (Int32Array.mk #[1, 2, (-2147483648)]).back? == some (-2147483648)
+#guard ((Int32Array.mk #[1, 2, 3]).pop.push big).data == #[1, 2, big]
+#guard (Int32Array.mk #[1, 2, big]).back? == some big
 #guard Int32Array.empty.back? == none
-#guard (Int32Array.mk #[1, 2, (-2147483648)]).back! == (-2147483648)
-#guard (Int32Array.mk #[1, 2, (-2147483648)]).back (by decide) == (-2147483648)
+#guard (Int32Array.mk #[1, 2, big]).back! == big
+#guard (Int32Array.mk #[1, 2, big]).back (by decide) == big
 
 -- Popping from a shared array must leave the original unchanged.
 #guard
@@ -309,8 +316,8 @@ open ScalarArray ScalarArrayTest
 
 #guard Int32Array.popsInPlace 1
 
-#guard (Int32Array.mk #[1, 0, (-2147483648), 0, 0]).popWhile (· == 0) == Int32Array.mk #[1, 0, (-2147483648)]
-#guard (Int32Array.mk #[1, 0, (-2147483648)]).popWhile (· == 0) == Int32Array.mk #[1, 0, (-2147483648)]
+#guard (Int32Array.mk #[1, 0, big, 0, 0]).popWhile (· == 0) == Int32Array.mk #[1, 0, big]
+#guard (Int32Array.mk #[1, 0, big]).popWhile (· == 0) == Int32Array.mk #[1, 0, big]
 #guard (Int32Array.mk #[0, 0]).popWhile (· == 0) == Int32Array.empty
 #guard Int32Array.empty.popWhile (· == 0) == Int32Array.empty
 
@@ -325,8 +332,8 @@ open ScalarArray ScalarArrayTest
 
 example (p : Int32 → Bool) (a : Int32Array) : (a.popWhile p).data = a.data.popWhile p := by simp
 
-#guard ((Int32Array.mk #[1, 2, 3, (-2147483648)]).extract 1 3).data == #[2, 3]
-#guard ((Int32Array.mk #[1, 2, 3, (-2147483648)]).extract 2 100).data == #[3, (-2147483648)]
+#guard ((Int32Array.mk #[1, 2, 3, big]).extract 1 3).data == #[2, 3]
+#guard ((Int32Array.mk #[1, 2, 3, big]).extract 2 100).data == #[3, big]
 #guard ((Int32Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
 #guard ((Int32Array.mk #[1, 2, 3]).extract 2 1).data == #[]
 #guard ((Int32Array.mk #[1, 2, 3]).extract 5 9).data == #[]
@@ -335,28 +342,28 @@ example (p : Int32 → Bool) (a : Int32Array) : (a.popWhile p).data = a.data.pop
 #guard
   let xs := (Array.range 100000).map Nat.toInt32
   ((Int32Array.mk xs).extract 70000 70010).data == xs.extract 70000 70010
-#guard rawElemSize ((Int32Array.mk #[1, 2, 3]).extract 1 2) == (4 : UInt32)
+#guard rawElemSize ((Int32Array.mk #[1, 2, 3]).extract 1 2) == elemSize
 
 -- The extracted array is independent of the original.
 #guard
   let a := Int32Array.mk #[1, 2, 3]
-  let b := (a.extract 0 2).set! 0 (-2147483648)
-  b.data == #[(-2147483648), 2] && a.data == #[1, 2, 3]
+  let b := (a.extract 0 2).set! 0 big
+  b.data == #[big, 2] && a.data == #[1, 2, 3]
 
 /-! Building arrays -/
 
-#guard (Int32Array.replicate 3 (-2147483648)).data == #[(-2147483648), (-2147483648), (-2147483648)]
+#guard (Int32Array.replicate 3 big).data == #[big, big, big]
 #guard (Int32Array.replicate 0 1).data == #[]
-#guard (Int32Array.replicate 100000 (-2147483648)).data == Array.replicate 100000 (-2147483648)
+#guard (Int32Array.replicate 100000 big).data == Array.replicate 100000 big
 #guard (Int32Array.ofFn (n := 4) fun i => i.val.toInt32).data == #[0, 1, 2, 3]
 #guard (Int32Array.ofFn (n := 0) fun i => i.val.toInt32).data == #[]
-#guard rawElemSize (Int32Array.replicate 2 1) == (4 : UInt32)
-#guard rawElemSize (Int32Array.ofFn (n := 2) fun _ => 1) == (4 : UInt32)
+#guard rawElemSize (Int32Array.replicate 2 1) == elemSize
+#guard rawElemSize (Int32Array.ofFn (n := 2) fun _ => 1) == elemSize
 
 /-! Lemmas -/
 
 example (a : Int32Array) (v : Int32) : (a.push v).pop = a := by simp [Int32Array.ext_iff]
-example : (Int32Array.replicate 3 (-2147483648))[1] = (-2147483648) := by simp
+example : (Int32Array.replicate 3 big)[1] = big := by simp
 example (a b : Int32Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
 example (a : Int32Array) (i : Nat) (v : Int32) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
@@ -366,44 +373,44 @@ example (a : Int32Array) (v : Int32) : (a.push v).pop = a :=
 
 /-! Default bounds proofs -/
 
-#guard (Int32Array.mk #[1, 2, (-2147483648)]).get 2 == (-2147483648)
-#guard (Int32Array.mk #[1, 2, (-2147483648)]).uget 2 == (-2147483648)
-#guard ((Int32Array.mk #[1, 2, 3]).set 1 (-2147483648)).data == #[1, (-2147483648), 3]
-#guard ((Int32Array.mk #[1, 2, 3]).uset 1 (-2147483648)).data == #[1, (-2147483648), 3]
+#guard (Int32Array.mk #[1, 2, big]).get 2 == big
+#guard (Int32Array.mk #[1, 2, big]).uget 2 == big
+#guard ((Int32Array.mk #[1, 2, 3]).set 1 big).data == #[1, big, 3]
+#guard ((Int32Array.mk #[1, 2, 3]).uset 1 big).data == #[1, big, 3]
 
 /-! `set!` leaves the array unchanged when the index is out of bounds, like `ByteArray.set!`. -/
 
-#guard ((Int32Array.mk #[1, 2, 3]).set! 3 (-2147483648)).data == #[1, 2, 3]
-#guard ((Int32Array.mk #[1, 2, 3]).set! (2 ^ 70) (-2147483648)).data == #[1, 2, 3]
+#guard ((Int32Array.mk #[1, 2, 3]).set! 3 big).data == #[1, 2, 3]
+#guard ((Int32Array.mk #[1, 2, 3]).set! (2 ^ 70) big).data == #[1, 2, 3]
 
 /-! Folds over part of an array -/
 
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)]).foldl (fun acc x => x :: acc) [] 1 3 == [3, 2]
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)]).foldl (fun acc x => x :: acc) [] 2 == [(-2147483648), 3]
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)]).foldl (fun acc x => x :: acc) [] 1 100 == [(-2147483648), 3, 2]
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)]).foldl (fun acc x => x :: acc) [] 3 1 == []
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)]).foldl (fun acc x => x :: acc) [] 9 12 == []
+#guard (Int32Array.mk #[1, 2, 3, big]).foldl (fun acc x => x :: acc) [] 1 3 == [3, 2]
+#guard (Int32Array.mk #[1, 2, 3, big]).foldl (fun acc x => x :: acc) [] 2 == [big, 3]
+#guard (Int32Array.mk #[1, 2, 3, big]).foldl (fun acc x => x :: acc) [] 1 100 == [big, 3, 2]
+#guard (Int32Array.mk #[1, 2, 3, big]).foldl (fun acc x => x :: acc) [] 3 1 == []
+#guard (Int32Array.mk #[1, 2, 3, big]).foldl (fun acc x => x :: acc) [] 9 12 == []
 #guard (Int32Array.mk #[1, 2, 3]).foldlM (m := Option)
   (fun acc x => if x == 1 then none else some (x :: acc)) [] 1 == some [3, 2]
 
 /-! Copying slices -/
 
 #guard
-  let src := Int32Array.mk #[10, 11, 12, (-2147483648)]
+  let src := Int32Array.mk #[10, 11, 12, big]
   let dest := Int32Array.mk #[1, 2, 3, 4, 5]
   (src.copySlice 1 dest 2 2).data == #[1, 2, 11, 12, 5] &&
-  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, (-2147483648)] &&
+  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, big] &&
   (src.copySlice 0 dest 9 2).data == #[1, 2, 3, 4, 5, 10, 11] &&
   (src.copySlice 9 dest 1 2).data == #[1, 2, 3, 4, 5] &&
-  (src.copySlice 2 dest 0 10).data == #[12, (-2147483648), 3, 4, 5] &&
+  (src.copySlice 2 dest 0 10).data == #[12, big, 3, 4, 5] &&
   (src.copySlice 0 dest 0 0).data == #[1, 2, 3, 4, 5] &&
-  (src.copySlice 0 Int32Array.empty 0 4).data == #[10, 11, 12, (-2147483648)] &&
-  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, (-2147483648)]
+  (src.copySlice 0 Int32Array.empty 0 4).data == #[10, 11, 12, big] &&
+  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, big]
 
 -- Copying from an array into itself.
 #guard
-  let a := Int32Array.mk #[1, 2, 3, (-2147483648)]
-  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, (-2147483648)]
+  let a := Int32Array.mk #[1, 2, 3, big]
+  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, big]
 
 #guard
   let xs := (Array.range 100000).map Nat.toInt32
@@ -411,13 +418,13 @@ example (a : Int32Array) (v : Int32) : (a.push v).pop = a :=
   (a.copySlice 70000 (Int32Array.replicate 10 0) 5 10).data ==
     Array.replicate 5 0 ++ xs.extract 70000 70010
 
-#guard rawElemSize ((Int32Array.mk #[1]).copySlice 0 Int32Array.empty 0 1) == (4 : UInt32)
+#guard rawElemSize ((Int32Array.mk #[1]).copySlice 0 Int32Array.empty 0 1) == elemSize
 
 @[noinline] def Int32Array.copiesSliceInPlace (x : Int32) : Bool :=
   let dest := (Int32Array.emptyWithCapacity 10).push x |>.push x |>.push x
   let p := rawAddr dest
-  let dest := (Int32Array.mk #[(-2147483648), (-2147483648)]).copySlice 0 dest 1 2
-  rawAddr dest == p && dest.data == #[x, (-2147483648), (-2147483648)]
+  let dest := (Int32Array.mk #[big, big]).copySlice 0 dest 1 2
+  rawAddr dest == p && dest.data == #[x, big, big]
 
 @[noinline] def Int32Array.copySliceGrowth (x : Int32) : Bool :=
   let dest := (Int32Array.mk #[x, x, x, x])
@@ -429,25 +436,25 @@ example (a : Int32Array) (v : Int32) : (a.push v).pop = a :=
 
 /-! Linearity markers -/
 
-#guard ((Int32Array.mk #[1, 2]).markLinear.push (-2147483648)).data == #[1, 2, (-2147483648)]
-#guard ((Int32Array.mk #[1]).propagateMark (Int32Array.mk #[2, (-2147483648)])).data == #[2, (-2147483648)]
+#guard ((Int32Array.mk #[1, 2]).markLinear.push big).data == #[1, 2, big]
+#guard ((Int32Array.mk #[1]).propagateMark (Int32Array.mk #[2, big])).data == #[2, big]
 
 /-! Search -/
 
-#guard (Int32Array.mk #[1, 2, (-2147483648), 2]).findIdx? (· == 2) == some 1
-#guard (Int32Array.mk #[1, 2, (-2147483648), 2]).findIdx? (· == 2) 2 == some 3
-#guard (Int32Array.mk #[1, 2, (-2147483648), 2]).findIdx? (· == 3) == none
-#guard (Int32Array.mk #[1, 2, (-2147483648), 2]).findIdx? (· == 1) 9 == none
-#guard ((Int32Array.mk #[1, 2, (-2147483648), 2]).findFinIdx? (· == (-2147483648))).map (·.val) == some 2
+#guard (Int32Array.mk #[1, 2, big, 2]).findIdx? (· == 2) == some 1
+#guard (Int32Array.mk #[1, 2, big, 2]).findIdx? (· == 2) 2 == some 3
+#guard (Int32Array.mk #[1, 2, big, 2]).findIdx? (· == 3) == none
+#guard (Int32Array.mk #[1, 2, big, 2]).findIdx? (· == 1) 9 == none
+#guard ((Int32Array.mk #[1, 2, big, 2]).findFinIdx? (· == big)).map (·.val) == some 2
 
 /-! Lists -/
 
-#guard (Int32Array.ofList [1, 2, (-2147483648)]).data == #[1, 2, (-2147483648)]
+#guard (Int32Array.ofList [1, 2, big]).data == #[1, 2, big]
 #guard (Int32Array.ofList []).data == #[]
-#guard [1, 2, (-2147483648)].toInt32Array == Int32Array.mk #[1, 2, (-2147483648)]
+#guard [1, 2, big].toInt32Array == Int32Array.mk #[1, 2, big]
 #guard (Int32Array.ofList ((List.range 100000).map Nat.toInt32)).data ==
   (Array.range 100000).map Nat.toInt32
-#guard rawElemSize (Int32Array.ofList [1, 2]) == (4 : UInt32)
+#guard rawElemSize (Int32Array.ofList [1, 2]) == elemSize
 
 /-! More lemmas -/
 
@@ -461,50 +468,50 @@ example (a : Int32Array) : Int32Array.ofList a.toList = a := by simp
 /-! Slices -/
 
 #guard
-  let a := Int32Array.mk #[1, 2, 3, (-2147483648)]
+  let a := Int32Array.mk #[1, 2, 3, big]
   let s := a[1...3]
   s.size == 2 && s[0]! == 2 && s[1]! == 3 && s.getD 2 7 == 7 && s.copy == Int32Array.mk #[2, 3] &&
     s.toList == [2, 3] && s.toArray == #[2, 3]
 
 #guard
-  let a := Int32Array.mk #[1, 2, 3, (-2147483648)]
-  a[1...=3].toList == [2, 3, (-2147483648)] && a[*...2].toList == [1, 2] && a[2...*].toList == [3, (-2147483648)] &&
-    a[*...*].toList == [1, 2, 3, (-2147483648)] && a[0<...2].toList == [2] &&
-    a[0<...=2].toList == [2, 3] && a[*...=1].toList == [1, 2] && a[1<...*].toList == [3, (-2147483648)]
+  let a := Int32Array.mk #[1, 2, 3, big]
+  a[1...=3].toList == [2, 3, big] && a[*...2].toList == [1, 2] && a[2...*].toList == [3, big] &&
+    a[*...*].toList == [1, 2, 3, big] && a[0<...2].toList == [2] &&
+    a[0<...=2].toList == [2, 3] && a[*...=1].toList == [1, 2] && a[1<...*].toList == [3, big]
 
 -- Bounds are clamped.
 #guard
-  let a := Int32Array.mk #[1, 2, 3, (-2147483648)]
-  a[2...100].toList == [3, (-2147483648)] && a[3...1].size == 0 && a[9...12].size == 0 &&
-    (a.toSlice 1 (2 ^ 70)).toList == [2, 3, (-2147483648)]
+  let a := Int32Array.mk #[1, 2, 3, big]
+  a[2...100].toList == [3, big] && a[3...1].size == 0 && a[9...12].size == 0 &&
+    (a.toSlice 1 (2 ^ 70)).toList == [2, 3, big]
 
 -- Slices of slices.
 #guard
-  let s := (Int32Array.mk #[1, 2, 3, (-2147483648)])[1...4]
-  s[1...2].toList == [3] && s[0...100].toList == [2, 3, (-2147483648)] && s[*...*].toList == [2, 3, (-2147483648)] &&
-    s[2...*].toList == [(-2147483648)] && s[5...6].size == 0
+  let s := (Int32Array.mk #[1, 2, 3, big])[1...4]
+  s[1...2].toList == [3] && s[0...100].toList == [2, 3, big] && s[*...*].toList == [2, 3, big] &&
+    s[2...*].toList == [big] && s[5...6].size == 0
 
 #guard
-  let s := (Int32Array.mk #[1, 2, 3, (-2147483648)])[1...4]
-  s.popFront.toList == [3, (-2147483648)] && s.popFront.popFront.popFront.popFront.size == 0
+  let s := (Int32Array.mk #[1, 2, 3, big])[1...4]
+  s.popFront.toList == [3, big] && s.popFront.popFront.popFront.popFront.size == 0
 
 #guard (∅ : Int32Array.Slice).size == 0 && (default : Int32Array.Slice).toList == []
 
 -- An array coerces to the slice of all its elements.
 #guard
-  let s : Int32Array.Slice := Int32Array.mk #[1, 2, (-2147483648)]
-  s.toList == [1, 2, (-2147483648)] && s.start == 0
+  let s : Int32Array.Slice := Int32Array.mk #[1, 2, big]
+  s.toList == [1, 2, big] && s.start == 0
 
 -- A slice does not coerce back to an array, since that would copy.
 example (s : Int32Array.Slice) : Int32Array := s.copy
 
 #guard Id.run do
   let mut r : List Int32 := []
-  for x in (Int32Array.mk #[1, 2, 3, (-2147483648)])[1...*] do
+  for x in (Int32Array.mk #[1, 2, 3, big])[1...*] do
     r := x :: r
-  return r == [(-2147483648), 3, 2]
+  return r == [big, 3, 2]
 
-#guard (Int32Array.mk #[1, 2, 3, (-2147483648)])[1...*].foldl (fun acc x => x :: acc) [] == [(-2147483648), 3, 2]
+#guard (Int32Array.mk #[1, 2, 3, big])[1...*].foldl (fun acc x => x :: acc) [] == [big, 3, 2]
 
 #guard
   let xs := (Array.range 100000).map Nat.toInt32
@@ -526,41 +533,42 @@ example (s : Int32Array.Slice) : s.copy.size = s.size := by simp
 /-! Slice API -/
 
 #guard
-  let s := (Int32Array.mk #[1, 2, 3, (-2147483648), 2])[1...5]
-  s.foldr (fun x acc => x :: acc) [] == [2, 3, (-2147483648), 2] &&
-    s.foldl (fun acc x => x :: acc) [] == [2, (-2147483648), 3, 2] &&
-    s.any (· == (-2147483648)) && !s.any (· == 1) && s.all (· != 1) && !s.all (· == 2) &&
-    s.contains (-2147483648) && !s.contains 1 && s.count (· == 2) == 2 &&
-    s.find? (· > 2) == some 3 && s.findRev? (· != (-2147483648)) == some 2 && s.findRev? (· == 1) == none
+  let s := (Int32Array.mk #[1, 2, 3, big, 2])[1...5]
+  s.foldr (fun x acc => x :: acc) [] == [2, 3, big, 2] &&
+    s.foldl (fun acc x => x :: acc) [] == [2, big, 3, 2] &&
+    s.any (· == big) && !s.any (· == 1) && s.all (· != 1) && !s.all (· == 2) &&
+    s.contains big && !s.contains 1 && s.count (· == 2) == 2 &&
+    s.find? (· > 2) == some 3 && s.findRev? (· != big) == some 2 && s.findRev? (· == 1) == none
 
 #guard (Int32Array.mk #[1, 2, 3])[1...1].foldr (fun x acc => x :: acc) [] == []
 #guard (Int32Array.mk #[1, 2, 3])[3...*].find? (fun _ => true) == none
 
 #guard
-  let s := (Int32Array.mk #[1, 2, 3, (-2147483648)])[1...*]
+  let s := (Int32Array.mk #[1, 2, 3, big])[1...*]
   let r : StateM (List Int32) Unit := s.forRevM fun x => modify (x :: ·)
-  (r.run []).2 == [2, 3, (-2147483648)]
+  (r.run []).2 == [2, 3, big]
 
-#guard Id.run ((Int32Array.mk #[1, 2, (-2147483648)])[*...*].findSomeRevM?
+#guard Id.run ((Int32Array.mk #[1, 2, big])[*...*].findSomeRevM?
   (fun x => pure (if x == 2 then some x else none))) == some 2
 
 /-! The `Std.Iterators` API on arrays and slices -/
 
 #guard (Int32Array.mk #[1, 2, 3]).iter.toList == [1, 2, 3]
 #guard ((Int32Array.mk #[1, 2, 3]).iter.map (· * 2)).toInt32Array == Int32Array.mk #[2, 4, 6]
-#guard ((Int32Array.mk #[1, 2, 3, (-2147483648)]).iter.filter (· != 2)).toInt32Array ==
-  Int32Array.mk #[1, 3, (-2147483648)]
-#guard ((Int32Array.mk #[1, 2, 3, (-2147483648)]).iter.take 2).toInt32Array == Int32Array.mk #[1, 2]
-#guard ((Int32Array.mk #[1, 2, 3, (-2147483648)]).iter.drop 2).toInt32Array == Int32Array.mk #[3, (-2147483648)]
-#guard (((Int32Array.mk #[1, 2, 3]).iter.zip (Int32Array.mk #[(-2147483648), 5]).iter).map
-  fun (x, y) => x + y).toInt32Array == Int32Array.mk #[1 + (-2147483648), 7]
-#guard ((Int32Array.mk #[1, 2, 3, (-2147483648)])[1...3].iter.map (· + 1)).toInt32Array ==
+#guard ((Int32Array.mk #[1, 2, 3, big]).iter.filter (· != 2)).toInt32Array ==
+  Int32Array.mk #[1, 3, big]
+#guard ((Int32Array.mk #[1, 2, 3, big]).iter.take 2).toInt32Array == Int32Array.mk #[1, 2]
+#guard ((Int32Array.mk #[1, 2, 3, big]).iter.drop 2).toInt32Array == Int32Array.mk #[3, big]
+#guard (((Int32Array.mk #[1, 2, 3]).iter.zip (Int32Array.mk #[big, 5]).iter).map
+  fun (x, y) => x + y).toInt32Array == Int32Array.mk #[1 + big, 7]
+#guard ((Int32Array.mk #[1, 2, 3, big])[1...3].iter.map (· + 1)).toInt32Array ==
   Int32Array.mk #[3, 4]
 #guard (Int32Array.mk #[1, 2, 3]).iter.length == 3
 #guard Int32Array.empty.iter.toInt32Array == Int32Array.empty
 #guard
   let xs := (Array.range 100000).map Nat.toInt32
   ((Int32Array.mk xs).iter.map (· + 1)).toInt32Array.data == xs.map (· + 1)
-#guard rawElemSize ((Int32Array.mk #[1]).iter.toInt32Array) == (4 : UInt32)
-#guard ((Int32Array.mk #[1, 2, 3]).iter.toInt32ArrayWithCapacity 100) == Int32Array.mk #[1, 2, 3]
+#guard rawElemSize ((Int32Array.mk #[1]).iter.toInt32Array) == elemSize
+#guard (Int32Array.mk #[1, 2, 3]).iter.toInt32ArrayWithCapacity 100 ==
+  Int32Array.mk #[1, 2, 3]
 #guard rawCapacity ((Int32Array.mk #[1, 2, 3]).iter.toInt32ArrayWithCapacity 100) ≥ 100

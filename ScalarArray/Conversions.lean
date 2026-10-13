@@ -41,10 +41,12 @@ public def ofByteArray (b : ByteArray) : UInt8Array := mk b.data
 @[simp] public theorem size_ofByteArray (b : ByteArray) : (ofByteArray b).size = b.size := by
   simp [← ByteArray.size_data, -size_data, size_eq_data_size]
 
-@[simp] public theorem ofByteArray_toByteArray (a : UInt8Array) : ofByteArray a.toByteArray = a := by
+@[simp] public theorem ofByteArray_toByteArray (a : UInt8Array) :
+    ofByteArray a.toByteArray = a := by
   simp [UInt8Array.ext_iff]
 
-@[simp] public theorem toByteArray_ofByteArray (b : ByteArray) : (ofByteArray b).toByteArray = b := by
+@[simp] public theorem toByteArray_ofByteArray (b : ByteArray) :
+    (ofByteArray b).toByteArray = b := by
   rfl
 
 end UInt8Array

@@ -39,7 +39,8 @@ private theorem size_le_capacity : (a : ScalarArray) → a.size ≤ a.capacity
   | allocate _ _ _ h => h
 
 @[extern "lean_copy_sarray"]
-private def copyWithCapacity (a : ScalarArray) (capacity : USize) (h : a.size ≤ capacity) : ScalarArray :=
+private def copyWithCapacity (a : ScalarArray) (capacity : USize) (h : a.size ≤ capacity) :
+    ScalarArray :=
   allocate a.elemSize a.size capacity h
 
 @[inline]
@@ -47,7 +48,8 @@ private def copy (a : ScalarArray) : ScalarArray :=
   a.copyWithCapacity a.capacity a.size_le_capacity
 
 @[extern c inline "#1;\nlean_sarray_set_size(#1, #2)"]
-private unsafe def resizeUnsafe (a : ScalarArray) (size : USize) (h : size ≤ a.capacity) (_exclusive : isExclusiveUnsafe a := by rfl) : ScalarArray :=
+private unsafe def resizeUnsafe (a : ScalarArray) (size : USize) (h : size ≤ a.capacity)
+    (_exclusive : isExclusiveUnsafe a := by rfl) : ScalarArray :=
   allocate a.elemSize size a.capacity h
 
 @[extern "lean_sarray_ensure_exclusive"]
