@@ -135,9 +135,11 @@ private unsafe def setImpl : type_of% @set :=
 
 attribute [implemented_by setImpl] set
 
+@[expose]
 public def get! (a : @& UInt8Array) (i : @& Nat) : UInt8 :=
   if h : i < a.size then a.get i h else panic! "index out of bounds"
 
+@[expose]
 public def getD (a : @& UInt8Array) (i : @& Nat) (v₀ : UInt8) : UInt8 :=
   if h : i < a.size then a.get i h else v₀
 
@@ -248,7 +250,7 @@ public def copySlice (src : @& UInt8Array) (srcOff : Nat) (dest : UInt8Array)
 
 /-! ## Removing elements -/
 
-public def isEmpty (a : @& UInt8Array) : Bool := a.size == 0
+@[expose] public def isEmpty (a : @& UInt8Array) : Bool := a.size == 0
 
 private unsafe def popImpl (a : UInt8Array) : UInt8Array :=
   if a.size == 0 then
@@ -425,7 +427,7 @@ public def foldl {β : Type v} (f : β → UInt8 → β) (init : β) (a : @& UIn
 public def foldr {β : Type v} (f : UInt8 → β → β) (init : β) (a : @& UInt8Array) : β :=
   Id.run <| a.foldrM (pure <| f · ·) init
 
-@[inline]
+@[inline, expose]
 public def forM {m : Type v → Type w} [Monad m] (f : UInt8 → m PUnit) (a : @& UInt8Array) :
     m PUnit :=
   a.foldlM (fun _ x => f x) ⟨⟩
@@ -442,7 +444,7 @@ where
       | .yield b => loop (i + 1) b
     else pure b
 
-@[implemented_by forInImpl]
+@[implemented_by forInImpl, expose]
 public def forIn {β : Type v} {m : Type v → Type w} [Monad m] (a : @& UInt8Array) (init : β)
     (f : UInt8 → β → m (ForInStep β)) : m β :=
   ForIn.forIn a.data init f
@@ -458,7 +460,7 @@ where
     if h : i.toNat < a.size then p (a.uget i h) || loop (i + 1) else false
 
 /-- Whether some element of `a` satisfies `p`. -/
-@[implemented_by anyImpl]
+@[implemented_by anyImpl, expose]
 public def any (a : @& UInt8Array) (p : UInt8 → Bool) : Bool :=
   a.data.any p
 
@@ -470,7 +472,7 @@ where
     if h : i.toNat < a.size then p (a.uget i h) && loop (i + 1) else true
 
 /-- Whether every element of `a` satisfies `p`. -/
-@[implemented_by allImpl]
+@[implemented_by allImpl, expose]
 public def all (a : @& UInt8Array) (p : UInt8 → Bool) : Bool :=
   a.data.all p
 
@@ -478,7 +480,7 @@ private unsafe def containsImpl (a : @& UInt8Array) (v : UInt8) : Bool :=
   anyImpl a (v == ·)
 
 /-- Whether `v` is an element of `a`. -/
-@[implemented_by containsImpl]
+@[implemented_by containsImpl, expose]
 public def contains (a : @& UInt8Array) (v : UInt8) : Bool :=
   a.data.contains v
 
@@ -1099,6 +1101,291 @@ public theorem copySlice_eq_append (src : UInt8Array) (srcOff : Nat) (dest : UIn
   simp only [Slice.copy, size_extract, Slice.size_eq]
   omega
 
+/-! ### Lists -/
+
+@[simp] public theorem toList_mk (a : Array UInt8) : (mk a).toList = a.toList := rfl
+
+@[simp] public theorem length_toList (a : UInt8Array) : a.toList.length = a.size := by
+  simp [← toList_data]
+
+@[simp] public theorem getElem_toList (a : UInt8Array) (i : Nat) (h : i < a.toList.length) :
+    a.toList[i] = a[i]'(by simpa using h) := by
+  simp [← toList_data]
+
+@[simp] public theorem getElem?_toList (a : UInt8Array) (i : Nat) : a.toList[i]? = a[i]? := by
+  by_cases h : i < a.size <;> simp [h, ← toList_data]
+
+@[simp] public theorem toList_inj {a b : UInt8Array} : a.toList = b.toList ↔ a = b :=
+  ⟨fun h => by rw [← ofList_toList a, h, ofList_toList], fun h => h ▸ rfl⟩
+
+@[simp] public theorem toList_empty : (empty : UInt8Array).toList = [] := rfl
+
+@[simp] public theorem toList_push (a : UInt8Array) (v : UInt8) :
+    (a.push v).toList = a.toList ++ [v] := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_pop (a : UInt8Array) : a.pop.toList = a.toList.dropLast := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_append (a b : UInt8Array) :
+    (a ++ b).toList = a.toList ++ b.toList := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_set (a : UInt8Array) (i : Nat) (v : UInt8) (h) :
+    (a.set i v h).toList = a.toList.set i v := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_set! (a : UInt8Array) (i : Nat) (v : UInt8) :
+    (a.set! i v).toList = a.toList.set i v := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_extract (a : UInt8Array) (start stop : Nat) :
+    (a.extract start stop).toList = a.toList.extract start stop := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_replicate (n : Nat) (v : UInt8) :
+    (replicate n v).toList = List.replicate n v := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_ofFn {n : Nat} (f : Fin n → UInt8) :
+    (ofFn f).toList = List.ofFn f := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_popWhile (p : UInt8 → Bool) (a : UInt8Array) :
+    (a.popWhile p).toList = (a.toList.reverse.dropWhile p).reverse := by
+  rw [← toList_data, data_popWhile, ← Array.toArray_toList (xs := a.data),
+    List.popWhile_toArray]
+  simp
+
+/-! ### Last element -/
+
+public theorem back?_eq_getElem? (a : UInt8Array) : a.back? = a[a.size - 1]? := by
+  simp only [back?]
+
+public theorem back!_eq_getElem! (a : UInt8Array) : a.back! = a[a.size - 1]! := by
+  simp only [back!]
+
+public theorem back_eq_getElem (a : UInt8Array) (h : 0 < a.size) :
+    a.back h = a[a.size - 1]'(Nat.sub_lt h Nat.one_pos) := by
+  simp only [back]
+
+@[simp] public theorem getLast?_toList (a : UInt8Array) : a.toList.getLast? = a.back? := by
+  rw [List.getLast?_eq_getElem?, getElem?_toList, length_toList, back?_eq_getElem?]
+
+@[simp] public theorem back?_empty : (empty : UInt8Array).back? = none := by
+  rw [← getLast?_toList, toList_empty, List.getLast?_nil]
+
+@[simp] public theorem back?_push (a : UInt8Array) (v : UInt8) :
+    (a.push v).back? = some v := by
+  rw [← getLast?_toList, toList_push, List.getLast?_concat]
+
+@[simp] public theorem back!_push (a : UInt8Array) (v : UInt8) : (a.push v).back! = v := by
+  simp [back!_eq_getElem!]
+
+@[simp] public theorem back_push (a : UInt8Array) (v : UInt8) (h) : (a.push v).back h = v := by
+  simp [back_eq_getElem]
+
+/-! ### More lists -/
+
+@[simp] public theorem toList_uset (a : UInt8Array) (i : USize) (v : UInt8) (h) :
+    (a.uset i v h).toList = a.toList.set i.toNat v := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_copySlice (src : UInt8Array) (srcOff : Nat) (dest : UInt8Array)
+    (destOff len : Nat) (exact : Bool) :
+    (src.copySlice srcOff dest destOff len exact).toList =
+      dest.toList.extract 0 destOff ++ src.toList.extract srcOff (srcOff + len) ++
+        dest.toList.extract (destOff + min len (src.size - srcOff)) dest.size := by
+  simp [copySlice_eq_append]
+
+/-! ### Accessors -/
+
+@[simp] public theorem get_eq_getElem (a : UInt8Array) (i : Nat) (h) : a.get i h = a[i] := rfl
+
+@[simp] public theorem uget_eq_getElem (a : UInt8Array) (i : USize) (h) :
+    a.uget i h = a[i.toNat] := by
+  cases a; rfl
+
+@[simp] public theorem get!_eq_getElem! (a : UInt8Array) (i : Nat) : a.get! i = a[i]! := by
+  rw [get!]
+  split
+  · simp_all [getElem!_pos]
+  · simp_all [getElem!_neg]
+
+@[simp] public theorem getD_eq_getD_getElem? (a : UInt8Array) (i : Nat) (v₀ : UInt8) :
+    a.getD i v₀ = a[i]?.getD v₀ := by
+  rw [getD]
+  split <;> simp_all
+
+@[simp] public theorem isEmpty_iff {a : UInt8Array} : a.isEmpty ↔ a = empty := by
+  simp [isEmpty, ← size_eq_zero_iff]
+
+/-! ### Queries -/
+
+@[simp] public theorem any_toList (a : UInt8Array) (p : UInt8 → Bool) :
+    a.toList.any p = a.any p := by
+  simp [any, ← toList_data]
+
+@[simp] public theorem all_toList (a : UInt8Array) (p : UInt8 → Bool) :
+    a.toList.all p = a.all p := by
+  simp [all, ← toList_data]
+
+@[simp] public theorem contains_toList (a : UInt8Array) (v : UInt8) :
+    a.toList.contains v = a.contains v := by
+  simp [contains, ← toList_data]
+
+@[simp] public theorem foldl_toList {β : Type v} (f : β → UInt8 → β) (init : β)
+    (a : UInt8Array) : a.toList.foldl f init = a.foldl f init := by
+  simp [foldl_eq_foldl_data, ← toList_data]
+
+@[simp] public theorem foldr_toList {β : Type v} (f : UInt8 → β → β) (init : β)
+    (a : UInt8Array) : a.toList.foldr f init = a.foldr f init := by
+  simp [foldr_eq_foldr_data, ← toList_data]
+
+@[simp] public theorem forIn_toList {β : Type v} {m : Type v → Type w} [Monad m] [LawfulMonad m]
+    (a : UInt8Array) (init : β) (f : UInt8 → β → m (ForInStep β)) :
+    ForIn.forIn a.toList init f = ForIn.forIn a init f := by
+  rw [← toList_data, Array.forIn_toList]
+  rfl
+
+private theorem findIdx?_loop_eq (a : UInt8Array) (p : UInt8 → Bool) (i : Nat) :
+    findIdx?.loop a p i = ((a.toList.drop i).findIdx? p).map (· + i) := by
+  fun_induction findIdx?.loop a p i with
+  | case1 i h hp =>
+    rw [List.drop_eq_getElem_cons (by simpa using h), List.findIdx?_cons]
+    simp [hp]
+  | case2 i h hp ih =>
+    rw [ih, List.drop_eq_getElem_cons (l := a.toList) (i := i) (by simpa using h),
+      List.findIdx?_cons]
+    simp [hp, Option.map_map, Function.comp_def, Nat.add_assoc, Nat.add_comm 1]
+  | case3 i h =>
+    rw [List.drop_of_length_le (by simpa using h)]
+    rfl
+
+public theorem findIdx?_eq (a : UInt8Array) (p : UInt8 → Bool) (start : Nat) :
+    a.findIdx? p start = ((a.toList.drop start).findIdx? p).map (· + start) := by
+  simp [findIdx?, findIdx?_loop_eq]
+
+@[simp] public theorem findIdx?_toList (a : UInt8Array) (p : UInt8 → Bool) :
+    a.toList.findIdx? p = a.findIdx? p := by
+  simp [findIdx?_eq]
+
+private theorem findFinIdx?_loop_eq (a : UInt8Array) (p : UInt8 → Bool) (i : Nat) :
+    (findFinIdx?.loop a p i).map Fin.val = findIdx?.loop a p i := by
+  fun_induction findFinIdx?.loop a p i <;> rw [findIdx?.loop] <;> simp_all <;> omega
+
+@[simp] public theorem map_val_findFinIdx? (a : UInt8Array) (p : UInt8 → Bool) (start : Nat) :
+    (a.findFinIdx? p start).map Fin.val = a.findIdx? p start := by
+  simp [findFinIdx?, findIdx?, findFinIdx?_loop_eq]
+
+/-! ### Slices -/
+
+@[simp] public theorem Slice.getElem_copy (s : UInt8Array.Slice) (i : Nat)
+    (h : i < s.copy.size) :
+    s.copy[i] = s[i]'(by simpa using h) := by
+  simp [Slice.copy, Slice.getElem_eq]
+
+/-- Copying the slice from `start` to `stop` is the same as extracting those elements. -/
+@[simp] public theorem copy_toSlice (a : UInt8Array) (start stop : Nat) :
+    (a.toSlice start stop).copy = a.extract start stop := by
+  rw [← toList_inj]
+  unfold toSlice
+  split <;> split <;>
+    simp [Slice.copy, Slice.array, Slice.start, Slice.stop] <;> omega
+
+@[simp] public theorem array_toSlice (a : UInt8Array) (start stop : Nat) :
+    (a.toSlice start stop).array = a := by
+  unfold toSlice
+  split <;> split <;> rfl
+
+@[simp] public theorem start_toSlice (a : UInt8Array) (start stop : Nat) :
+    (a.toSlice start stop).start = min start (min stop a.size) := by
+  unfold toSlice
+  split <;> split <;> simp only [Slice.start] <;> omega
+
+@[simp] public theorem stop_toSlice (a : UInt8Array) (start stop : Nat) :
+    (a.toSlice start stop).stop = min stop a.size := by
+  unfold toSlice
+  split <;> split <;> simp only [Slice.stop] <;> omega
+
+@[simp] public theorem size_toSlice (a : UInt8Array) (start stop : Nat) :
+    (a.toSlice start stop).size = min stop a.size - start := by
+  rw [Slice.size_eq, start_toSlice, stop_toSlice]
+  omega
+
+@[simp] public theorem getElem_toSlice (a : UInt8Array) (start stop i : Nat) (h) :
+    (a.toSlice start stop)[i]'h = a[start + i]'(by simp at h; omega) := by
+  simp only [size_toSlice] at h
+  simp only [Slice.getElem_eq, array_toSlice, start_toSlice]
+  congr 1
+  omega
+
+@[simp] public theorem Slice.size_slice (s : UInt8Array.Slice) (start stop : Nat) :
+    (s.slice start stop).size = min stop s.size - start := by
+  have := s.stop_le_array_size
+  rw [slice, size_toSlice, size_eq]
+  omega
+
+@[simp] public theorem Slice.getElem_slice (s : UInt8Array.Slice) (start stop i : Nat) (h) :
+    (s.slice start stop)[i]'h = s[start + i]'(by simp at h; omega) := by
+  have := s.stop_le_array_size
+  have := s.size_eq
+  have h' := h
+  rw [size_slice, size_eq] at h'
+  simp only [Slice.getElem_eq, slice, array_toSlice, start_toSlice]
+  congr 1
+  omega
+
+@[simp] public theorem Slice.copy_slice (s : UInt8Array.Slice) (start stop : Nat) :
+    (s.slice start stop).copy = s.copy.extract start stop := by
+  apply ext_getElem
+  · simp
+  · intro i _ _
+    simp
+
+@[simp] public theorem Slice.array_popFront (s : UInt8Array.Slice) :
+    s.popFront.array = s.array := by
+  simp only [popFront]
+  split <;> rfl
+
+@[simp] public theorem Slice.start_popFront (s : UInt8Array.Slice) :
+    s.popFront.start = min (s.start + 1) s.stop := by
+  rcases s with ⟨⟨_, start, stop, h, _⟩⟩
+  simp only [popFront, Slice.start, Slice.stop]
+  by_cases hc : start < stop <;> simp [hc] <;> omega
+
+@[simp] public theorem Slice.stop_popFront (s : UInt8Array.Slice) :
+    s.popFront.stop = s.stop := by
+  simp only [popFront]
+  split <;> rfl
+
+@[simp] public theorem Slice.size_popFront (s : UInt8Array.Slice) :
+    s.popFront.size = s.size - 1 := by
+  rw [size_eq, size_eq, start_popFront, stop_popFront]
+  omega
+
+@[simp] public theorem Slice.getElem_popFront (s : UInt8Array.Slice) (i : Nat) (h) :
+    s.popFront[i]'h = s[i + 1]'(by simp at h; omega) := by
+  have : s.start < s.stop := by rw [size_popFront, size_eq] at h; omega
+  simp only [Slice.getElem_eq, array_popFront, start_popFront]
+  congr 1
+  omega
+
+private theorem Slice.foldrM_loop_eq {β : Type v} (f : UInt8 → β → β)
+    (s : UInt8Array.Slice) (i : Nat) (h : i ≤ s.size) (b : β) :
+    Slice.foldrM.loop (m := Id) (pure <| f · ·) s i h b = (s.copy.toList.take i).foldr f b := by
+  induction i generalizing b with
+  | zero => rfl
+  | succ i ih =>
+    have hi : i < s.copy.toList.length := by simp; omega
+    rw [Slice.foldrM.loop, List.take_add_one, List.getElem?_eq_getElem hi]
+    simp [ih]
+
+/-- Folding over a slice is folding over the list of its elements. -/
+public theorem Slice.foldr_eq_foldr_toList_copy {β : Type v} (f : UInt8 → β → β)
+    (init : β) (s : UInt8Array.Slice) : s.foldr f init = s.copy.toList.foldr f init := by
+  rw [Slice.foldr, Slice.foldrM, Id.run, Slice.foldrM_loop_eq,
+    List.take_of_length_le (by simp)]
 
 end UInt8Array
 
