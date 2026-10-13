@@ -5,6 +5,8 @@ testDriver = "ScalarArrayTest"
 
 [[lean_lib]]
 name = "ScalarArray"
+# Lets the interpreter run the `extern` C code in downstream files, for `#eval` and `#guard`.
+precompileModules = true
 
 [[lean_lib]]
 name = "ScalarArrayTest"

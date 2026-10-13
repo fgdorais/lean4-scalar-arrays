@@ -820,12 +820,25 @@ end Slice
 /--
 Collects the values emitted by an iterator into a new array. Together with the `Std.Iterators`
 combinators, this gives functions such as `map`, `filter`, `take` and `zipWith`, for example
-`(a.iter.map (· + 1)).toInt16Array`. The new array starts with room for `capacity` elements.
+`(a.iter.map (· + 1)).toInt16Array`.
 -/
 @[inline, expose]
 public def _root_.Std.Iter.toInt16Array {α : Type} [Std.Iterator α Id Int16]
-    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int16) (capacity := 0) : Int16Array :=
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int16) : Int16Array :=
+  it.fold (·.push ·) empty
+
+/--
+Collects the values emitted by an iterator into a new array that starts with room for `capacity`
+elements, like `Std.Iter.toInt16Array`.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toInt16ArrayWithCapacity {α : Type} [Std.Iterator α Id Int16]
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int16) (capacity : Nat) : Int16Array :=
   it.fold (·.push ·) (emptyWithCapacity capacity)
+
+@[simp] public theorem _root_.Std.Iter.toInt16ArrayWithCapacity_eq {α : Type}
+    [Std.Iterator α Id Int16] [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int16)
+    (capacity : Nat) : it.toInt16ArrayWithCapacity capacity = it.toInt16Array := rfl
 
 @[simp] public theorem size_mk (a : Array Int16) : (mk a).size = a.size := rfl
 

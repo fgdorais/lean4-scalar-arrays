@@ -820,12 +820,25 @@ end Slice
 /--
 Collects the values emitted by an iterator into a new array. Together with the `Std.Iterators`
 combinators, this gives functions such as `map`, `filter`, `take` and `zipWith`, for example
-`(a.iter.map (· + 1)).toUInt32Array`. The new array starts with room for `capacity` elements.
+`(a.iter.map (· + 1)).toUInt32Array`.
 -/
 @[inline, expose]
 public def _root_.Std.Iter.toUInt32Array {α : Type} [Std.Iterator α Id UInt32]
-    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) UInt32) (capacity := 0) : UInt32Array :=
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) UInt32) : UInt32Array :=
+  it.fold (·.push ·) empty
+
+/--
+Collects the values emitted by an iterator into a new array that starts with room for `capacity`
+elements, like `Std.Iter.toUInt32Array`.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toUInt32ArrayWithCapacity {α : Type} [Std.Iterator α Id UInt32]
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) UInt32) (capacity : Nat) : UInt32Array :=
   it.fold (·.push ·) (emptyWithCapacity capacity)
+
+@[simp] public theorem _root_.Std.Iter.toUInt32ArrayWithCapacity_eq {α : Type}
+    [Std.Iterator α Id UInt32] [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) UInt32)
+    (capacity : Nat) : it.toUInt32ArrayWithCapacity capacity = it.toUInt32Array := rfl
 
 @[simp] public theorem size_mk (a : Array UInt32) : (mk a).size = a.size := rfl
 

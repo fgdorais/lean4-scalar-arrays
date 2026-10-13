@@ -562,5 +562,5 @@ example (s : ISizeArray.Slice) : s.copy.size = s.size := by simp
   let xs := (Array.range 100000).map Nat.toISize
   ((ISizeArray.mk xs).iter.map (· + 1)).toISizeArray.data == xs.map (· + 1)
 #guard rawElemSize ((ISizeArray.mk #[1]).iter.toISizeArray) == ((System.Platform.numBits / 8).toUInt32 : UInt32)
-#guard ((ISizeArray.mk #[1, 2, 3]).iter.toISizeArray (capacity := 100)) == ISizeArray.mk #[1, 2, 3]
-#guard rawCapacity ((ISizeArray.mk #[1, 2, 3]).iter.toISizeArray (capacity := 100)) ≥ 100
+#guard ((ISizeArray.mk #[1, 2, 3]).iter.toISizeArrayWithCapacity 100) == ISizeArray.mk #[1, 2, 3]
+#guard rawCapacity ((ISizeArray.mk #[1, 2, 3]).iter.toISizeArrayWithCapacity 100) ≥ 100

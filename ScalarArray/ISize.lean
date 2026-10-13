@@ -820,12 +820,25 @@ end Slice
 /--
 Collects the values emitted by an iterator into a new array. Together with the `Std.Iterators`
 combinators, this gives functions such as `map`, `filter`, `take` and `zipWith`, for example
-`(a.iter.map (· + 1)).toISizeArray`. The new array starts with room for `capacity` elements.
+`(a.iter.map (· + 1)).toISizeArray`.
 -/
 @[inline, expose]
 public def _root_.Std.Iter.toISizeArray {α : Type} [Std.Iterator α Id ISize]
-    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) ISize) (capacity := 0) : ISizeArray :=
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) ISize) : ISizeArray :=
+  it.fold (·.push ·) empty
+
+/--
+Collects the values emitted by an iterator into a new array that starts with room for `capacity`
+elements, like `Std.Iter.toISizeArray`.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toISizeArrayWithCapacity {α : Type} [Std.Iterator α Id ISize]
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) ISize) (capacity : Nat) : ISizeArray :=
   it.fold (·.push ·) (emptyWithCapacity capacity)
+
+@[simp] public theorem _root_.Std.Iter.toISizeArrayWithCapacity_eq {α : Type}
+    [Std.Iterator α Id ISize] [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) ISize)
+    (capacity : Nat) : it.toISizeArrayWithCapacity capacity = it.toISizeArray := rfl
 
 @[simp] public theorem size_mk (a : Array ISize) : (mk a).size = a.size := rfl
 
