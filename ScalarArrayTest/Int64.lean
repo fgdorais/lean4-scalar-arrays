@@ -217,3 +217,133 @@ open ScalarArray ScalarArrayTest
 #guard rawCapacity (Int64Array.mk #[1, 2, 3, 4] ++ Int64Array.mk #[5]) ≥ 8
 #guard rawCapacity (Int64Array.mk #[1] ++ Int64Array.mk (Array.replicate 10 0)) ≥ 11
 #guard rawElemSize (Int64Array.mk #[1] ++ Int64Array.mk #[2]) == (8 : UInt32)
+
+/-! Equality -/
+
+#guard Int64Array.mk #[1, 2, (-9223372036854775808)] == Int64Array.mk #[1, 2, (-9223372036854775808)]
+#guard Int64Array.mk #[1, 2, (-9223372036854775808)] != Int64Array.mk #[1, 2, 0]
+#guard Int64Array.mk #[1, 2] != Int64Array.mk #[1, 2, 0]
+#guard Int64Array.mk #[1, 2, 0] != Int64Array.mk #[1, 2]
+#guard Int64Array.empty == Int64Array.emptyWithCapacity 10
+#guard (Int64Array.mk #[1, 2] ++ Int64Array.mk #[(-9223372036854775808)]) == Int64Array.mk #[1, 2, (-9223372036854775808)]
+-- Capacity and leftover memory past the size don't matter.
+#guard (Int64Array.emptyWithCapacity 100).push 1 == Int64Array.mk #[1]
+#guard (Int64Array.mk #[1, 2, 3]).pop == Int64Array.mk #[1, 2]
+#guard (Int64Array.mk (Array.replicate 100000 0)).set! 99999 (-9223372036854775808) !=
+  Int64Array.mk (Array.replicate 100000 0)
+
+/-! Decidable equality and hashing -/
+
+#guard decide (Int64Array.mk #[1, 2, (-9223372036854775808)] = Int64Array.mk #[1, 2, (-9223372036854775808)])
+#guard !decide (Int64Array.mk #[1, 2, (-9223372036854775808)] = Int64Array.mk #[1, 2, 0])
+#guard hash (Int64Array.mk #[1, 2, (-9223372036854775808)]) == hash #[(1 : Int64), 2, (-9223372036854775808)]
+#guard hash (Int64Array.empty) == hash (#[] : Array Int64)
+#guard hash ((Int64Array.emptyWithCapacity 100).push 1) == hash (Int64Array.mk #[1])
+
+/-! Iteration -/
+
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808)]).foldl (fun acc x => x :: acc) [] == [(-9223372036854775808), 2, 1]
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808)]).foldr (fun x acc => x :: acc) [] == [1, 2, (-9223372036854775808)]
+#guard Int64Array.empty.foldl (fun acc x => x :: acc) [] == []
+#guard Int64Array.empty.foldr (fun x acc => x :: acc) [] == []
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808)]).foldlM (m := Option)
+  (fun acc x => if x == 2 then none else some (x :: acc)) [] == none
+#guard (Int64Array.mk #[1, (-9223372036854775808)]).foldrM (m := Option) (fun x acc => some (x :: acc)) [] ==
+  some [1, (-9223372036854775808)]
+
+#guard Id.run do
+  let mut r : List Int64 := []
+  for x in Int64Array.mk #[1, 2, (-9223372036854775808)] do
+    r := x :: r
+  return r == [(-9223372036854775808), 2, 1]
+
+#guard Id.run do
+  let mut r : List Int64 := []
+  for x in Int64Array.mk #[1, 2, 3, 4] do
+    if x == 3 then break
+    r := x :: r
+  return r == [2, 1]
+
+#guard
+  let r : StateM (List Int64) Unit := (Int64Array.mk #[1, 2, (-9223372036854775808)]).forM fun x => modify (x :: ·)
+  (r.run []).2 == [(-9223372036854775808), 2, 1]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toInt64
+  let f := fun (acc : List Int64) x => if x == 0 then x :: acc else acc
+  (Int64Array.mk xs).foldl f [] == xs.foldl f []
+
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808)]).any (· == (-9223372036854775808))
+#guard !(Int64Array.mk #[1, 2, 3]).any (· == (-9223372036854775808))
+#guard (Int64Array.mk #[1, 2, 3]).all (· != (-9223372036854775808))
+#guard !(Int64Array.mk #[1, (-9223372036854775808), 3]).all (· != (-9223372036854775808))
+#guard !Int64Array.empty.any (fun _ => true) && Int64Array.empty.all (fun _ => false)
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808)]).contains (-9223372036854775808)
+#guard !(Int64Array.mk #[1, 2, 3]).contains (-9223372036854775808)
+#guard (Int64Array.mk (Array.replicate 100000 0) |>.set! 99999 (-9223372036854775808)).contains (-9223372036854775808)
+
+/-! Removing elements -/
+
+#guard Int64Array.empty.isEmpty && !(Int64Array.mk #[1]).isEmpty
+#guard (Int64Array.mk #[1]).pop.isEmpty
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808)]).pop.data == #[1, 2]
+#guard Int64Array.empty.pop.data == #[]
+#guard ((Int64Array.mk #[1, 2, 3]).pop.push (-9223372036854775808)).data == #[1, 2, (-9223372036854775808)]
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808)]).back? == some (-9223372036854775808)
+#guard Int64Array.empty.back? == none
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808)]).back! == (-9223372036854775808)
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808)]).back (by decide) == (-9223372036854775808)
+
+-- Popping from a shared array must leave the original unchanged.
+#guard
+  let a := Int64Array.mk #[1, 2, 3]
+  let b := a.pop
+  b.data == #[1, 2] && a.data == #[1, 2, 3]
+
+-- The array is built from a parameter so that it isn't extracted as a shared closed term.
+@[noinline] def Int64Array.popsInPlace (x : Int64) : Bool :=
+  let a := (Int64Array.mk #[x]).push x
+  let p := rawAddr a
+  let a := a.pop
+  rawAddr a == p && a.data == #[x]
+
+#guard Int64Array.popsInPlace 1
+
+#guard ((Int64Array.mk #[1, 2, 3, (-9223372036854775808)]).extract 1 3).data == #[2, 3]
+#guard ((Int64Array.mk #[1, 2, 3, (-9223372036854775808)]).extract 2 100).data == #[3, (-9223372036854775808)]
+#guard ((Int64Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
+#guard ((Int64Array.mk #[1, 2, 3]).extract 2 1).data == #[]
+#guard ((Int64Array.mk #[1, 2, 3]).extract 5 9).data == #[]
+#guard ((Int64Array.mk #[1, 2, 3]).extract (2 ^ 70) (2 ^ 71)).data == #[]
+#guard ((Int64Array.mk #[1, 2, 3]).extract 1 (2 ^ 70)).data == #[2, 3]
+#guard
+  let xs := (Array.range 100000).map Nat.toInt64
+  ((Int64Array.mk xs).extract 70000 70010).data == xs.extract 70000 70010
+#guard rawElemSize ((Int64Array.mk #[1, 2, 3]).extract 1 2) == (8 : UInt32)
+
+-- The extracted array is independent of the original.
+#guard
+  let a := Int64Array.mk #[1, 2, 3]
+  let b := (a.extract 0 2).set! 0 (-9223372036854775808)
+  b.data == #[(-9223372036854775808), 2] && a.data == #[1, 2, 3]
+
+/-! Building arrays -/
+
+#guard (Int64Array.replicate 3 (-9223372036854775808)).data == #[(-9223372036854775808), (-9223372036854775808), (-9223372036854775808)]
+#guard (Int64Array.replicate 0 1).data == #[]
+#guard (Int64Array.replicate 100000 (-9223372036854775808)).data == Array.replicate 100000 (-9223372036854775808)
+#guard (Int64Array.ofFn (n := 4) fun i => i.val.toInt64).data == #[0, 1, 2, 3]
+#guard (Int64Array.ofFn (n := 0) fun i => i.val.toInt64).data == #[]
+#guard rawElemSize (Int64Array.replicate 2 1) == (8 : UInt32)
+#guard rawElemSize (Int64Array.ofFn (n := 2) fun _ => 1) == (8 : UInt32)
+
+/-! Lemmas -/
+
+example (a : Int64Array) (v : Int64) : (a.push v).pop = a := by simp [Int64Array.ext_iff]
+example : (Int64Array.replicate 3 (-9223372036854775808))[1] = (-9223372036854775808) := by simp
+example (a b : Int64Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
+example (a : Int64Array) (i : Nat) (v : Int64) (h : i < a.size) :
+    (a.set i v h)[i]'(by simpa) = v := by simp
+example (a : Int64Array) : a.extract 0 a.size = a := by simp [Int64Array.ext_iff]
+example (a : Int64Array) (v : Int64) : (a.push v).pop = a :=
+  Int64Array.ext_getElem (by simp) (by simp_all)

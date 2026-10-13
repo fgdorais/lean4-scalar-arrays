@@ -217,3 +217,133 @@ open ScalarArray ScalarArrayTest
 #guard rawCapacity (UInt64Array.mk #[1, 2, 3, 4] ++ UInt64Array.mk #[5]) ≥ 8
 #guard rawCapacity (UInt64Array.mk #[1] ++ UInt64Array.mk (Array.replicate 10 0)) ≥ 11
 #guard rawElemSize (UInt64Array.mk #[1] ++ UInt64Array.mk #[2]) == (8 : UInt32)
+
+/-! Equality -/
+
+#guard UInt64Array.mk #[1, 2, 18446744073709551615] == UInt64Array.mk #[1, 2, 18446744073709551615]
+#guard UInt64Array.mk #[1, 2, 18446744073709551615] != UInt64Array.mk #[1, 2, 0]
+#guard UInt64Array.mk #[1, 2] != UInt64Array.mk #[1, 2, 0]
+#guard UInt64Array.mk #[1, 2, 0] != UInt64Array.mk #[1, 2]
+#guard UInt64Array.empty == UInt64Array.emptyWithCapacity 10
+#guard (UInt64Array.mk #[1, 2] ++ UInt64Array.mk #[18446744073709551615]) == UInt64Array.mk #[1, 2, 18446744073709551615]
+-- Capacity and leftover memory past the size don't matter.
+#guard (UInt64Array.emptyWithCapacity 100).push 1 == UInt64Array.mk #[1]
+#guard (UInt64Array.mk #[1, 2, 3]).pop == UInt64Array.mk #[1, 2]
+#guard (UInt64Array.mk (Array.replicate 100000 0)).set! 99999 18446744073709551615 !=
+  UInt64Array.mk (Array.replicate 100000 0)
+
+/-! Decidable equality and hashing -/
+
+#guard decide (UInt64Array.mk #[1, 2, 18446744073709551615] = UInt64Array.mk #[1, 2, 18446744073709551615])
+#guard !decide (UInt64Array.mk #[1, 2, 18446744073709551615] = UInt64Array.mk #[1, 2, 0])
+#guard hash (UInt64Array.mk #[1, 2, 18446744073709551615]) == hash #[(1 : UInt64), 2, 18446744073709551615]
+#guard hash (UInt64Array.empty) == hash (#[] : Array UInt64)
+#guard hash ((UInt64Array.emptyWithCapacity 100).push 1) == hash (UInt64Array.mk #[1])
+
+/-! Iteration -/
+
+#guard (UInt64Array.mk #[1, 2, 18446744073709551615]).foldl (fun acc x => x :: acc) [] == [18446744073709551615, 2, 1]
+#guard (UInt64Array.mk #[1, 2, 18446744073709551615]).foldr (fun x acc => x :: acc) [] == [1, 2, 18446744073709551615]
+#guard UInt64Array.empty.foldl (fun acc x => x :: acc) [] == []
+#guard UInt64Array.empty.foldr (fun x acc => x :: acc) [] == []
+#guard (UInt64Array.mk #[1, 2, 18446744073709551615]).foldlM (m := Option)
+  (fun acc x => if x == 2 then none else some (x :: acc)) [] == none
+#guard (UInt64Array.mk #[1, 18446744073709551615]).foldrM (m := Option) (fun x acc => some (x :: acc)) [] ==
+  some [1, 18446744073709551615]
+
+#guard Id.run do
+  let mut r : List UInt64 := []
+  for x in UInt64Array.mk #[1, 2, 18446744073709551615] do
+    r := x :: r
+  return r == [18446744073709551615, 2, 1]
+
+#guard Id.run do
+  let mut r : List UInt64 := []
+  for x in UInt64Array.mk #[1, 2, 3, 4] do
+    if x == 3 then break
+    r := x :: r
+  return r == [2, 1]
+
+#guard
+  let r : StateM (List UInt64) Unit := (UInt64Array.mk #[1, 2, 18446744073709551615]).forM fun x => modify (x :: ·)
+  (r.run []).2 == [18446744073709551615, 2, 1]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toUInt64
+  let f := fun (acc : List UInt64) x => if x == 0 then x :: acc else acc
+  (UInt64Array.mk xs).foldl f [] == xs.foldl f []
+
+#guard (UInt64Array.mk #[1, 2, 18446744073709551615]).any (· == 18446744073709551615)
+#guard !(UInt64Array.mk #[1, 2, 3]).any (· == 18446744073709551615)
+#guard (UInt64Array.mk #[1, 2, 3]).all (· != 18446744073709551615)
+#guard !(UInt64Array.mk #[1, 18446744073709551615, 3]).all (· != 18446744073709551615)
+#guard !UInt64Array.empty.any (fun _ => true) && UInt64Array.empty.all (fun _ => false)
+#guard (UInt64Array.mk #[1, 2, 18446744073709551615]).contains 18446744073709551615
+#guard !(UInt64Array.mk #[1, 2, 3]).contains 18446744073709551615
+#guard (UInt64Array.mk (Array.replicate 100000 0) |>.set! 99999 18446744073709551615).contains 18446744073709551615
+
+/-! Removing elements -/
+
+#guard UInt64Array.empty.isEmpty && !(UInt64Array.mk #[1]).isEmpty
+#guard (UInt64Array.mk #[1]).pop.isEmpty
+#guard (UInt64Array.mk #[1, 2, 18446744073709551615]).pop.data == #[1, 2]
+#guard UInt64Array.empty.pop.data == #[]
+#guard ((UInt64Array.mk #[1, 2, 3]).pop.push 18446744073709551615).data == #[1, 2, 18446744073709551615]
+#guard (UInt64Array.mk #[1, 2, 18446744073709551615]).back? == some 18446744073709551615
+#guard UInt64Array.empty.back? == none
+#guard (UInt64Array.mk #[1, 2, 18446744073709551615]).back! == 18446744073709551615
+#guard (UInt64Array.mk #[1, 2, 18446744073709551615]).back (by decide) == 18446744073709551615
+
+-- Popping from a shared array must leave the original unchanged.
+#guard
+  let a := UInt64Array.mk #[1, 2, 3]
+  let b := a.pop
+  b.data == #[1, 2] && a.data == #[1, 2, 3]
+
+-- The array is built from a parameter so that it isn't extracted as a shared closed term.
+@[noinline] def UInt64Array.popsInPlace (x : UInt64) : Bool :=
+  let a := (UInt64Array.mk #[x]).push x
+  let p := rawAddr a
+  let a := a.pop
+  rawAddr a == p && a.data == #[x]
+
+#guard UInt64Array.popsInPlace 1
+
+#guard ((UInt64Array.mk #[1, 2, 3, 18446744073709551615]).extract 1 3).data == #[2, 3]
+#guard ((UInt64Array.mk #[1, 2, 3, 18446744073709551615]).extract 2 100).data == #[3, 18446744073709551615]
+#guard ((UInt64Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
+#guard ((UInt64Array.mk #[1, 2, 3]).extract 2 1).data == #[]
+#guard ((UInt64Array.mk #[1, 2, 3]).extract 5 9).data == #[]
+#guard ((UInt64Array.mk #[1, 2, 3]).extract (2 ^ 70) (2 ^ 71)).data == #[]
+#guard ((UInt64Array.mk #[1, 2, 3]).extract 1 (2 ^ 70)).data == #[2, 3]
+#guard
+  let xs := (Array.range 100000).map Nat.toUInt64
+  ((UInt64Array.mk xs).extract 70000 70010).data == xs.extract 70000 70010
+#guard rawElemSize ((UInt64Array.mk #[1, 2, 3]).extract 1 2) == (8 : UInt32)
+
+-- The extracted array is independent of the original.
+#guard
+  let a := UInt64Array.mk #[1, 2, 3]
+  let b := (a.extract 0 2).set! 0 18446744073709551615
+  b.data == #[18446744073709551615, 2] && a.data == #[1, 2, 3]
+
+/-! Building arrays -/
+
+#guard (UInt64Array.replicate 3 18446744073709551615).data == #[18446744073709551615, 18446744073709551615, 18446744073709551615]
+#guard (UInt64Array.replicate 0 1).data == #[]
+#guard (UInt64Array.replicate 100000 18446744073709551615).data == Array.replicate 100000 18446744073709551615
+#guard (UInt64Array.ofFn (n := 4) fun i => i.val.toUInt64).data == #[0, 1, 2, 3]
+#guard (UInt64Array.ofFn (n := 0) fun i => i.val.toUInt64).data == #[]
+#guard rawElemSize (UInt64Array.replicate 2 1) == (8 : UInt32)
+#guard rawElemSize (UInt64Array.ofFn (n := 2) fun _ => 1) == (8 : UInt32)
+
+/-! Lemmas -/
+
+example (a : UInt64Array) (v : UInt64) : (a.push v).pop = a := by simp [UInt64Array.ext_iff]
+example : (UInt64Array.replicate 3 18446744073709551615)[1] = 18446744073709551615 := by simp
+example (a b : UInt64Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
+example (a : UInt64Array) (i : Nat) (v : UInt64) (h : i < a.size) :
+    (a.set i v h)[i]'(by simpa) = v := by simp
+example (a : UInt64Array) : a.extract 0 a.size = a := by simp [UInt64Array.ext_iff]
+example (a : UInt64Array) (v : UInt64) : (a.push v).pop = a :=
+  UInt64Array.ext_getElem (by simp) (by simp_all)
