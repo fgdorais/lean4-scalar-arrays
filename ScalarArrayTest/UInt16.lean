@@ -498,3 +498,43 @@ example (a : UInt16Array) : UInt16Array.ofList a.toList = a := by simp
 #guard UInt16Array.slicesWithoutCopying 1
 
 example (s : UInt16Array.Slice) : s.copy.size = s.size := by simp
+
+/-! Slice API -/
+
+#guard
+  let s := (UInt16Array.mk #[1, 2, 3, 65535, 2])[1...5]
+  s.foldr (fun x acc => x :: acc) [] == [2, 3, 65535, 2] &&
+    s.foldl (fun acc x => x :: acc) [] == [2, 65535, 3, 2] &&
+    s.any (· == 65535) && !s.any (· == 1) && s.all (· != 1) && !s.all (· == 2) &&
+    s.contains 65535 && !s.contains 1 && s.count (· == 2) == 2 &&
+    s.find? (· > 2) == some 3 && s.findRev? (· != 65535) == some 2 && s.findRev? (· == 1) == none
+
+#guard (UInt16Array.mk #[1, 2, 3])[1...1].foldr (fun x acc => x :: acc) [] == []
+#guard (UInt16Array.mk #[1, 2, 3])[3...*].find? (fun _ => true) == none
+
+#guard
+  let s := (UInt16Array.mk #[1, 2, 3, 65535])[1...*]
+  let r : StateM (List UInt16) Unit := s.forRevM fun x => modify (x :: ·)
+  (r.run []).2 == [2, 3, 65535]
+
+#guard Id.run ((UInt16Array.mk #[1, 2, 65535])[*...*].findSomeRevM?
+  (fun x => pure (if x == 2 then some x else none))) == some 2
+
+/-! The `Std.Iterators` API on arrays and slices -/
+
+#guard (UInt16Array.mk #[1, 2, 3]).iter.toList == [1, 2, 3]
+#guard ((UInt16Array.mk #[1, 2, 3]).iter.map (· * 2)).toUInt16Array == UInt16Array.mk #[2, 4, 6]
+#guard ((UInt16Array.mk #[1, 2, 3, 65535]).iter.filter (· != 2)).toUInt16Array ==
+  UInt16Array.mk #[1, 3, 65535]
+#guard ((UInt16Array.mk #[1, 2, 3, 65535]).iter.take 2).toUInt16Array == UInt16Array.mk #[1, 2]
+#guard ((UInt16Array.mk #[1, 2, 3, 65535]).iter.drop 2).toUInt16Array == UInt16Array.mk #[3, 65535]
+#guard (((UInt16Array.mk #[1, 2, 3]).iter.zip (UInt16Array.mk #[65535, 5]).iter).map
+  fun (x, y) => x + y).toUInt16Array == UInt16Array.mk #[1 + 65535, 7]
+#guard ((UInt16Array.mk #[1, 2, 3, 65535])[1...3].iter.map (· + 1)).toUInt16Array ==
+  UInt16Array.mk #[3, 4]
+#guard (UInt16Array.mk #[1, 2, 3]).iter.length == 3
+#guard UInt16Array.empty.iter.toUInt16Array == UInt16Array.empty
+#guard
+  let xs := (Array.range 100000).map Nat.toUInt16
+  ((UInt16Array.mk xs).iter.map (· + 1)).toUInt16Array.data == xs.map (· + 1)
+#guard rawElemSize ((UInt16Array.mk #[1]).iter.toUInt16Array) == (2 : UInt32)

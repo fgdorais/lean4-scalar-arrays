@@ -5,6 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 import all ScalarArray.Internal
+public import Std.Data.Iterators
 
 /-!
 # Arrays of `Int64`
@@ -491,7 +492,7 @@ public instance : ToString Int64Array where
 /-! ## Slices -/
 
 /-- Internal representation of `Int64Array.Slice`. -/
-public structure SliceData where
+public protected structure SliceData where
   /-- The underlying array. -/
   array : Int64Array
   /-- The starting index of the slice (inclusive). -/
@@ -508,53 +509,53 @@ A region of a `Int64Array`: the elements from index `start` up to, but not inclu
 Taking a slice doesn't copy the array. Slices are written with core's slice notation, such as
 `a[i...j]`, `a[i...*]` or `a[*...j]`.
 -/
-public abbrev Slice := Std.Slice SliceData
+public protected abbrev Slice := Std.Slice Int64Array.SliceData
 
-public instance : Std.Slice.Self (Std.Slice SliceData) Slice where
+public instance : Std.Slice.Self (Std.Slice Int64Array.SliceData) Int64Array.Slice where
 
 namespace Slice
 
 @[always_inline, inline, expose, inherit_doc SliceData.array]
-public def array (s : Slice) : Int64Array := s.internalRepresentation.array
+public def array (s : Int64Array.Slice) : Int64Array := s.internalRepresentation.array
 
 @[always_inline, inline, expose, inherit_doc SliceData.start]
-public def start (s : Slice) : Nat := s.internalRepresentation.start
+public def start (s : Int64Array.Slice) : Nat := s.internalRepresentation.start
 
 @[always_inline, inline, expose, inherit_doc SliceData.stop]
-public def stop (s : Slice) : Nat := s.internalRepresentation.stop
+public def stop (s : Int64Array.Slice) : Nat := s.internalRepresentation.stop
 
 @[inherit_doc SliceData.start_le_stop]
-public theorem start_le_stop (s : Slice) : s.start ≤ s.stop := s.internalRepresentation.start_le_stop
+public theorem start_le_stop (s : Int64Array.Slice) : s.start ≤ s.stop := s.internalRepresentation.start_le_stop
 
 @[inherit_doc SliceData.stop_le_array_size]
-public theorem stop_le_array_size (s : Slice) : s.stop ≤ s.array.size :=
+public theorem stop_le_array_size (s : Int64Array.Slice) : s.stop ≤ s.array.size :=
   s.internalRepresentation.stop_le_array_size
 
-public instance : Std.Slice.SliceSize SliceData where
+public instance : Std.Slice.SliceSize Int64Array.SliceData where
   size s := s.internalRepresentation.stop - s.internalRepresentation.start
 
-public theorem size_eq (s : Slice) : s.size = s.stop - s.start := rfl
+public theorem size_eq (s : Int64Array.Slice) : s.size = s.stop - s.start := rfl
 
 /-- The element at index `i` of the slice, counted from the start of the slice. -/
 @[inline, expose]
-public def get (s : Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) : Int64 :=
+public def get (s : Int64Array.Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) : Int64 :=
   s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega)
 
-public instance : GetElem Slice Nat Int64 fun s i => i < s.size where
+public instance : GetElem Int64Array.Slice Nat Int64 fun s i => i < s.size where
   getElem s i h := s.get i h
 
 /-- The element at index `i` of the slice, or `v₀` if `i` is out of bounds. -/
 @[inline]
-public def getD (s : Slice) (i : Nat) (v₀ : Int64) : Int64 :=
+public def getD (s : Int64Array.Slice) (i : Nat) (v₀ : Int64) : Int64 :=
   if h : i < s.size then s[i] else v₀
 
 /-- The element at index `i` of the slice, or `default` if `i` is out of bounds. -/
-public abbrev get! (s : Slice) (i : Nat) : Int64 :=
+public abbrev get! (s : Int64Array.Slice) (i : Nat) : Int64 :=
   getD s i default
 
 /-- Removes the first element of the slice, if any. -/
 @[expose]
-public def popFront (s : Slice) : Slice :=
+public def popFront (s : Int64Array.Slice) : Int64Array.Slice :=
   if h : s.start < s.stop then
     ⟨{ s.internalRepresentation with start := s.start + 1, start_le_stop := h }⟩
   else
@@ -562,28 +563,28 @@ public def popFront (s : Slice) : Slice :=
 
 /-- The empty slice, backed by an empty array. -/
 @[expose]
-public protected def empty : Slice :=
+public protected def empty : Int64Array.Slice :=
   ⟨{ array := Int64Array.empty, start := 0, stop := 0, start_le_stop := Nat.le_refl 0,
      stop_le_array_size := Nat.le_refl 0 }⟩
 
-public instance : EmptyCollection Slice := ⟨Slice.empty⟩
+public instance : EmptyCollection Int64Array.Slice := ⟨Slice.empty⟩
 
-public instance : Inhabited Slice := ⟨Slice.empty⟩
+public instance : Inhabited Int64Array.Slice := ⟨Slice.empty⟩
 
 /-- The elements of the slice, copied into a new array with a single `memcpy`. -/
 @[expose]
-public def copy (s : Slice) : Int64Array :=
+public def copy (s : Int64Array.Slice) : Int64Array :=
   s.array.extract s.start s.stop
 
-public instance : Coe Slice Int64Array := ⟨copy⟩
+public instance : Coe Int64Array.Slice Int64Array := ⟨copy⟩
 
-public theorem getElem_eq (s : Slice) (i : Nat) (h : i < s.size) :
+public theorem getElem_eq (s : Int64Array.Slice) (i : Nat) (h : i < s.size) :
     s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega) := rfl
 
-public instance : Repr Slice where
+public instance : Repr Int64Array.Slice where
   reprPrec s _ := repr s.copy ++ ".toSlice"
 
-public instance : ToString Slice where
+public instance : ToString Int64Array.Slice where
   toString s := toString s.copy
 
 end Slice
@@ -593,7 +594,7 @@ The slice of `a` from index `start` up to, but not including, `stop`. If `start`
 valid bounds, they are clamped to the size of `a`, and `start` is clamped to `stop`.
 -/
 @[expose]
-public def toSlice (a : Int64Array) (start : Nat := 0) (stop : Nat := a.size) : Slice :=
+public def toSlice (a : Int64Array) (start : Nat := 0) (stop : Nat := a.size) : Int64Array.Slice :=
   if h₂ : stop ≤ a.size then
     if h₁ : start ≤ stop then
       ⟨{ array := a, start, stop, start_le_stop := h₁, stop_le_array_size := h₂ }⟩
@@ -608,78 +609,78 @@ public def toSlice (a : Int64Array) (start : Nat := 0) (stop : Nat := a.size) : 
       ⟨{ array := a, start := a.size, stop := a.size, start_le_stop := Nat.le_refl _,
          stop_le_array_size := Nat.le_refl _ }⟩
 
-public instance : Std.Rcc.Sliceable Int64Array Nat Slice where
+public instance : Std.Rcc.Sliceable Int64Array Nat Int64Array.Slice where
   mkSlice a range := a.toSlice range.lower (range.upper + 1)
 
-public instance : Std.Rco.Sliceable Int64Array Nat Slice where
+public instance : Std.Rco.Sliceable Int64Array Nat Int64Array.Slice where
   mkSlice a range := a.toSlice range.lower range.upper
 
-public instance : Std.Rci.Sliceable Int64Array Nat Slice where
+public instance : Std.Rci.Sliceable Int64Array Nat Int64Array.Slice where
   mkSlice a range := a.toSlice range.lower
 
-public instance : Std.Roc.Sliceable Int64Array Nat Slice where
+public instance : Std.Roc.Sliceable Int64Array Nat Int64Array.Slice where
   mkSlice a range := a.toSlice (range.lower + 1) (range.upper + 1)
 
-public instance : Std.Roo.Sliceable Int64Array Nat Slice where
+public instance : Std.Roo.Sliceable Int64Array Nat Int64Array.Slice where
   mkSlice a range := a.toSlice (range.lower + 1) range.upper
 
-public instance : Std.Roi.Sliceable Int64Array Nat Slice where
+public instance : Std.Roi.Sliceable Int64Array Nat Int64Array.Slice where
   mkSlice a range := a.toSlice (range.lower + 1)
 
-public instance : Std.Ric.Sliceable Int64Array Nat Slice where
+public instance : Std.Ric.Sliceable Int64Array Nat Int64Array.Slice where
   mkSlice a range := a.toSlice 0 (range.upper + 1)
 
-public instance : Std.Rio.Sliceable Int64Array Nat Slice where
+public instance : Std.Rio.Sliceable Int64Array Nat Int64Array.Slice where
   mkSlice a range := a.toSlice 0 range.upper
 
-public instance : Std.Rii.Sliceable Int64Array Nat Slice where
+public instance : Std.Rii.Sliceable Int64Array Nat Int64Array.Slice where
   mkSlice a _ := a.toSlice
 
 namespace Slice
 
 /-- The slice of `s` from index `start` up to, but not including, `stop`, clamped like `toSlice`. -/
 @[expose]
-public def slice (s : Slice) (start : Nat := 0) (stop : Nat := s.size) : Slice :=
+public def slice (s : Int64Array.Slice) (start : Nat := 0) (stop : Nat := s.size) : Int64Array.Slice :=
   s.array.toSlice (s.start + min start s.size) (s.start + min stop s.size)
 
 end Slice
 
-public instance : Std.Rcc.Sliceable Slice Nat Slice where
+public instance : Std.Rcc.Sliceable Int64Array.Slice Nat Int64Array.Slice where
   mkSlice s range := s.slice range.lower (range.upper + 1)
 
-public instance : Std.Rco.Sliceable Slice Nat Slice where
+public instance : Std.Rco.Sliceable Int64Array.Slice Nat Int64Array.Slice where
   mkSlice s range := s.slice range.lower range.upper
 
-public instance : Std.Rci.Sliceable Slice Nat Slice where
+public instance : Std.Rci.Sliceable Int64Array.Slice Nat Int64Array.Slice where
   mkSlice s range := s.slice range.lower
 
-public instance : Std.Roc.Sliceable Slice Nat Slice where
+public instance : Std.Roc.Sliceable Int64Array.Slice Nat Int64Array.Slice where
   mkSlice s range := s.slice (range.lower + 1) (range.upper + 1)
 
-public instance : Std.Roo.Sliceable Slice Nat Slice where
+public instance : Std.Roo.Sliceable Int64Array.Slice Nat Int64Array.Slice where
   mkSlice s range := s.slice (range.lower + 1) range.upper
 
-public instance : Std.Roi.Sliceable Slice Nat Slice where
+public instance : Std.Roi.Sliceable Int64Array.Slice Nat Int64Array.Slice where
   mkSlice s range := s.slice (range.lower + 1)
 
-public instance : Std.Ric.Sliceable Slice Nat Slice where
+public instance : Std.Ric.Sliceable Int64Array.Slice Nat Int64Array.Slice where
   mkSlice s range := s.slice 0 (range.upper + 1)
 
-public instance : Std.Rio.Sliceable Slice Nat Slice where
+public instance : Std.Rio.Sliceable Int64Array.Slice Nat Int64Array.Slice where
   mkSlice s range := s.slice 0 range.upper
 
-public instance : Std.Rii.Sliceable Slice Nat Slice where
+public instance : Std.Rii.Sliceable Int64Array.Slice Nat Int64Array.Slice where
   mkSlice s _ := s
 
 /-- The iterator over the elements of a slice, used for `for` loops and the generic slice API. -/
-public structure SliceIterator where
+public protected structure SliceIterator where
   /-- The rest of the slice. -/
-  xs : Slice
+  xs : Int64Array.Slice
 
 @[inline, expose]
 public def SliceIterator.step :
-    Std.IterM (α := SliceIterator) Id Int64 →
-      Std.IterStep (Std.IterM (α := SliceIterator) m Int64) Int64
+    Std.IterM (α := Int64Array.SliceIterator) Id Int64 →
+      Std.IterStep (Std.IterM (α := Int64Array.SliceIterator) m Int64) Int64
   | ⟨⟨xs⟩⟩ =>
     if h : xs.start < xs.stop then
       have := xs.stop_le_array_size
@@ -687,11 +688,11 @@ public def SliceIterator.step :
     else
       .done
 
-public instance : Std.Iterator SliceIterator Id Int64 where
+public instance : Std.Iterator Int64Array.SliceIterator Id Int64 where
   IsPlausibleStep it step := step = SliceIterator.step it
   step it := pure <| .deflate ⟨SliceIterator.step it, rfl⟩
 
-private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation SliceIterator Id where
+private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation Int64Array.SliceIterator Id where
   Rel := InvImage WellFoundedRelation.rel
     (fun it => it.internalState.xs.stop - it.internalState.xs.start)
   wf := InvImage.wf _ WellFoundedRelation.wf
@@ -709,15 +710,103 @@ private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation 
     next =>
       simp [Std.IterStep.successor] at h
 
-public instance : Std.Iterators.Finite SliceIterator Id :=
+public instance : Std.Iterators.Finite Int64Array.SliceIterator Id :=
   .of_finitenessRelation SliceIterator.finitenessRelation
 
-public instance [Monad m] : Std.IteratorLoop SliceIterator Id m := .defaultImplementation
+public instance [Monad m] : Std.IteratorLoop Int64Array.SliceIterator Id m := .defaultImplementation
 
-public instance : Std.ToIterator (Std.Slice SliceData) Id SliceIterator Int64 :=
-  Std.ToIterator.of SliceIterator (⟨⟨·⟩⟩)
+public instance : Std.ToIterator (Std.Slice Int64Array.SliceData) Id Int64Array.SliceIterator Int64 :=
+  Std.ToIterator.of Int64Array.SliceIterator (⟨⟨·⟩⟩)
 
-public instance [Monad m] : ForIn m Slice Int64 := inferInstance
+public instance [Monad m] : ForIn m Int64Array.Slice Int64 := inferInstance
+
+/-- An iterator over the elements of `a`, for use with the `Std.Iterators` API. -/
+@[inline, expose]
+public def iter (a : Int64Array) : Std.Iter (α := Int64Array.SliceIterator) Int64 :=
+  a.toSlice.iter
+
+namespace Slice
+
+/-- Folds a monadic function over the elements of `s`, from last to first. -/
+@[inline, expose]
+public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : Int64 → β → m β) (init : β)
+    (s : Int64Array.Slice) : m β :=
+  loop s.size (Nat.le_refl _) init
+where
+  @[specialize] loop : (i : Nat) → i ≤ s.size → β → m β
+    | 0, _, b => pure b
+    | i + 1, h, b => do loop i (Nat.le_of_succ_le h) (← f s[i] b)
+
+/-- Folds a function over the elements of `s`, from last to first. -/
+@[inline, expose]
+public def foldr {β : Type v} (f : Int64 → β → β) (init : β) (s : Int64Array.Slice) : β :=
+  Id.run <| s.foldrM (pure <| f · ·) init
+
+/-- Runs a monadic action on each element of `s`, from last to first. -/
+@[inline, expose]
+public def forRevM {m : Type v → Type w} [Monad m] (f : Int64 → m PUnit) (s : Int64Array.Slice) : m PUnit :=
+  s.foldrM (fun x _ => f x) ⟨⟩
+
+/-- The result of the last element of `s` for which `f` returns `some`, searching from the end. -/
+@[inline, expose]
+public def findSomeRevM? {β : Type v} {m : Type v → Type w} [Monad m] (s : Int64Array.Slice)
+    (f : Int64 → m (Option β)) : m (Option β) :=
+  loop s.size (Nat.le_refl _)
+where
+  @[specialize] loop : (i : Nat) → i ≤ s.size → m (Option β)
+    | 0, _ => pure none
+    | i + 1, h => do
+      match ← f s[i] with
+      | some b => pure (some b)
+      | none => loop i (Nat.le_of_succ_le h)
+
+/-- The last element of `s` that satisfies the monadic predicate `p`. -/
+@[inline, expose]
+public def findRevM? {m : Type → Type w} [Monad m] (s : Int64Array.Slice) (p : Int64 → m Bool) :
+    m (Option Int64) :=
+  s.findSomeRevM? fun x => return if (← p x) then some x else none
+
+/-- The last element of `s` that satisfies `p`. -/
+@[inline, expose]
+public def findRev? (s : Int64Array.Slice) (p : Int64 → Bool) : Option Int64 :=
+  Id.run <| s.findRevM? (pure <| p ·)
+
+/-- The first element of `s` that satisfies `p`. -/
+@[inline, expose]
+public def find? (s : Int64Array.Slice) (p : Int64 → Bool) : Option Int64 :=
+  s.iter.find? p
+
+/-- Whether some element of `s` satisfies `p`. -/
+@[inline, expose]
+public def any (s : Int64Array.Slice) (p : Int64 → Bool) : Bool :=
+  s.iter.any p
+
+/-- Whether every element of `s` satisfies `p`. -/
+@[inline, expose]
+public def all (s : Int64Array.Slice) (p : Int64 → Bool) : Bool :=
+  s.iter.all p
+
+/-- Whether `v` is an element of `s`. -/
+@[inline, expose]
+public def contains (s : Int64Array.Slice) (v : Int64) : Bool :=
+  s.any (v == ·)
+
+/-- The number of elements of `s` that satisfy `p`. -/
+@[inline, expose]
+public def count (s : Int64Array.Slice) (p : Int64 → Bool) : Nat :=
+  s.iter.fold (fun n x => if p x then n + 1 else n) 0
+
+end Slice
+
+/--
+Collects the values emitted by an iterator into a new array. Together with the `Std.Iterators`
+combinators, this gives functions such as `map`, `filter`, `take` and `zipWith`, for example
+`(a.iter.map (· + 1)).toInt64Array`.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toInt64Array {α : Type} [Std.Iterator α Id Int64]
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int64) : Int64Array :=
+  it.fold (·.push ·) empty
 
 @[simp] public theorem size_mk (a : Array Int64) : (mk a).size = a.size := rfl
 
@@ -951,10 +1040,11 @@ public theorem copySlice_eq_append (src : Int64Array) (srcOff : Nat) (dest : Int
         dest.extract (destOff + min len (src.size - srcOff)) dest.size := by
   simp [Int64Array.ext_iff]
 
-@[simp] public theorem Slice.size_copy (s : Slice) : s.copy.size = s.size := by
+@[simp] public theorem Slice.size_copy (s : Int64Array.Slice) : s.copy.size = s.size := by
   have := s.stop_le_array_size
   simp only [Slice.copy, size_extract, Slice.size_eq]
   omega
+
 
 end Int64Array
 

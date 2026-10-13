@@ -490,3 +490,43 @@ example (a : Float64Array) : Float64Array.ofList a.toList = a := by simp
 #guard Float64Array.slicesWithoutCopying 1
 
 example (s : Float64Array.Slice) : s.copy.size = s.size := by simp
+
+/-! Slice API -/
+
+#guard
+  let s := (Float64Array.mk #[1, 2, 3, (-1.5e300), 2])[1...5]
+  s.foldr (fun x acc => x :: acc) [] == [2, 3, (-1.5e300), 2] &&
+    s.foldl (fun acc x => x :: acc) [] == [2, (-1.5e300), 3, 2] &&
+    s.any (· == (-1.5e300)) && !s.any (· == 1) && s.all (· != 1) && !s.all (· == 2) &&
+    s.contains (-1.5e300) && !s.contains 1 && s.count (· == 2) == 2 &&
+    s.find? (· > 2) == some 3 && s.findRev? (· != (-1.5e300)) == some 2 && s.findRev? (· == 1) == none
+
+#guard (Float64Array.mk #[1, 2, 3])[1...1].foldr (fun x acc => x :: acc) [] == []
+#guard (Float64Array.mk #[1, 2, 3])[3...*].find? (fun _ => true) == none
+
+#guard
+  let s := (Float64Array.mk #[1, 2, 3, (-1.5e300)])[1...*]
+  let r : StateM (List Float) Unit := s.forRevM fun x => modify (x :: ·)
+  (r.run []).2 == [2, 3, (-1.5e300)]
+
+#guard Id.run ((Float64Array.mk #[1, 2, (-1.5e300)])[*...*].findSomeRevM?
+  (fun x => pure (if x == 2 then some x else none))) == some 2
+
+/-! The `Std.Iterators` API on arrays and slices -/
+
+#guard (Float64Array.mk #[1, 2, 3]).iter.toList == [1, 2, 3]
+#guard ((Float64Array.mk #[1, 2, 3]).iter.map (· * 2)).toFloat64Array == Float64Array.mk #[2, 4, 6]
+#guard ((Float64Array.mk #[1, 2, 3, (-1.5e300)]).iter.filter (· != 2)).toFloat64Array ==
+  Float64Array.mk #[1, 3, (-1.5e300)]
+#guard ((Float64Array.mk #[1, 2, 3, (-1.5e300)]).iter.take 2).toFloat64Array == Float64Array.mk #[1, 2]
+#guard ((Float64Array.mk #[1, 2, 3, (-1.5e300)]).iter.drop 2).toFloat64Array == Float64Array.mk #[3, (-1.5e300)]
+#guard (((Float64Array.mk #[1, 2, 3]).iter.zip (Float64Array.mk #[(-1.5e300), 5]).iter).map
+  fun (x, y) => x + y).toFloat64Array == Float64Array.mk #[1 + (-1.5e300), 7]
+#guard ((Float64Array.mk #[1, 2, 3, (-1.5e300)])[1...3].iter.map (· + 1)).toFloat64Array ==
+  Float64Array.mk #[3, 4]
+#guard (Float64Array.mk #[1, 2, 3]).iter.length == 3
+#guard Float64Array.empty.iter.toFloat64Array == Float64Array.empty
+#guard
+  let xs := (Array.range 100000).map Nat.toFloat
+  ((Float64Array.mk xs).iter.map (· + 1)).toFloat64Array.data == xs.map (· + 1)
+#guard rawElemSize ((Float64Array.mk #[1]).iter.toFloat64Array) == (8 : UInt32)

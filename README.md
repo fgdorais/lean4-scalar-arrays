@@ -77,7 +77,8 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Slicing      | `append`, `a ++ b`, `extract`, `copySlice`                                  |
 | Iteration    | `foldl`, `foldr`, `foldlM`, `foldrM`, `forM`, `for x in a`, `any`, `all`, `contains` |
 | Search       | `findIdx?`, `findFinIdx?`                                                   |
-| Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `get`, `getD`, `get!`, `popFront`, `copy`, `for x in s`, `foldl`, `toArray`, `toList` |
+| Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `get`, `getD`, `get!`, `popFront`, `copy`, `for x in s`, `foldl`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findSomeRevM?`, `toArray`, `toList` |
+| Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, and `Std.Iter.toXArray` to collect an iterator into an array |
 | Equality     | `a == b`; for integer types also `DecidableEq` and `Hashable`               |
 | Linearity    | `markLinear`, `propagateMark`                                               |
 | Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
@@ -105,6 +106,17 @@ never copy, so core's functions can be used directly on these arrays and vice ve
 
 Slices are `Std.Slice`s, like core's `Subarray`, so they work with the generic slice API. Taking a
 slice never copies the array; `Slice.copy` makes a new array with a single `memcpy`.
+
+Arrays and slices also have iterators, so the `Std.Iterators` combinators cover operations that
+don't have their own function here, and `Std.Iter.toXArray` turns the result back into an array:
+
+```lean
+(a.iter.map (· * 2)).toUInt32Array          -- map
+(a.iter.filter (· > 0)).toUInt32Array       -- filter
+a[2...*].copy                                -- drop
+(a.iter.zip b.iter |>.map fun (x, y) => x + y).toUInt32Array  -- zipWith
+a.iter.length                                -- size
+```
 
 Equality on the integer types compares the arrays' memory with `memcmp`, and their hash agrees
 with the hash of `data`. `Float32Array` and `Float64Array` compare elements with floating-point
