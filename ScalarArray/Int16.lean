@@ -167,17 +167,27 @@ public def push : Int16Array → Int16 → Int16Array
   | mk a, v => mk (a.push v)
 
 /--
+Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting at
+byte `destOff`. Only valid when `dest` is exclusive and both ranges are within the capacities.
+-/
+-- TODO: core has no runtime function that copies a slice of a scalar array with any element size;
+-- `lean_byte_array_copy_slice` only works for bytes. Replace this once core has one.
+@[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + #4, lean_sarray_cptr(#2) + #3, #5)"]
+private unsafe def memcpyUnsafe : Int16Array → @& Int16Array → (srcOff destOff n : USize) → Int16Array
+  | dest, _, _, _, _ => dest
+
+/--
 Copies the `n` elements of `src` starting at index `srcOff` into `dest` starting at index `destOff`,
 in place, and grows the size of `dest` to `destOff + n` if it is smaller. Only valid when `dest` is
 exclusive, has capacity for `destOff + n` elements, and is not the same object as `src`, and when
 `destOff ≤ dest.size` and `srcOff + n ≤ src.size`.
 -/
-@[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + lean_sarray_elem_size(#1) * #4, lean_sarray_cptr(#2) + lean_sarray_elem_size(#2) * #3, lean_sarray_elem_size(#2) * #5);\nif (lean_sarray_size(#1) < #4 + #5) lean_sarray_set_size(#1, #4 + #5)"]
-private unsafe def copySliceUnsafe :
-    Int16Array → @& Int16Array → (srcOff destOff n : USize) → Int16Array
-  | mk dest, mk src, srcOff, destOff, n =>
-    mk (dest.extract 0 destOff.toNat ++ src.extract srcOff.toNat (srcOff.toNat + n.toNat) ++
-      dest.extract (destOff.toNat + n.toNat) dest.size)
+@[inline]
+private unsafe def copySliceUnsafe (dest : Int16Array) (src : @& Int16Array) (srcOff destOff n : USize) :
+    Int16Array :=
+  let esz := (unsafeCast src : ScalarArray).elemSize.toUSize
+  let d : ScalarArray := unsafeCast (memcpyUnsafe dest src (srcOff * esz) (destOff * esz) (n * esz))
+  unsafeCast (d.resizeUnsafe (max d.size (destOff + n)) lcProof lcProof)
 
 private unsafe def appendImpl (a b : Int16Array) : Int16Array :=
   let s : ScalarArray := unsafeCast a
