@@ -5,6 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 import all ScalarArray.Internal
+public import Std.Data.Iterators
 
 /-!
 # Arrays of `Int8`
@@ -491,7 +492,7 @@ public instance : ToString Int8Array where
 /-! ## Slices -/
 
 /-- Internal representation of `Int8Array.Slice`. -/
-public structure SliceData where
+public protected structure SliceData where
   /-- The underlying array. -/
   array : Int8Array
   /-- The starting index of the slice (inclusive). -/
@@ -508,53 +509,53 @@ A region of a `Int8Array`: the elements from index `start` up to, but not includ
 Taking a slice doesn't copy the array. Slices are written with core's slice notation, such as
 `a[i...j]`, `a[i...*]` or `a[*...j]`.
 -/
-public abbrev Slice := Std.Slice SliceData
+public protected abbrev Slice := Std.Slice Int8Array.SliceData
 
-public instance : Std.Slice.Self (Std.Slice SliceData) Slice where
+public instance : Std.Slice.Self (Std.Slice Int8Array.SliceData) Int8Array.Slice where
 
 namespace Slice
 
 @[always_inline, inline, expose, inherit_doc SliceData.array]
-public def array (s : Slice) : Int8Array := s.internalRepresentation.array
+public def array (s : Int8Array.Slice) : Int8Array := s.internalRepresentation.array
 
 @[always_inline, inline, expose, inherit_doc SliceData.start]
-public def start (s : Slice) : Nat := s.internalRepresentation.start
+public def start (s : Int8Array.Slice) : Nat := s.internalRepresentation.start
 
 @[always_inline, inline, expose, inherit_doc SliceData.stop]
-public def stop (s : Slice) : Nat := s.internalRepresentation.stop
+public def stop (s : Int8Array.Slice) : Nat := s.internalRepresentation.stop
 
 @[inherit_doc SliceData.start_le_stop]
-public theorem start_le_stop (s : Slice) : s.start ≤ s.stop := s.internalRepresentation.start_le_stop
+public theorem start_le_stop (s : Int8Array.Slice) : s.start ≤ s.stop := s.internalRepresentation.start_le_stop
 
 @[inherit_doc SliceData.stop_le_array_size]
-public theorem stop_le_array_size (s : Slice) : s.stop ≤ s.array.size :=
+public theorem stop_le_array_size (s : Int8Array.Slice) : s.stop ≤ s.array.size :=
   s.internalRepresentation.stop_le_array_size
 
-public instance : Std.Slice.SliceSize SliceData where
+public instance : Std.Slice.SliceSize Int8Array.SliceData where
   size s := s.internalRepresentation.stop - s.internalRepresentation.start
 
-public theorem size_eq (s : Slice) : s.size = s.stop - s.start := rfl
+public theorem size_eq (s : Int8Array.Slice) : s.size = s.stop - s.start := rfl
 
 /-- The element at index `i` of the slice, counted from the start of the slice. -/
 @[inline, expose]
-public def get (s : Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) : Int8 :=
+public def get (s : Int8Array.Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) : Int8 :=
   s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega)
 
-public instance : GetElem Slice Nat Int8 fun s i => i < s.size where
+public instance : GetElem Int8Array.Slice Nat Int8 fun s i => i < s.size where
   getElem s i h := s.get i h
 
 /-- The element at index `i` of the slice, or `v₀` if `i` is out of bounds. -/
 @[inline]
-public def getD (s : Slice) (i : Nat) (v₀ : Int8) : Int8 :=
+public def getD (s : Int8Array.Slice) (i : Nat) (v₀ : Int8) : Int8 :=
   if h : i < s.size then s[i] else v₀
 
 /-- The element at index `i` of the slice, or `default` if `i` is out of bounds. -/
-public abbrev get! (s : Slice) (i : Nat) : Int8 :=
+public abbrev get! (s : Int8Array.Slice) (i : Nat) : Int8 :=
   getD s i default
 
 /-- Removes the first element of the slice, if any. -/
 @[expose]
-public def popFront (s : Slice) : Slice :=
+public def popFront (s : Int8Array.Slice) : Int8Array.Slice :=
   if h : s.start < s.stop then
     ⟨{ s.internalRepresentation with start := s.start + 1, start_le_stop := h }⟩
   else
@@ -562,28 +563,28 @@ public def popFront (s : Slice) : Slice :=
 
 /-- The empty slice, backed by an empty array. -/
 @[expose]
-public protected def empty : Slice :=
+public protected def empty : Int8Array.Slice :=
   ⟨{ array := Int8Array.empty, start := 0, stop := 0, start_le_stop := Nat.le_refl 0,
      stop_le_array_size := Nat.le_refl 0 }⟩
 
-public instance : EmptyCollection Slice := ⟨Slice.empty⟩
+public instance : EmptyCollection Int8Array.Slice := ⟨Slice.empty⟩
 
-public instance : Inhabited Slice := ⟨Slice.empty⟩
+public instance : Inhabited Int8Array.Slice := ⟨Slice.empty⟩
 
 /-- The elements of the slice, copied into a new array with a single `memcpy`. -/
 @[expose]
-public def copy (s : Slice) : Int8Array :=
+public def copy (s : Int8Array.Slice) : Int8Array :=
   s.array.extract s.start s.stop
 
-public instance : Coe Slice Int8Array := ⟨copy⟩
+public instance : Coe Int8Array.Slice Int8Array := ⟨copy⟩
 
-public theorem getElem_eq (s : Slice) (i : Nat) (h : i < s.size) :
+public theorem getElem_eq (s : Int8Array.Slice) (i : Nat) (h : i < s.size) :
     s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega) := rfl
 
-public instance : Repr Slice where
+public instance : Repr Int8Array.Slice where
   reprPrec s _ := repr s.copy ++ ".toSlice"
 
-public instance : ToString Slice where
+public instance : ToString Int8Array.Slice where
   toString s := toString s.copy
 
 end Slice
@@ -593,7 +594,7 @@ The slice of `a` from index `start` up to, but not including, `stop`. If `start`
 valid bounds, they are clamped to the size of `a`, and `start` is clamped to `stop`.
 -/
 @[expose]
-public def toSlice (a : Int8Array) (start : Nat := 0) (stop : Nat := a.size) : Slice :=
+public def toSlice (a : Int8Array) (start : Nat := 0) (stop : Nat := a.size) : Int8Array.Slice :=
   if h₂ : stop ≤ a.size then
     if h₁ : start ≤ stop then
       ⟨{ array := a, start, stop, start_le_stop := h₁, stop_le_array_size := h₂ }⟩
@@ -608,78 +609,78 @@ public def toSlice (a : Int8Array) (start : Nat := 0) (stop : Nat := a.size) : S
       ⟨{ array := a, start := a.size, stop := a.size, start_le_stop := Nat.le_refl _,
          stop_le_array_size := Nat.le_refl _ }⟩
 
-public instance : Std.Rcc.Sliceable Int8Array Nat Slice where
+public instance : Std.Rcc.Sliceable Int8Array Nat Int8Array.Slice where
   mkSlice a range := a.toSlice range.lower (range.upper + 1)
 
-public instance : Std.Rco.Sliceable Int8Array Nat Slice where
+public instance : Std.Rco.Sliceable Int8Array Nat Int8Array.Slice where
   mkSlice a range := a.toSlice range.lower range.upper
 
-public instance : Std.Rci.Sliceable Int8Array Nat Slice where
+public instance : Std.Rci.Sliceable Int8Array Nat Int8Array.Slice where
   mkSlice a range := a.toSlice range.lower
 
-public instance : Std.Roc.Sliceable Int8Array Nat Slice where
+public instance : Std.Roc.Sliceable Int8Array Nat Int8Array.Slice where
   mkSlice a range := a.toSlice (range.lower + 1) (range.upper + 1)
 
-public instance : Std.Roo.Sliceable Int8Array Nat Slice where
+public instance : Std.Roo.Sliceable Int8Array Nat Int8Array.Slice where
   mkSlice a range := a.toSlice (range.lower + 1) range.upper
 
-public instance : Std.Roi.Sliceable Int8Array Nat Slice where
+public instance : Std.Roi.Sliceable Int8Array Nat Int8Array.Slice where
   mkSlice a range := a.toSlice (range.lower + 1)
 
-public instance : Std.Ric.Sliceable Int8Array Nat Slice where
+public instance : Std.Ric.Sliceable Int8Array Nat Int8Array.Slice where
   mkSlice a range := a.toSlice 0 (range.upper + 1)
 
-public instance : Std.Rio.Sliceable Int8Array Nat Slice where
+public instance : Std.Rio.Sliceable Int8Array Nat Int8Array.Slice where
   mkSlice a range := a.toSlice 0 range.upper
 
-public instance : Std.Rii.Sliceable Int8Array Nat Slice where
+public instance : Std.Rii.Sliceable Int8Array Nat Int8Array.Slice where
   mkSlice a _ := a.toSlice
 
 namespace Slice
 
 /-- The slice of `s` from index `start` up to, but not including, `stop`, clamped like `toSlice`. -/
 @[expose]
-public def slice (s : Slice) (start : Nat := 0) (stop : Nat := s.size) : Slice :=
+public def slice (s : Int8Array.Slice) (start : Nat := 0) (stop : Nat := s.size) : Int8Array.Slice :=
   s.array.toSlice (s.start + min start s.size) (s.start + min stop s.size)
 
 end Slice
 
-public instance : Std.Rcc.Sliceable Slice Nat Slice where
+public instance : Std.Rcc.Sliceable Int8Array.Slice Nat Int8Array.Slice where
   mkSlice s range := s.slice range.lower (range.upper + 1)
 
-public instance : Std.Rco.Sliceable Slice Nat Slice where
+public instance : Std.Rco.Sliceable Int8Array.Slice Nat Int8Array.Slice where
   mkSlice s range := s.slice range.lower range.upper
 
-public instance : Std.Rci.Sliceable Slice Nat Slice where
+public instance : Std.Rci.Sliceable Int8Array.Slice Nat Int8Array.Slice where
   mkSlice s range := s.slice range.lower
 
-public instance : Std.Roc.Sliceable Slice Nat Slice where
+public instance : Std.Roc.Sliceable Int8Array.Slice Nat Int8Array.Slice where
   mkSlice s range := s.slice (range.lower + 1) (range.upper + 1)
 
-public instance : Std.Roo.Sliceable Slice Nat Slice where
+public instance : Std.Roo.Sliceable Int8Array.Slice Nat Int8Array.Slice where
   mkSlice s range := s.slice (range.lower + 1) range.upper
 
-public instance : Std.Roi.Sliceable Slice Nat Slice where
+public instance : Std.Roi.Sliceable Int8Array.Slice Nat Int8Array.Slice where
   mkSlice s range := s.slice (range.lower + 1)
 
-public instance : Std.Ric.Sliceable Slice Nat Slice where
+public instance : Std.Ric.Sliceable Int8Array.Slice Nat Int8Array.Slice where
   mkSlice s range := s.slice 0 (range.upper + 1)
 
-public instance : Std.Rio.Sliceable Slice Nat Slice where
+public instance : Std.Rio.Sliceable Int8Array.Slice Nat Int8Array.Slice where
   mkSlice s range := s.slice 0 range.upper
 
-public instance : Std.Rii.Sliceable Slice Nat Slice where
+public instance : Std.Rii.Sliceable Int8Array.Slice Nat Int8Array.Slice where
   mkSlice s _ := s
 
 /-- The iterator over the elements of a slice, used for `for` loops and the generic slice API. -/
-public structure SliceIterator where
+public protected structure SliceIterator where
   /-- The rest of the slice. -/
-  xs : Slice
+  xs : Int8Array.Slice
 
 @[inline, expose]
 public def SliceIterator.step :
-    Std.IterM (α := SliceIterator) Id Int8 →
-      Std.IterStep (Std.IterM (α := SliceIterator) m Int8) Int8
+    Std.IterM (α := Int8Array.SliceIterator) Id Int8 →
+      Std.IterStep (Std.IterM (α := Int8Array.SliceIterator) m Int8) Int8
   | ⟨⟨xs⟩⟩ =>
     if h : xs.start < xs.stop then
       have := xs.stop_le_array_size
@@ -687,11 +688,11 @@ public def SliceIterator.step :
     else
       .done
 
-public instance : Std.Iterator SliceIterator Id Int8 where
+public instance : Std.Iterator Int8Array.SliceIterator Id Int8 where
   IsPlausibleStep it step := step = SliceIterator.step it
   step it := pure <| .deflate ⟨SliceIterator.step it, rfl⟩
 
-private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation SliceIterator Id where
+private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation Int8Array.SliceIterator Id where
   Rel := InvImage WellFoundedRelation.rel
     (fun it => it.internalState.xs.stop - it.internalState.xs.start)
   wf := InvImage.wf _ WellFoundedRelation.wf
@@ -709,15 +710,103 @@ private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation 
     next =>
       simp [Std.IterStep.successor] at h
 
-public instance : Std.Iterators.Finite SliceIterator Id :=
+public instance : Std.Iterators.Finite Int8Array.SliceIterator Id :=
   .of_finitenessRelation SliceIterator.finitenessRelation
 
-public instance [Monad m] : Std.IteratorLoop SliceIterator Id m := .defaultImplementation
+public instance [Monad m] : Std.IteratorLoop Int8Array.SliceIterator Id m := .defaultImplementation
 
-public instance : Std.ToIterator (Std.Slice SliceData) Id SliceIterator Int8 :=
-  Std.ToIterator.of SliceIterator (⟨⟨·⟩⟩)
+public instance : Std.ToIterator (Std.Slice Int8Array.SliceData) Id Int8Array.SliceIterator Int8 :=
+  Std.ToIterator.of Int8Array.SliceIterator (⟨⟨·⟩⟩)
 
-public instance [Monad m] : ForIn m Slice Int8 := inferInstance
+public instance [Monad m] : ForIn m Int8Array.Slice Int8 := inferInstance
+
+/-- An iterator over the elements of `a`, for use with the `Std.Iterators` API. -/
+@[inline, expose]
+public def iter (a : Int8Array) : Std.Iter (α := Int8Array.SliceIterator) Int8 :=
+  a.toSlice.iter
+
+namespace Slice
+
+/-- Folds a monadic function over the elements of `s`, from last to first. -/
+@[inline, expose]
+public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : Int8 → β → m β) (init : β)
+    (s : Int8Array.Slice) : m β :=
+  loop s.size (Nat.le_refl _) init
+where
+  @[specialize] loop : (i : Nat) → i ≤ s.size → β → m β
+    | 0, _, b => pure b
+    | i + 1, h, b => do loop i (Nat.le_of_succ_le h) (← f s[i] b)
+
+/-- Folds a function over the elements of `s`, from last to first. -/
+@[inline, expose]
+public def foldr {β : Type v} (f : Int8 → β → β) (init : β) (s : Int8Array.Slice) : β :=
+  Id.run <| s.foldrM (pure <| f · ·) init
+
+/-- Runs a monadic action on each element of `s`, from last to first. -/
+@[inline, expose]
+public def forRevM {m : Type v → Type w} [Monad m] (f : Int8 → m PUnit) (s : Int8Array.Slice) : m PUnit :=
+  s.foldrM (fun x _ => f x) ⟨⟩
+
+/-- The result of the last element of `s` for which `f` returns `some`, searching from the end. -/
+@[inline, expose]
+public def findSomeRevM? {β : Type v} {m : Type v → Type w} [Monad m] (s : Int8Array.Slice)
+    (f : Int8 → m (Option β)) : m (Option β) :=
+  loop s.size (Nat.le_refl _)
+where
+  @[specialize] loop : (i : Nat) → i ≤ s.size → m (Option β)
+    | 0, _ => pure none
+    | i + 1, h => do
+      match ← f s[i] with
+      | some b => pure (some b)
+      | none => loop i (Nat.le_of_succ_le h)
+
+/-- The last element of `s` that satisfies the monadic predicate `p`. -/
+@[inline, expose]
+public def findRevM? {m : Type → Type w} [Monad m] (s : Int8Array.Slice) (p : Int8 → m Bool) :
+    m (Option Int8) :=
+  s.findSomeRevM? fun x => return if (← p x) then some x else none
+
+/-- The last element of `s` that satisfies `p`. -/
+@[inline, expose]
+public def findRev? (s : Int8Array.Slice) (p : Int8 → Bool) : Option Int8 :=
+  Id.run <| s.findRevM? (pure <| p ·)
+
+/-- The first element of `s` that satisfies `p`. -/
+@[inline, expose]
+public def find? (s : Int8Array.Slice) (p : Int8 → Bool) : Option Int8 :=
+  s.iter.find? p
+
+/-- Whether some element of `s` satisfies `p`. -/
+@[inline, expose]
+public def any (s : Int8Array.Slice) (p : Int8 → Bool) : Bool :=
+  s.iter.any p
+
+/-- Whether every element of `s` satisfies `p`. -/
+@[inline, expose]
+public def all (s : Int8Array.Slice) (p : Int8 → Bool) : Bool :=
+  s.iter.all p
+
+/-- Whether `v` is an element of `s`. -/
+@[inline, expose]
+public def contains (s : Int8Array.Slice) (v : Int8) : Bool :=
+  s.any (v == ·)
+
+/-- The number of elements of `s` that satisfy `p`. -/
+@[inline, expose]
+public def count (s : Int8Array.Slice) (p : Int8 → Bool) : Nat :=
+  s.iter.fold (fun n x => if p x then n + 1 else n) 0
+
+end Slice
+
+/--
+Collects the values emitted by an iterator into a new array. Together with the `Std.Iterators`
+combinators, this gives functions such as `map`, `filter`, `take` and `zipWith`, for example
+`(a.iter.map (· + 1)).toInt8Array`.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toInt8Array {α : Type} [Std.Iterator α Id Int8]
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int8) : Int8Array :=
+  it.fold (·.push ·) empty
 
 @[simp] public theorem size_mk (a : Array Int8) : (mk a).size = a.size := rfl
 
@@ -951,10 +1040,11 @@ public theorem copySlice_eq_append (src : Int8Array) (srcOff : Nat) (dest : Int8
         dest.extract (destOff + min len (src.size - srcOff)) dest.size := by
   simp [Int8Array.ext_iff]
 
-@[simp] public theorem Slice.size_copy (s : Slice) : s.copy.size = s.size := by
+@[simp] public theorem Slice.size_copy (s : Int8Array.Slice) : s.copy.size = s.size := by
   have := s.stop_le_array_size
   simp only [Slice.copy, size_extract, Slice.size_eq]
   omega
+
 
 end Int8Array
 

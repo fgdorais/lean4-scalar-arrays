@@ -498,3 +498,43 @@ example (a : Int64Array) : Int64Array.ofList a.toList = a := by simp
 #guard Int64Array.slicesWithoutCopying 1
 
 example (s : Int64Array.Slice) : s.copy.size = s.size := by simp
+
+/-! Slice API -/
+
+#guard
+  let s := (Int64Array.mk #[1, 2, 3, (-9223372036854775808), 2])[1...5]
+  s.foldr (fun x acc => x :: acc) [] == [2, 3, (-9223372036854775808), 2] &&
+    s.foldl (fun acc x => x :: acc) [] == [2, (-9223372036854775808), 3, 2] &&
+    s.any (· == (-9223372036854775808)) && !s.any (· == 1) && s.all (· != 1) && !s.all (· == 2) &&
+    s.contains (-9223372036854775808) && !s.contains 1 && s.count (· == 2) == 2 &&
+    s.find? (· > 2) == some 3 && s.findRev? (· != (-9223372036854775808)) == some 2 && s.findRev? (· == 1) == none
+
+#guard (Int64Array.mk #[1, 2, 3])[1...1].foldr (fun x acc => x :: acc) [] == []
+#guard (Int64Array.mk #[1, 2, 3])[3...*].find? (fun _ => true) == none
+
+#guard
+  let s := (Int64Array.mk #[1, 2, 3, (-9223372036854775808)])[1...*]
+  let r : StateM (List Int64) Unit := s.forRevM fun x => modify (x :: ·)
+  (r.run []).2 == [2, 3, (-9223372036854775808)]
+
+#guard Id.run ((Int64Array.mk #[1, 2, (-9223372036854775808)])[*...*].findSomeRevM?
+  (fun x => pure (if x == 2 then some x else none))) == some 2
+
+/-! The `Std.Iterators` API on arrays and slices -/
+
+#guard (Int64Array.mk #[1, 2, 3]).iter.toList == [1, 2, 3]
+#guard ((Int64Array.mk #[1, 2, 3]).iter.map (· * 2)).toInt64Array == Int64Array.mk #[2, 4, 6]
+#guard ((Int64Array.mk #[1, 2, 3, (-9223372036854775808)]).iter.filter (· != 2)).toInt64Array ==
+  Int64Array.mk #[1, 3, (-9223372036854775808)]
+#guard ((Int64Array.mk #[1, 2, 3, (-9223372036854775808)]).iter.take 2).toInt64Array == Int64Array.mk #[1, 2]
+#guard ((Int64Array.mk #[1, 2, 3, (-9223372036854775808)]).iter.drop 2).toInt64Array == Int64Array.mk #[3, (-9223372036854775808)]
+#guard (((Int64Array.mk #[1, 2, 3]).iter.zip (Int64Array.mk #[(-9223372036854775808), 5]).iter).map
+  fun (x, y) => x + y).toInt64Array == Int64Array.mk #[1 + (-9223372036854775808), 7]
+#guard ((Int64Array.mk #[1, 2, 3, (-9223372036854775808)])[1...3].iter.map (· + 1)).toInt64Array ==
+  Int64Array.mk #[3, 4]
+#guard (Int64Array.mk #[1, 2, 3]).iter.length == 3
+#guard Int64Array.empty.iter.toInt64Array == Int64Array.empty
+#guard
+  let xs := (Array.range 100000).map Nat.toInt64
+  ((Int64Array.mk xs).iter.map (· + 1)).toInt64Array.data == xs.map (· + 1)
+#guard rawElemSize ((Int64Array.mk #[1]).iter.toInt64Array) == (8 : UInt32)

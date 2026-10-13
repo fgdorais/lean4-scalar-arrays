@@ -498,3 +498,43 @@ example (a : Int32Array) : Int32Array.ofList a.toList = a := by simp
 #guard Int32Array.slicesWithoutCopying 1
 
 example (s : Int32Array.Slice) : s.copy.size = s.size := by simp
+
+/-! Slice API -/
+
+#guard
+  let s := (Int32Array.mk #[1, 2, 3, (-2147483648), 2])[1...5]
+  s.foldr (fun x acc => x :: acc) [] == [2, 3, (-2147483648), 2] &&
+    s.foldl (fun acc x => x :: acc) [] == [2, (-2147483648), 3, 2] &&
+    s.any (· == (-2147483648)) && !s.any (· == 1) && s.all (· != 1) && !s.all (· == 2) &&
+    s.contains (-2147483648) && !s.contains 1 && s.count (· == 2) == 2 &&
+    s.find? (· > 2) == some 3 && s.findRev? (· != (-2147483648)) == some 2 && s.findRev? (· == 1) == none
+
+#guard (Int32Array.mk #[1, 2, 3])[1...1].foldr (fun x acc => x :: acc) [] == []
+#guard (Int32Array.mk #[1, 2, 3])[3...*].find? (fun _ => true) == none
+
+#guard
+  let s := (Int32Array.mk #[1, 2, 3, (-2147483648)])[1...*]
+  let r : StateM (List Int32) Unit := s.forRevM fun x => modify (x :: ·)
+  (r.run []).2 == [2, 3, (-2147483648)]
+
+#guard Id.run ((Int32Array.mk #[1, 2, (-2147483648)])[*...*].findSomeRevM?
+  (fun x => pure (if x == 2 then some x else none))) == some 2
+
+/-! The `Std.Iterators` API on arrays and slices -/
+
+#guard (Int32Array.mk #[1, 2, 3]).iter.toList == [1, 2, 3]
+#guard ((Int32Array.mk #[1, 2, 3]).iter.map (· * 2)).toInt32Array == Int32Array.mk #[2, 4, 6]
+#guard ((Int32Array.mk #[1, 2, 3, (-2147483648)]).iter.filter (· != 2)).toInt32Array ==
+  Int32Array.mk #[1, 3, (-2147483648)]
+#guard ((Int32Array.mk #[1, 2, 3, (-2147483648)]).iter.take 2).toInt32Array == Int32Array.mk #[1, 2]
+#guard ((Int32Array.mk #[1, 2, 3, (-2147483648)]).iter.drop 2).toInt32Array == Int32Array.mk #[3, (-2147483648)]
+#guard (((Int32Array.mk #[1, 2, 3]).iter.zip (Int32Array.mk #[(-2147483648), 5]).iter).map
+  fun (x, y) => x + y).toInt32Array == Int32Array.mk #[1 + (-2147483648), 7]
+#guard ((Int32Array.mk #[1, 2, 3, (-2147483648)])[1...3].iter.map (· + 1)).toInt32Array ==
+  Int32Array.mk #[3, 4]
+#guard (Int32Array.mk #[1, 2, 3]).iter.length == 3
+#guard Int32Array.empty.iter.toInt32Array == Int32Array.empty
+#guard
+  let xs := (Array.range 100000).map Nat.toInt32
+  ((Int32Array.mk xs).iter.map (· + 1)).toInt32Array.data == xs.map (· + 1)
+#guard rawElemSize ((Int32Array.mk #[1]).iter.toInt32Array) == (4 : UInt32)

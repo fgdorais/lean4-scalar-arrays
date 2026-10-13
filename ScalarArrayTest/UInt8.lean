@@ -498,3 +498,43 @@ example (a : UInt8Array) : UInt8Array.ofList a.toList = a := by simp
 #guard UInt8Array.slicesWithoutCopying 1
 
 example (s : UInt8Array.Slice) : s.copy.size = s.size := by simp
+
+/-! Slice API -/
+
+#guard
+  let s := (UInt8Array.mk #[1, 2, 3, 255, 2])[1...5]
+  s.foldr (fun x acc => x :: acc) [] == [2, 3, 255, 2] &&
+    s.foldl (fun acc x => x :: acc) [] == [2, 255, 3, 2] &&
+    s.any (· == 255) && !s.any (· == 1) && s.all (· != 1) && !s.all (· == 2) &&
+    s.contains 255 && !s.contains 1 && s.count (· == 2) == 2 &&
+    s.find? (· > 2) == some 3 && s.findRev? (· != 255) == some 2 && s.findRev? (· == 1) == none
+
+#guard (UInt8Array.mk #[1, 2, 3])[1...1].foldr (fun x acc => x :: acc) [] == []
+#guard (UInt8Array.mk #[1, 2, 3])[3...*].find? (fun _ => true) == none
+
+#guard
+  let s := (UInt8Array.mk #[1, 2, 3, 255])[1...*]
+  let r : StateM (List UInt8) Unit := s.forRevM fun x => modify (x :: ·)
+  (r.run []).2 == [2, 3, 255]
+
+#guard Id.run ((UInt8Array.mk #[1, 2, 255])[*...*].findSomeRevM?
+  (fun x => pure (if x == 2 then some x else none))) == some 2
+
+/-! The `Std.Iterators` API on arrays and slices -/
+
+#guard (UInt8Array.mk #[1, 2, 3]).iter.toList == [1, 2, 3]
+#guard ((UInt8Array.mk #[1, 2, 3]).iter.map (· * 2)).toUInt8Array == UInt8Array.mk #[2, 4, 6]
+#guard ((UInt8Array.mk #[1, 2, 3, 255]).iter.filter (· != 2)).toUInt8Array ==
+  UInt8Array.mk #[1, 3, 255]
+#guard ((UInt8Array.mk #[1, 2, 3, 255]).iter.take 2).toUInt8Array == UInt8Array.mk #[1, 2]
+#guard ((UInt8Array.mk #[1, 2, 3, 255]).iter.drop 2).toUInt8Array == UInt8Array.mk #[3, 255]
+#guard (((UInt8Array.mk #[1, 2, 3]).iter.zip (UInt8Array.mk #[255, 5]).iter).map
+  fun (x, y) => x + y).toUInt8Array == UInt8Array.mk #[1 + 255, 7]
+#guard ((UInt8Array.mk #[1, 2, 3, 255])[1...3].iter.map (· + 1)).toUInt8Array ==
+  UInt8Array.mk #[3, 4]
+#guard (UInt8Array.mk #[1, 2, 3]).iter.length == 3
+#guard UInt8Array.empty.iter.toUInt8Array == UInt8Array.empty
+#guard
+  let xs := (Array.range 100000).map Nat.toUInt8
+  ((UInt8Array.mk xs).iter.map (· + 1)).toUInt8Array.data == xs.map (· + 1)
+#guard rawElemSize ((UInt8Array.mk #[1]).iter.toUInt8Array) == (1 : UInt32)
