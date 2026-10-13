@@ -72,10 +72,10 @@ private unsafe def mkWithCapacityImpl (a : Array Int16) (capacity : Nat := a.siz
   let cap := toUSizeChecked capacity
   let sz := toUSizeChecked a.size
   let r : Int16Array := unsafeCast <| ScalarArray.allocate 2 sz (max sz cap) lcProof
-  loop r 0
+  loop sz r 0
 where
-  loop (r : Int16Array) (i : Nat) : Int16Array :=
-    if h : i < a.size then loop (setInt16Unsafe r i.toUSize a[i]) (i + 1) else r
+  loop (sz : USize) (r : Int16Array) (i : USize) : Int16Array :=
+    if i < sz then loop sz (setInt16Unsafe r i (a.uget i lcProof)) (i + 1) else r
 
 private unsafe def mkImpl (a : Array Int16) : Int16Array :=
   mkWithCapacityImpl a a.size
@@ -83,10 +83,10 @@ private unsafe def mkImpl (a : Array Int16) : Int16Array :=
 attribute [implemented_by mkImpl] Int16Array.mk
 
 private unsafe def dataImpl (a : @& Int16Array) : Array Int16 :=
-  loop 0 (Array.emptyWithCapacity a.size)
+  loop a.usize 0 (Array.replicate a.size default)
 where
-  loop (i : USize) (r : Array Int16) : Array Int16 :=
-    if h : i.toNat < a.size then loop (i + 1) (r.push (a.uget i h)) else r
+  loop (sz i : USize) (r : Array Int16) : Array Int16 :=
+    if i < sz then loop sz (i + 1) (r.uset i (a.uget i lcProof) lcProof) else r
 
 /-- The elements of `a` as an `Array Int16`. -/
 @[implemented_by dataImpl, expose]
