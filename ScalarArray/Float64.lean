@@ -145,6 +145,33 @@ where
 public def push : Float64Array → Float → Float64Array
   | mk a, v => mk (a.push v)
 
+/--
+Copies the elements of `b` to the end of `a` in place. Only valid when `a` is exclusive, has room
+for the elements of `b`, and is not the same object as `b`.
+-/
+@[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + lean_sarray_elem_size(#1) * lean_sarray_size(#1), lean_sarray_cptr(#2), lean_sarray_elem_size(#2) * lean_sarray_size(#2));\nlean_sarray_set_size(#1, lean_sarray_size(#1) + lean_sarray_size(#2))"]
+private unsafe def appendUnsafe : Float64Array → @& Float64Array → Float64Array
+  | mk a, mk b => mk (a ++ b)
+
+private unsafe def appendImpl (a b : Float64Array) : Float64Array :=
+  let s : ScalarArray := unsafeCast a
+  let n := s.size + (unsafeCast b : ScalarArray).size
+  let cap := s.capacity
+  if n < s.size then
+    panic! "out of memory"
+  else if n ≤ cap then
+    appendUnsafe (unsafeCast s.ensureExclusive) b
+  else
+    let cap := if cap < cap + cap && n ≤ cap + cap then cap + cap else n
+    appendUnsafe (unsafeCast (s.copyWithCapacity cap lcProof)) b
+
+/-- Appends the elements of `b` to `a`, in place when `a` is not shared and has room. -/
+@[implemented_by appendImpl, expose]
+public def append : Float64Array → Float64Array → Float64Array
+  | mk a, mk b => mk (a ++ b)
+
+public instance : Append Float64Array := ⟨append⟩
+
 public def toList (a : Float64Array) : List Float := a.data.toList
 
 public instance : Repr Float64Array where
@@ -170,6 +197,12 @@ public theorem size_eq_data_size (a : Float64Array) : a.size = a.data.size := by
 
 @[simp] public theorem size_push (a : Float64Array) (v : Float) : (a.push v).size = a.size + 1 := by
   cases a; simp [push, size]
+
+@[simp] public theorem data_append (a b : Float64Array) : (a ++ b).data = a.data ++ b.data := by
+  cases a; cases b; rfl
+
+@[simp] public theorem size_append (a b : Float64Array) : (a ++ b).size = a.size + b.size := by
+  simp [size_eq_data_size]
 
 end Float64Array
 

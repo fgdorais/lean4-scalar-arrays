@@ -145,3 +145,78 @@ open ScalarArray ScalarArrayTest
 -- Growth is geometric, so pushing is amortized constant time.
 #guard rawCapacity ((USizeArray.mk #[1, 2, 3, 4]).push 5) ≥ 8
 
+
+/-! Appending -/
+
+#guard (USizeArray.mk #[1, 2] ++ USizeArray.mk #[3, 18446744073709551615]).data == #[1, 2, 3, 18446744073709551615]
+#guard ((USizeArray.mk #[1, 2]).append (USizeArray.mk #[3])).data == #[1, 2, 3]
+#guard (USizeArray.mk #[1, 2] ++ USizeArray.empty).data == #[1, 2]
+#guard (USizeArray.empty ++ USizeArray.mk #[1, 2]).data == #[1, 2]
+#guard (USizeArray.empty ++ USizeArray.empty).data == #[]
+#guard (USizeArray.mk #[0, 0] ++ USizeArray.mk #[18446744073709551615] ++ USizeArray.mk #[0]).data ==
+  #[0, 0, 18446744073709551615, 0]
+
+-- Appending an array to itself, with and without room.
+#guard
+  let a := USizeArray.mk #[1, 2, 3]
+  (a ++ a).data == #[1, 2, 3, 1, 2, 3]
+
+#guard
+  let a := (USizeArray.emptyWithCapacity 10).push 1 |>.push 2
+  (a ++ a).data == #[1, 2, 1, 2]
+
+-- Appending to a shared array must leave the original unchanged, with and without room. The
+-- results are checked first so that they are computed while the original is still live.
+#guard
+  let a := (USizeArray.emptyWithCapacity 10).push 1
+  let b := a ++ USizeArray.mk #[2, 3]
+  let c := a ++ USizeArray.mk #[4]
+  c.data == #[1, 4] && b.data == #[1, 2, 3] && a.data == #[1]
+
+#guard
+  let a := USizeArray.mk #[1]
+  let b := a ++ USizeArray.mk #[2, 3]
+  b.data == #[1, 2, 3] && a.data == #[1]
+
+-- The right operand is never modified.
+#guard
+  let b := USizeArray.mk #[2, 3]
+  let c := USizeArray.mk #[1] ++ b
+  c.data == #[1, 2, 3] && b.data == #[2, 3]
+
+-- Many appends to an exclusive array.
+#guard Id.run do
+  let mut a := USizeArray.empty
+  let mut r : Array USize := #[]
+  for i in [0:1000] do
+    a := a ++ USizeArray.mk #[i.toUSize, (i * 7).toUSize, 18446744073709551615]
+    r := r ++ #[i.toUSize, (i * 7).toUSize, 18446744073709551615]
+  return a.data == r
+
+-- Large arrays on both sides.
+#guard
+  let xs := (Array.range 50000).map Nat.toUSize
+  let ys := (Array.range 50000).map fun i => (i * 3).toUSize
+  (USizeArray.mk xs ++ USizeArray.mk ys).data == xs ++ ys
+
+-- An exclusive array with room is appended to in place, and growth is geometric.
+-- The array is built from a parameter so that it isn't extracted as a shared closed term.
+@[noinline] def USizeArray.appendsInPlace (x : USize) : Bool :=
+  let a := (USizeArray.emptyWithCapacity 10).push x
+  let p := rawAddr a
+  let a := a ++ USizeArray.mk #[2, 3]
+  rawAddr a == p && a.data == #[x, 2, 3]
+
+@[noinline] def USizeArray.appendsToCopyWhenShared (x : USize) : Bool :=
+  let a := (USizeArray.emptyWithCapacity 10).push x
+  let p := rawAddr a
+  let b := a ++ USizeArray.mk #[2, 3]
+  rawAddr b != p && b.data == #[x, 2, 3] && a.data == #[x]
+
+#guard USizeArray.appendsInPlace 1
+#guard USizeArray.appendsToCopyWhenShared 1
+
+#guard rawCapacity ((USizeArray.emptyWithCapacity 10).push 1 ++ USizeArray.mk #[2, 3]) ≥ 10
+#guard rawCapacity (USizeArray.mk #[1, 2, 3, 4] ++ USizeArray.mk #[5]) ≥ 8
+#guard rawCapacity (USizeArray.mk #[1] ++ USizeArray.mk (Array.replicate 10 0)) ≥ 11
+#guard rawElemSize (USizeArray.mk #[1] ++ USizeArray.mk #[2]) == ((System.Platform.numBits / 8).toUInt32 : UInt32)
