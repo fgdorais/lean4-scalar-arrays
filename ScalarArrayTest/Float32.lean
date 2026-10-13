@@ -59,6 +59,14 @@ private abbrev elemSize : UInt32 := 4
   let a := Float32Array.mk #[1, 2, 3]
   let b := a.set! 1 42
   b.data == #[1, 42, 3] && a.data == #[1, 2, 3]
+#guard
+  let a := Float32Array.mk #[1, 2, 3]
+  let b := a.uset 0 big (by simp [a])
+  b.data == #[big, 2, 3] && a.data == #[1, 2, 3]
+#guard
+  let a := Float32Array.mk #[1, 2, 3]
+  let b := a.set 2 big (by simp [a])
+  b.data == #[1, 2, big] && a.data == #[1, 2, 3]
 
 -- Repeated writes to an exclusive array.
 #guard Id.run do
