@@ -115,9 +115,6 @@ public def getD (a : @& Int64Array) (i : @& Nat) (v₀ : Int64) : Int64 :=
 public def set! (a : Int64Array) (i : Nat) (v : Int64) : Int64Array :=
   if h : i < a.size then a.set i v h else panic! "index out of bounds"
 
-public def setD (a : Int64Array) (i : Nat) (v : Int64) : Int64Array :=
-  if h : i < a.size then a.set i v h else a
-
 public instance : GetElem Int64Array Nat Int64 fun a i => i < a.size where
   getElem a i h := a.get i h
 

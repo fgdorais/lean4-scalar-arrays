@@ -115,9 +115,6 @@ public def getD (a : @& Int8Array) (i : @& Nat) (v₀ : Int8) : Int8 :=
 public def set! (a : Int8Array) (i : Nat) (v : Int8) : Int8Array :=
   if h : i < a.size then a.set i v h else panic! "index out of bounds"
 
-public def setD (a : Int8Array) (i : Nat) (v : Int8) : Int8Array :=
-  if h : i < a.size then a.set i v h else a
-
 public instance : GetElem Int8Array Nat Int8 fun a i => i < a.size where
   getElem a i h := a.get i h
 

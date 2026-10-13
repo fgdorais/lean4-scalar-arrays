@@ -118,9 +118,6 @@ public def getD (a : @& Float64Array) (i : @& Nat) (v₀ : Float) : Float :=
 public def set! (a : Float64Array) (i : Nat) (v : Float) : Float64Array :=
   if h : i < a.size then a.set i v h else panic! "index out of bounds"
 
-public def setD (a : Float64Array) (i : Nat) (v : Float) : Float64Array :=
-  if h : i < a.size then a.set i v h else a
-
 public instance : GetElem Float64Array Nat Float fun a i => i < a.size where
   getElem a i h := a.get i h
 

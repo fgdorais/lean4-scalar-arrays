@@ -72,7 +72,7 @@ Every type `XArray` with element type `X` has the same API. For `Float64Array`, 
 | Conversion   | `data : XArray → Array X`, `toList`                                         |
 | Size         | `size : XArray → Nat`, `usize : XArray → USize`                             |
 | Reading      | `get`, `uget`, `get!`, `getD`, and `a[i]`, `a[i]?`, `a[i]!` with `Nat` or `USize` indices |
-| Writing      | `set`, `uset`, `set!`, `setD`, `push`                                       |
+| Writing      | `set`, `uset`, `set!`, `push`                                               |
 | Appending    | `append`, `a ++ b`                                                          |
 | Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `Repr`, `ToString`     |
 | Lemmas       | `size_mk`, `data_mk`, `mk_data`, `size_eq_data_size`, `size_uset`, `size_set`, `size_push`, `size_append`, `data_append` |
@@ -82,7 +82,7 @@ As with `Array`:
 - writes update the array in place when it is not shared, and copy it first when it is;
 - `push` and `++` grow the capacity geometrically, so repeated pushes or appends take amortized
   constant time per element;
-- `get!` and `set!` panic on an out-of-bounds index, while `getD`, `setD` and `a[i]?` don't.
+- `get!` and `set!` panic on an out-of-bounds index, while `getD` and `a[i]?` don't.
 
 `a ++ b` copies the elements of `b` with a single `memcpy`, into `a` itself when it is not shared
 and has room.

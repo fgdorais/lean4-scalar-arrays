@@ -41,8 +41,6 @@ open ScalarArray ScalarArrayTest
 #guard ((Int64Array.mk #[1, 2, 3]).set 1 42 (by decide)).data == #[1, 42, 3]
 #guard ((Int64Array.mk #[1, 2, 3]).uset 2 42 (by simp)).data == #[1, 2, 42]
 #guard ((Int64Array.mk #[1, 2, 3]).set! 0 (-9223372036854775808)).data == #[(-9223372036854775808), 2, 3]
-#guard ((Int64Array.mk #[1, 2, 3]).setD 0 0).data == #[0, 2, 3]
-#guard ((Int64Array.mk #[1, 2, 3]).setD 3 42).data == #[1, 2, 3]
 
 -- Writing to a shared array must leave the original unchanged. The result is checked first so
 -- that it is computed while the original is still live.
@@ -108,7 +106,6 @@ open ScalarArray ScalarArrayTest
 
 #guard (Int64Array.mk #[1, 2, 3])[2 ^ 70]? == none
 #guard (Int64Array.mk #[1, 2, 3]).getD (2 ^ 70) 7 == 7
-#guard ((Int64Array.mk #[1, 2, 3]).setD (2 ^ 70) 7).data == #[1, 2, 3]
 
 /-! Pushing onto a shared array that is at full capacity -/
 

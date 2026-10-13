@@ -115,9 +115,6 @@ public def getD (a : @& USizeArray) (i : @& Nat) (v₀ : USize) : USize :=
 public def set! (a : USizeArray) (i : Nat) (v : USize) : USizeArray :=
   if h : i < a.size then a.set i v h else panic! "index out of bounds"
 
-public def setD (a : USizeArray) (i : Nat) (v : USize) : USizeArray :=
-  if h : i < a.size then a.set i v h else a
-
 public instance : GetElem USizeArray Nat USize fun a i => i < a.size where
   getElem a i h := a.get i h
 
