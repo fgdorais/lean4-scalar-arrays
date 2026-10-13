@@ -72,7 +72,7 @@ Every type `XArray` with element type `X` has the same API. For `Float64Array`, 
 | Conversion   | `data : XArray → Array X`, `toList`                                         |
 | Size         | `size : XArray → Nat`, `usize : XArray → USize`                             |
 | Reading      | `get`, `uget`, `get!`, `getD`, and `a[i]`, `a[i]?`, `a[i]!` with `Nat` or `USize` indices |
-| Writing      | `set`, `uset`, `set!`, `setD`, `push`                                       |
+| Writing      | `set`, `uset`, `set!`, `push`                                               |
 | Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Repr`, `ToString`               |
 | Lemmas       | `size_mk`, `data_mk`, `mk_data`, `size_eq_data_size`, `size_uset`, `size_set`, `size_push` |
 
@@ -80,7 +80,7 @@ As with `Array`:
 
 - writes update the array in place when it is not shared, and copy it first when it is;
 - `push` grows the capacity geometrically, so a sequence of pushes takes amortized constant time;
-- `get!` and `set!` panic on an out-of-bounds index, while `getD`, `setD` and `a[i]?` don't.
+- `get!` and `set!` panic on an out-of-bounds index, while `getD` and `a[i]?` don't.
 
 ## How it works
 

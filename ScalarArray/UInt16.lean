@@ -115,9 +115,6 @@ public def getD (a : @& UInt16Array) (i : @& Nat) (v₀ : UInt16) : UInt16 :=
 public def set! (a : UInt16Array) (i : Nat) (v : UInt16) : UInt16Array :=
   if h : i < a.size then a.set i v h else panic! "index out of bounds"
 
-public def setD (a : UInt16Array) (i : Nat) (v : UInt16) : UInt16Array :=
-  if h : i < a.size then a.set i v h else a
-
 public instance : GetElem UInt16Array Nat UInt16 fun a i => i < a.size where
   getElem a i h := a.get i h
 
