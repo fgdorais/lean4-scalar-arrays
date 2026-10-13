@@ -55,8 +55,11 @@ public def get :
     (a : @& USizeArray) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → USize
   | mk a, i, h => a[i]
 
+-- Public, like `mkImpl`, `usetImpl` and `setImpl` below: a private `implemented_by` target
+-- attached with a separate `attribute` command is not visible to other modules, so code there
+-- that uses `get`, `mk`, `uset` or `set` would fail to compile.
 @[inline]
-private unsafe def getImpl : type_of% @get :=
+public unsafe def getImpl : type_of% @get :=
   fun a i _ => a.uget i.toUSize lcProof
 
 attribute [implemented_by getImpl] get
@@ -83,7 +86,7 @@ where
   loop (sz : USize) (r : USizeArray) (i : USize) : USizeArray :=
     if i < sz then loop sz (setUSizeUnsafe r i (a.uget i lcProof)) (i + 1) else r
 
-private unsafe def mkImpl (a : Array USize) : USizeArray :=
+public unsafe def mkImpl (a : Array USize) : USizeArray :=
   mkWithCapacityImpl a a.size
 
 attribute [implemented_by mkImpl] USizeArray.mk
@@ -119,7 +122,7 @@ public def uset :
     (h : i.toNat < a.size := by get_elem_tactic) → USizeArray
   | mk a, i, v, h => mk (a.uset i v h)
 
-private unsafe def usetImpl : type_of% @uset :=
+public unsafe def usetImpl : type_of% @uset :=
   fun a i v _ => setUSizeUnsafe (unsafeCast <| ScalarArray.ensureExclusive (unsafeCast a)) i v
 
 attribute [implemented_by usetImpl] uset
@@ -130,7 +133,7 @@ public def set :
     USizeArray
   | mk a, i, v, h => mk (a.set i v h)
 
-private unsafe def setImpl : type_of% @set :=
+public unsafe def setImpl : type_of% @set :=
   fun a i v _ => usetImpl a i.toUSize v lcProof
 
 attribute [implemented_by setImpl] set
