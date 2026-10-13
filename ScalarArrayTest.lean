@@ -2,6 +2,8 @@
 Copyright © 2026 François G. Dorais. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+module
+
 import ScalarArrayTest.UInt8
 import ScalarArrayTest.UInt16
 import ScalarArrayTest.UInt32
