@@ -309,6 +309,22 @@ open ScalarArray ScalarArrayTest
 
 #guard Int16Array.popsInPlace 1
 
+#guard (Int16Array.mk #[1, 0, (-32768), 0, 0]).popWhile (· == 0) == Int16Array.mk #[1, 0, (-32768)]
+#guard (Int16Array.mk #[1, 0, (-32768)]).popWhile (· == 0) == Int16Array.mk #[1, 0, (-32768)]
+#guard (Int16Array.mk #[0, 0]).popWhile (· == 0) == Int16Array.empty
+#guard Int16Array.empty.popWhile (· == 0) == Int16Array.empty
+
+-- Popping several elements from an exclusive array.
+@[noinline] def Int16Array.popsWhileInPlace (x : Int16) : Bool :=
+  let a := (Int16Array.mk #[x]).push 0 |>.push 0
+  let p := rawAddr a
+  let a := a.popWhile (· == 0)
+  rawAddr a == p && a.data == #[x]
+
+#guard Int16Array.popsWhileInPlace 1
+
+example (p : Int16 → Bool) (a : Int16Array) : (a.popWhile p).data = a.data.popWhile p := by simp
+
 #guard ((Int16Array.mk #[1, 2, 3, (-32768)]).extract 1 3).data == #[2, 3]
 #guard ((Int16Array.mk #[1, 2, 3, (-32768)]).extract 2 100).data == #[3, (-32768)]
 #guard ((Int16Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
@@ -473,6 +489,14 @@ example (a : Int16Array) : Int16Array.ofList a.toList = a := by simp
   s.popFront.toList == [3, (-32768)] && s.popFront.popFront.popFront.popFront.size == 0
 
 #guard (∅ : Int16Array.Slice).size == 0 && (default : Int16Array.Slice).toList == []
+
+-- An array coerces to the slice of all its elements.
+#guard
+  let s : Int16Array.Slice := Int16Array.mk #[1, 2, (-32768)]
+  s.toList == [1, 2, (-32768)] && s.start == 0
+
+-- A slice does not coerce back to an array, since that would copy.
+example (s : Int16Array.Slice) : Int16Array := s.copy
 
 #guard Id.run do
   let mut r : List Int16 := []

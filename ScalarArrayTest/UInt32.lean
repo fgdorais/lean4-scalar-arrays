@@ -309,6 +309,22 @@ open ScalarArray ScalarArrayTest
 
 #guard UInt32Array.popsInPlace 1
 
+#guard (UInt32Array.mk #[1, 0, 4294967295, 0, 0]).popWhile (· == 0) == UInt32Array.mk #[1, 0, 4294967295]
+#guard (UInt32Array.mk #[1, 0, 4294967295]).popWhile (· == 0) == UInt32Array.mk #[1, 0, 4294967295]
+#guard (UInt32Array.mk #[0, 0]).popWhile (· == 0) == UInt32Array.empty
+#guard UInt32Array.empty.popWhile (· == 0) == UInt32Array.empty
+
+-- Popping several elements from an exclusive array.
+@[noinline] def UInt32Array.popsWhileInPlace (x : UInt32) : Bool :=
+  let a := (UInt32Array.mk #[x]).push 0 |>.push 0
+  let p := rawAddr a
+  let a := a.popWhile (· == 0)
+  rawAddr a == p && a.data == #[x]
+
+#guard UInt32Array.popsWhileInPlace 1
+
+example (p : UInt32 → Bool) (a : UInt32Array) : (a.popWhile p).data = a.data.popWhile p := by simp
+
 #guard ((UInt32Array.mk #[1, 2, 3, 4294967295]).extract 1 3).data == #[2, 3]
 #guard ((UInt32Array.mk #[1, 2, 3, 4294967295]).extract 2 100).data == #[3, 4294967295]
 #guard ((UInt32Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
@@ -473,6 +489,14 @@ example (a : UInt32Array) : UInt32Array.ofList a.toList = a := by simp
   s.popFront.toList == [3, 4294967295] && s.popFront.popFront.popFront.popFront.size == 0
 
 #guard (∅ : UInt32Array.Slice).size == 0 && (default : UInt32Array.Slice).toList == []
+
+-- An array coerces to the slice of all its elements.
+#guard
+  let s : UInt32Array.Slice := UInt32Array.mk #[1, 2, 4294967295]
+  s.toList == [1, 2, 4294967295] && s.start == 0
+
+-- A slice does not coerce back to an array, since that would copy.
+example (s : UInt32Array.Slice) : UInt32Array := s.copy
 
 #guard Id.run do
   let mut r : List UInt32 := []

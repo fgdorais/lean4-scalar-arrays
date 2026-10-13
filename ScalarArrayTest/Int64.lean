@@ -309,6 +309,22 @@ open ScalarArray ScalarArrayTest
 
 #guard Int64Array.popsInPlace 1
 
+#guard (Int64Array.mk #[1, 0, (-9223372036854775808), 0, 0]).popWhile (· == 0) == Int64Array.mk #[1, 0, (-9223372036854775808)]
+#guard (Int64Array.mk #[1, 0, (-9223372036854775808)]).popWhile (· == 0) == Int64Array.mk #[1, 0, (-9223372036854775808)]
+#guard (Int64Array.mk #[0, 0]).popWhile (· == 0) == Int64Array.empty
+#guard Int64Array.empty.popWhile (· == 0) == Int64Array.empty
+
+-- Popping several elements from an exclusive array.
+@[noinline] def Int64Array.popsWhileInPlace (x : Int64) : Bool :=
+  let a := (Int64Array.mk #[x]).push 0 |>.push 0
+  let p := rawAddr a
+  let a := a.popWhile (· == 0)
+  rawAddr a == p && a.data == #[x]
+
+#guard Int64Array.popsWhileInPlace 1
+
+example (p : Int64 → Bool) (a : Int64Array) : (a.popWhile p).data = a.data.popWhile p := by simp
+
 #guard ((Int64Array.mk #[1, 2, 3, (-9223372036854775808)]).extract 1 3).data == #[2, 3]
 #guard ((Int64Array.mk #[1, 2, 3, (-9223372036854775808)]).extract 2 100).data == #[3, (-9223372036854775808)]
 #guard ((Int64Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
@@ -473,6 +489,14 @@ example (a : Int64Array) : Int64Array.ofList a.toList = a := by simp
   s.popFront.toList == [3, (-9223372036854775808)] && s.popFront.popFront.popFront.popFront.size == 0
 
 #guard (∅ : Int64Array.Slice).size == 0 && (default : Int64Array.Slice).toList == []
+
+-- An array coerces to the slice of all its elements.
+#guard
+  let s : Int64Array.Slice := Int64Array.mk #[1, 2, (-9223372036854775808)]
+  s.toList == [1, 2, (-9223372036854775808)] && s.start == 0
+
+-- A slice does not coerce back to an array, since that would copy.
+example (s : Int64Array.Slice) : Int64Array := s.copy
 
 #guard Id.run do
   let mut r : List Int64 := []

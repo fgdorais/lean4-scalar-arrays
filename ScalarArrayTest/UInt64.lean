@@ -309,6 +309,22 @@ open ScalarArray ScalarArrayTest
 
 #guard UInt64Array.popsInPlace 1
 
+#guard (UInt64Array.mk #[1, 0, 18446744073709551615, 0, 0]).popWhile (· == 0) == UInt64Array.mk #[1, 0, 18446744073709551615]
+#guard (UInt64Array.mk #[1, 0, 18446744073709551615]).popWhile (· == 0) == UInt64Array.mk #[1, 0, 18446744073709551615]
+#guard (UInt64Array.mk #[0, 0]).popWhile (· == 0) == UInt64Array.empty
+#guard UInt64Array.empty.popWhile (· == 0) == UInt64Array.empty
+
+-- Popping several elements from an exclusive array.
+@[noinline] def UInt64Array.popsWhileInPlace (x : UInt64) : Bool :=
+  let a := (UInt64Array.mk #[x]).push 0 |>.push 0
+  let p := rawAddr a
+  let a := a.popWhile (· == 0)
+  rawAddr a == p && a.data == #[x]
+
+#guard UInt64Array.popsWhileInPlace 1
+
+example (p : UInt64 → Bool) (a : UInt64Array) : (a.popWhile p).data = a.data.popWhile p := by simp
+
 #guard ((UInt64Array.mk #[1, 2, 3, 18446744073709551615]).extract 1 3).data == #[2, 3]
 #guard ((UInt64Array.mk #[1, 2, 3, 18446744073709551615]).extract 2 100).data == #[3, 18446744073709551615]
 #guard ((UInt64Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
@@ -473,6 +489,14 @@ example (a : UInt64Array) : UInt64Array.ofList a.toList = a := by simp
   s.popFront.toList == [3, 18446744073709551615] && s.popFront.popFront.popFront.popFront.size == 0
 
 #guard (∅ : UInt64Array.Slice).size == 0 && (default : UInt64Array.Slice).toList == []
+
+-- An array coerces to the slice of all its elements.
+#guard
+  let s : UInt64Array.Slice := UInt64Array.mk #[1, 2, 18446744073709551615]
+  s.toList == [1, 2, 18446744073709551615] && s.start == 0
+
+-- A slice does not coerce back to an array, since that would copy.
+example (s : UInt64Array.Slice) : UInt64Array := s.copy
 
 #guard Id.run do
   let mut r : List UInt64 := []
