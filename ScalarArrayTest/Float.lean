@@ -33,3 +33,13 @@ def float64Specials : Array Float :=
 -- `0.1` is not exactly representable, so a `Float32Array` must round it to single precision.
 #guard (Float32Array.mk #[0.1])[0]!.toFloat != (0.1 : Float)
 #guard (Float32Array.mk #[0.1])[0]! == (0.1 : Float32)
+
+/-! `==` on float arrays compares elements with floating-point `==`, like `Array Float`. -/
+
+#guard Float32Array.mk #[0.0 / 0.0] != Float32Array.mk #[0.0 / 0.0]
+#guard Float64Array.mk #[0.0 / 0.0] != Float64Array.mk #[0.0 / 0.0]
+#guard Float32Array.mk #[0.0] == Float32Array.mk #[-0.0]
+#guard Float64Array.mk #[0.0] == Float64Array.mk #[-0.0]
+#guard !(Float32Array.mk #[0.0 / 0.0]).contains (0.0 / 0.0)
+#guard !(Float64Array.mk #[0.0 / 0.0]).contains (0.0 / 0.0)
+#guard (Float64Array.mk #[1.0, 2.0] == Float64Array.mk #[1.0, 2.0]) == (#[(1.0 : Float), 2.0] == #[1.0, 2.0])

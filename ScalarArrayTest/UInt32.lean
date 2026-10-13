@@ -217,3 +217,133 @@ open ScalarArray ScalarArrayTest
 #guard rawCapacity (UInt32Array.mk #[1, 2, 3, 4] ++ UInt32Array.mk #[5]) ≥ 8
 #guard rawCapacity (UInt32Array.mk #[1] ++ UInt32Array.mk (Array.replicate 10 0)) ≥ 11
 #guard rawElemSize (UInt32Array.mk #[1] ++ UInt32Array.mk #[2]) == (4 : UInt32)
+
+/-! Equality -/
+
+#guard UInt32Array.mk #[1, 2, 4294967295] == UInt32Array.mk #[1, 2, 4294967295]
+#guard UInt32Array.mk #[1, 2, 4294967295] != UInt32Array.mk #[1, 2, 0]
+#guard UInt32Array.mk #[1, 2] != UInt32Array.mk #[1, 2, 0]
+#guard UInt32Array.mk #[1, 2, 0] != UInt32Array.mk #[1, 2]
+#guard UInt32Array.empty == UInt32Array.emptyWithCapacity 10
+#guard (UInt32Array.mk #[1, 2] ++ UInt32Array.mk #[4294967295]) == UInt32Array.mk #[1, 2, 4294967295]
+-- Capacity and leftover memory past the size don't matter.
+#guard (UInt32Array.emptyWithCapacity 100).push 1 == UInt32Array.mk #[1]
+#guard (UInt32Array.mk #[1, 2, 3]).pop == UInt32Array.mk #[1, 2]
+#guard (UInt32Array.mk (Array.replicate 100000 0)).set! 99999 4294967295 !=
+  UInt32Array.mk (Array.replicate 100000 0)
+
+/-! Decidable equality and hashing -/
+
+#guard decide (UInt32Array.mk #[1, 2, 4294967295] = UInt32Array.mk #[1, 2, 4294967295])
+#guard !decide (UInt32Array.mk #[1, 2, 4294967295] = UInt32Array.mk #[1, 2, 0])
+#guard hash (UInt32Array.mk #[1, 2, 4294967295]) == hash #[(1 : UInt32), 2, 4294967295]
+#guard hash (UInt32Array.empty) == hash (#[] : Array UInt32)
+#guard hash ((UInt32Array.emptyWithCapacity 100).push 1) == hash (UInt32Array.mk #[1])
+
+/-! Iteration -/
+
+#guard (UInt32Array.mk #[1, 2, 4294967295]).foldl (fun acc x => x :: acc) [] == [4294967295, 2, 1]
+#guard (UInt32Array.mk #[1, 2, 4294967295]).foldr (fun x acc => x :: acc) [] == [1, 2, 4294967295]
+#guard UInt32Array.empty.foldl (fun acc x => x :: acc) [] == []
+#guard UInt32Array.empty.foldr (fun x acc => x :: acc) [] == []
+#guard (UInt32Array.mk #[1, 2, 4294967295]).foldlM (m := Option)
+  (fun acc x => if x == 2 then none else some (x :: acc)) [] == none
+#guard (UInt32Array.mk #[1, 4294967295]).foldrM (m := Option) (fun x acc => some (x :: acc)) [] ==
+  some [1, 4294967295]
+
+#guard Id.run do
+  let mut r : List UInt32 := []
+  for x in UInt32Array.mk #[1, 2, 4294967295] do
+    r := x :: r
+  return r == [4294967295, 2, 1]
+
+#guard Id.run do
+  let mut r : List UInt32 := []
+  for x in UInt32Array.mk #[1, 2, 3, 4] do
+    if x == 3 then break
+    r := x :: r
+  return r == [2, 1]
+
+#guard
+  let r : StateM (List UInt32) Unit := (UInt32Array.mk #[1, 2, 4294967295]).forM fun x => modify (x :: ·)
+  (r.run []).2 == [4294967295, 2, 1]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toUInt32
+  let f := fun (acc : List UInt32) x => if x == 0 then x :: acc else acc
+  (UInt32Array.mk xs).foldl f [] == xs.foldl f []
+
+#guard (UInt32Array.mk #[1, 2, 4294967295]).any (· == 4294967295)
+#guard !(UInt32Array.mk #[1, 2, 3]).any (· == 4294967295)
+#guard (UInt32Array.mk #[1, 2, 3]).all (· != 4294967295)
+#guard !(UInt32Array.mk #[1, 4294967295, 3]).all (· != 4294967295)
+#guard !UInt32Array.empty.any (fun _ => true) && UInt32Array.empty.all (fun _ => false)
+#guard (UInt32Array.mk #[1, 2, 4294967295]).contains 4294967295
+#guard !(UInt32Array.mk #[1, 2, 3]).contains 4294967295
+#guard (UInt32Array.mk (Array.replicate 100000 0) |>.set! 99999 4294967295).contains 4294967295
+
+/-! Removing elements -/
+
+#guard UInt32Array.empty.isEmpty && !(UInt32Array.mk #[1]).isEmpty
+#guard (UInt32Array.mk #[1]).pop.isEmpty
+#guard (UInt32Array.mk #[1, 2, 4294967295]).pop.data == #[1, 2]
+#guard UInt32Array.empty.pop.data == #[]
+#guard ((UInt32Array.mk #[1, 2, 3]).pop.push 4294967295).data == #[1, 2, 4294967295]
+#guard (UInt32Array.mk #[1, 2, 4294967295]).back? == some 4294967295
+#guard UInt32Array.empty.back? == none
+#guard (UInt32Array.mk #[1, 2, 4294967295]).back! == 4294967295
+#guard (UInt32Array.mk #[1, 2, 4294967295]).back (by decide) == 4294967295
+
+-- Popping from a shared array must leave the original unchanged.
+#guard
+  let a := UInt32Array.mk #[1, 2, 3]
+  let b := a.pop
+  b.data == #[1, 2] && a.data == #[1, 2, 3]
+
+-- The array is built from a parameter so that it isn't extracted as a shared closed term.
+@[noinline] def UInt32Array.popsInPlace (x : UInt32) : Bool :=
+  let a := (UInt32Array.mk #[x]).push x
+  let p := rawAddr a
+  let a := a.pop
+  rawAddr a == p && a.data == #[x]
+
+#guard UInt32Array.popsInPlace 1
+
+#guard ((UInt32Array.mk #[1, 2, 3, 4294967295]).extract 1 3).data == #[2, 3]
+#guard ((UInt32Array.mk #[1, 2, 3, 4294967295]).extract 2 100).data == #[3, 4294967295]
+#guard ((UInt32Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
+#guard ((UInt32Array.mk #[1, 2, 3]).extract 2 1).data == #[]
+#guard ((UInt32Array.mk #[1, 2, 3]).extract 5 9).data == #[]
+#guard ((UInt32Array.mk #[1, 2, 3]).extract (2 ^ 70) (2 ^ 71)).data == #[]
+#guard ((UInt32Array.mk #[1, 2, 3]).extract 1 (2 ^ 70)).data == #[2, 3]
+#guard
+  let xs := (Array.range 100000).map Nat.toUInt32
+  ((UInt32Array.mk xs).extract 70000 70010).data == xs.extract 70000 70010
+#guard rawElemSize ((UInt32Array.mk #[1, 2, 3]).extract 1 2) == (4 : UInt32)
+
+-- The extracted array is independent of the original.
+#guard
+  let a := UInt32Array.mk #[1, 2, 3]
+  let b := (a.extract 0 2).set! 0 4294967295
+  b.data == #[4294967295, 2] && a.data == #[1, 2, 3]
+
+/-! Building arrays -/
+
+#guard (UInt32Array.replicate 3 4294967295).data == #[4294967295, 4294967295, 4294967295]
+#guard (UInt32Array.replicate 0 1).data == #[]
+#guard (UInt32Array.replicate 100000 4294967295).data == Array.replicate 100000 4294967295
+#guard (UInt32Array.ofFn (n := 4) fun i => i.val.toUInt32).data == #[0, 1, 2, 3]
+#guard (UInt32Array.ofFn (n := 0) fun i => i.val.toUInt32).data == #[]
+#guard rawElemSize (UInt32Array.replicate 2 1) == (4 : UInt32)
+#guard rawElemSize (UInt32Array.ofFn (n := 2) fun _ => 1) == (4 : UInt32)
+
+/-! Lemmas -/
+
+example (a : UInt32Array) (v : UInt32) : (a.push v).pop = a := by simp [UInt32Array.ext_iff]
+example : (UInt32Array.replicate 3 4294967295)[1] = 4294967295 := by simp
+example (a b : UInt32Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
+example (a : UInt32Array) (i : Nat) (v : UInt32) (h : i < a.size) :
+    (a.set i v h)[i]'(by simpa) = v := by simp
+example (a : UInt32Array) : a.extract 0 a.size = a := by simp [UInt32Array.ext_iff]
+example (a : UInt32Array) (v : UInt32) : (a.push v).pop = a :=
+  UInt32Array.ext_getElem (by simp) (by simp_all)
