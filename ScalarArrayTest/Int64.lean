@@ -344,6 +344,100 @@ example : (Int64Array.replicate 3 (-9223372036854775808))[1] = (-922337203685477
 example (a b : Int64Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
 example (a : Int64Array) (i : Nat) (v : Int64) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
-example (a : Int64Array) : a.extract 0 a.size = a := by simp [Int64Array.ext_iff]
+example (a : Int64Array) : a.extract 0 a.size = a := by simp
 example (a : Int64Array) (v : Int64) : (a.push v).pop = a :=
   Int64Array.ext_getElem (by simp) (by simp_all)
+
+/-! Default bounds proofs -/
+
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808)]).get 2 == (-9223372036854775808)
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808)]).uget 2 == (-9223372036854775808)
+#guard ((Int64Array.mk #[1, 2, 3]).set 1 (-9223372036854775808)).data == #[1, (-9223372036854775808), 3]
+#guard ((Int64Array.mk #[1, 2, 3]).uset 1 (-9223372036854775808)).data == #[1, (-9223372036854775808), 3]
+
+/-! `set!` leaves the array unchanged when the index is out of bounds, like `ByteArray.set!`. -/
+
+#guard ((Int64Array.mk #[1, 2, 3]).set! 3 (-9223372036854775808)).data == #[1, 2, 3]
+#guard ((Int64Array.mk #[1, 2, 3]).set! (2 ^ 70) (-9223372036854775808)).data == #[1, 2, 3]
+
+/-! Folds over part of an array -/
+
+#guard (Int64Array.mk #[1, 2, 3, (-9223372036854775808)]).foldl (fun acc x => x :: acc) [] 1 3 == [3, 2]
+#guard (Int64Array.mk #[1, 2, 3, (-9223372036854775808)]).foldl (fun acc x => x :: acc) [] 2 == [(-9223372036854775808), 3]
+#guard (Int64Array.mk #[1, 2, 3, (-9223372036854775808)]).foldl (fun acc x => x :: acc) [] 1 100 == [(-9223372036854775808), 3, 2]
+#guard (Int64Array.mk #[1, 2, 3, (-9223372036854775808)]).foldl (fun acc x => x :: acc) [] 3 1 == []
+#guard (Int64Array.mk #[1, 2, 3, (-9223372036854775808)]).foldl (fun acc x => x :: acc) [] 9 12 == []
+#guard (Int64Array.mk #[1, 2, 3]).foldlM (m := Option)
+  (fun acc x => if x == 1 then none else some (x :: acc)) [] 1 == some [3, 2]
+
+/-! Copying slices -/
+
+#guard
+  let src := Int64Array.mk #[10, 11, 12, (-9223372036854775808)]
+  let dest := Int64Array.mk #[1, 2, 3, 4, 5]
+  (src.copySlice 1 dest 2 2).data == #[1, 2, 11, 12, 5] &&
+  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, (-9223372036854775808)] &&
+  (src.copySlice 0 dest 9 2).data == #[1, 2, 3, 4, 5, 10, 11] &&
+  (src.copySlice 9 dest 1 2).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 2 dest 0 10).data == #[12, (-9223372036854775808), 3, 4, 5] &&
+  (src.copySlice 0 dest 0 0).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 0 Int64Array.empty 0 4).data == #[10, 11, 12, (-9223372036854775808)] &&
+  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, (-9223372036854775808)]
+
+-- Copying from an array into itself.
+#guard
+  let a := Int64Array.mk #[1, 2, 3, (-9223372036854775808)]
+  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, (-9223372036854775808)]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toInt64
+  let a := Int64Array.mk xs
+  (a.copySlice 70000 (Int64Array.replicate 10 0) 5 10).data ==
+    Array.replicate 5 0 ++ xs.extract 70000 70010
+
+#guard rawElemSize ((Int64Array.mk #[1]).copySlice 0 Int64Array.empty 0 1) == (8 : UInt32)
+
+@[noinline] def Int64Array.copiesSliceInPlace (x : Int64) : Bool :=
+  let dest := (Int64Array.emptyWithCapacity 10).push x |>.push x |>.push x
+  let p := rawAddr dest
+  let dest := (Int64Array.mk #[(-9223372036854775808), (-9223372036854775808)]).copySlice 0 dest 1 2
+  rawAddr dest == p && dest.data == #[x, (-9223372036854775808), (-9223372036854775808)]
+
+@[noinline] def Int64Array.copySliceGrowth (x : Int64) : Bool :=
+  let dest := (Int64Array.mk #[x, x, x, x])
+  rawCapacity ((Int64Array.mk #[x]).copySlice 0 dest 4 1 (exact := false)) ≥ 8 &&
+    rawCapacity ((Int64Array.mk #[x]).copySlice 0 dest 4 1) == 5
+
+#guard Int64Array.copiesSliceInPlace 1
+#guard Int64Array.copySliceGrowth 1
+
+/-! Linearity markers -/
+
+#guard ((Int64Array.mk #[1, 2]).markLinear.push (-9223372036854775808)).data == #[1, 2, (-9223372036854775808)]
+#guard ((Int64Array.mk #[1]).propagateMark (Int64Array.mk #[2, (-9223372036854775808)])).data == #[2, (-9223372036854775808)]
+
+/-! Search -/
+
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808), 2]).findIdx? (· == 2) == some 1
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808), 2]).findIdx? (· == 2) 2 == some 3
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808), 2]).findIdx? (· == 3) == none
+#guard (Int64Array.mk #[1, 2, (-9223372036854775808), 2]).findIdx? (· == 1) 9 == none
+#guard ((Int64Array.mk #[1, 2, (-9223372036854775808), 2]).findFinIdx? (· == (-9223372036854775808))).map (·.val) == some 2
+
+/-! Lists -/
+
+#guard (Int64Array.ofList [1, 2, (-9223372036854775808)]).data == #[1, 2, (-9223372036854775808)]
+#guard (Int64Array.ofList []).data == #[]
+#guard [1, 2, (-9223372036854775808)].toInt64Array == Int64Array.mk #[1, 2, (-9223372036854775808)]
+#guard (Int64Array.ofList ((List.range 100000).map Nat.toInt64)).data ==
+  (Array.range 100000).map Nat.toInt64
+#guard rawElemSize (Int64Array.ofList [1, 2]) == (8 : UInt32)
+
+/-! More lemmas -/
+
+example (a b c : Int64Array) : a ++ b ++ c = a ++ (b ++ c) := Int64Array.append_assoc ..
+example (a : Int64Array) : a ++ ∅ = a := by simp
+example (a b : Int64Array) : (a ++ b).extract 0 a.size = a := by simp
+example (a : Int64Array) (i : Nat) (v : Int64) : (a.set! i v).size = a.size := by simp
+example (l : List Int64) : (Int64Array.ofList l).toList = l := by simp
+example (a : Int64Array) : Int64Array.ofList a.toList = a := by simp

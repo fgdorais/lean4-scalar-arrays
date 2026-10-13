@@ -344,6 +344,100 @@ example : (Int8Array.replicate 3 (-128))[1] = (-128) := by simp
 example (a b : Int8Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
 example (a : Int8Array) (i : Nat) (v : Int8) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
-example (a : Int8Array) : a.extract 0 a.size = a := by simp [Int8Array.ext_iff]
+example (a : Int8Array) : a.extract 0 a.size = a := by simp
 example (a : Int8Array) (v : Int8) : (a.push v).pop = a :=
   Int8Array.ext_getElem (by simp) (by simp_all)
+
+/-! Default bounds proofs -/
+
+#guard (Int8Array.mk #[1, 2, (-128)]).get 2 == (-128)
+#guard (Int8Array.mk #[1, 2, (-128)]).uget 2 == (-128)
+#guard ((Int8Array.mk #[1, 2, 3]).set 1 (-128)).data == #[1, (-128), 3]
+#guard ((Int8Array.mk #[1, 2, 3]).uset 1 (-128)).data == #[1, (-128), 3]
+
+/-! `set!` leaves the array unchanged when the index is out of bounds, like `ByteArray.set!`. -/
+
+#guard ((Int8Array.mk #[1, 2, 3]).set! 3 (-128)).data == #[1, 2, 3]
+#guard ((Int8Array.mk #[1, 2, 3]).set! (2 ^ 70) (-128)).data == #[1, 2, 3]
+
+/-! Folds over part of an array -/
+
+#guard (Int8Array.mk #[1, 2, 3, (-128)]).foldl (fun acc x => x :: acc) [] 1 3 == [3, 2]
+#guard (Int8Array.mk #[1, 2, 3, (-128)]).foldl (fun acc x => x :: acc) [] 2 == [(-128), 3]
+#guard (Int8Array.mk #[1, 2, 3, (-128)]).foldl (fun acc x => x :: acc) [] 1 100 == [(-128), 3, 2]
+#guard (Int8Array.mk #[1, 2, 3, (-128)]).foldl (fun acc x => x :: acc) [] 3 1 == []
+#guard (Int8Array.mk #[1, 2, 3, (-128)]).foldl (fun acc x => x :: acc) [] 9 12 == []
+#guard (Int8Array.mk #[1, 2, 3]).foldlM (m := Option)
+  (fun acc x => if x == 1 then none else some (x :: acc)) [] 1 == some [3, 2]
+
+/-! Copying slices -/
+
+#guard
+  let src := Int8Array.mk #[10, 11, 12, (-128)]
+  let dest := Int8Array.mk #[1, 2, 3, 4, 5]
+  (src.copySlice 1 dest 2 2).data == #[1, 2, 11, 12, 5] &&
+  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, (-128)] &&
+  (src.copySlice 0 dest 9 2).data == #[1, 2, 3, 4, 5, 10, 11] &&
+  (src.copySlice 9 dest 1 2).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 2 dest 0 10).data == #[12, (-128), 3, 4, 5] &&
+  (src.copySlice 0 dest 0 0).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 0 Int8Array.empty 0 4).data == #[10, 11, 12, (-128)] &&
+  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, (-128)]
+
+-- Copying from an array into itself.
+#guard
+  let a := Int8Array.mk #[1, 2, 3, (-128)]
+  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, (-128)]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toInt8
+  let a := Int8Array.mk xs
+  (a.copySlice 70000 (Int8Array.replicate 10 0) 5 10).data ==
+    Array.replicate 5 0 ++ xs.extract 70000 70010
+
+#guard rawElemSize ((Int8Array.mk #[1]).copySlice 0 Int8Array.empty 0 1) == (1 : UInt32)
+
+@[noinline] def Int8Array.copiesSliceInPlace (x : Int8) : Bool :=
+  let dest := (Int8Array.emptyWithCapacity 10).push x |>.push x |>.push x
+  let p := rawAddr dest
+  let dest := (Int8Array.mk #[(-128), (-128)]).copySlice 0 dest 1 2
+  rawAddr dest == p && dest.data == #[x, (-128), (-128)]
+
+@[noinline] def Int8Array.copySliceGrowth (x : Int8) : Bool :=
+  let dest := (Int8Array.mk #[x, x, x, x])
+  rawCapacity ((Int8Array.mk #[x]).copySlice 0 dest 4 1 (exact := false)) ≥ 8 &&
+    rawCapacity ((Int8Array.mk #[x]).copySlice 0 dest 4 1) == 5
+
+#guard Int8Array.copiesSliceInPlace 1
+#guard Int8Array.copySliceGrowth 1
+
+/-! Linearity markers -/
+
+#guard ((Int8Array.mk #[1, 2]).markLinear.push (-128)).data == #[1, 2, (-128)]
+#guard ((Int8Array.mk #[1]).propagateMark (Int8Array.mk #[2, (-128)])).data == #[2, (-128)]
+
+/-! Search -/
+
+#guard (Int8Array.mk #[1, 2, (-128), 2]).findIdx? (· == 2) == some 1
+#guard (Int8Array.mk #[1, 2, (-128), 2]).findIdx? (· == 2) 2 == some 3
+#guard (Int8Array.mk #[1, 2, (-128), 2]).findIdx? (· == 3) == none
+#guard (Int8Array.mk #[1, 2, (-128), 2]).findIdx? (· == 1) 9 == none
+#guard ((Int8Array.mk #[1, 2, (-128), 2]).findFinIdx? (· == (-128))).map (·.val) == some 2
+
+/-! Lists -/
+
+#guard (Int8Array.ofList [1, 2, (-128)]).data == #[1, 2, (-128)]
+#guard (Int8Array.ofList []).data == #[]
+#guard [1, 2, (-128)].toInt8Array == Int8Array.mk #[1, 2, (-128)]
+#guard (Int8Array.ofList ((List.range 100000).map Nat.toInt8)).data ==
+  (Array.range 100000).map Nat.toInt8
+#guard rawElemSize (Int8Array.ofList [1, 2]) == (1 : UInt32)
+
+/-! More lemmas -/
+
+example (a b c : Int8Array) : a ++ b ++ c = a ++ (b ++ c) := Int8Array.append_assoc ..
+example (a : Int8Array) : a ++ ∅ = a := by simp
+example (a b : Int8Array) : (a ++ b).extract 0 a.size = a := by simp
+example (a : Int8Array) (i : Nat) (v : Int8) : (a.set! i v).size = a.size := by simp
+example (l : List Int8) : (Int8Array.ofList l).toList = l := by simp
+example (a : Int8Array) : Int8Array.ofList a.toList = a := by simp

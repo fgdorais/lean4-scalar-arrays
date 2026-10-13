@@ -336,6 +336,100 @@ example : (Float32Array.replicate 3 (-1.5e38))[1] = (-1.5e38) := by simp
 example (a b : Float32Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
 example (a : Float32Array) (i : Nat) (v : Float32) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
-example (a : Float32Array) : a.extract 0 a.size = a := by simp [Float32Array.ext_iff]
+example (a : Float32Array) : a.extract 0 a.size = a := by simp
 example (a : Float32Array) (v : Float32) : (a.push v).pop = a :=
   Float32Array.ext_getElem (by simp) (by simp_all)
+
+/-! Default bounds proofs -/
+
+#guard (Float32Array.mk #[1, 2, (-1.5e38)]).get 2 == (-1.5e38)
+#guard (Float32Array.mk #[1, 2, (-1.5e38)]).uget 2 == (-1.5e38)
+#guard ((Float32Array.mk #[1, 2, 3]).set 1 (-1.5e38)).data == #[1, (-1.5e38), 3]
+#guard ((Float32Array.mk #[1, 2, 3]).uset 1 (-1.5e38)).data == #[1, (-1.5e38), 3]
+
+/-! `set!` leaves the array unchanged when the index is out of bounds, like `ByteArray.set!`. -/
+
+#guard ((Float32Array.mk #[1, 2, 3]).set! 3 (-1.5e38)).data == #[1, 2, 3]
+#guard ((Float32Array.mk #[1, 2, 3]).set! (2 ^ 70) (-1.5e38)).data == #[1, 2, 3]
+
+/-! Folds over part of an array -/
+
+#guard (Float32Array.mk #[1, 2, 3, (-1.5e38)]).foldl (fun acc x => x :: acc) [] 1 3 == [3, 2]
+#guard (Float32Array.mk #[1, 2, 3, (-1.5e38)]).foldl (fun acc x => x :: acc) [] 2 == [(-1.5e38), 3]
+#guard (Float32Array.mk #[1, 2, 3, (-1.5e38)]).foldl (fun acc x => x :: acc) [] 1 100 == [(-1.5e38), 3, 2]
+#guard (Float32Array.mk #[1, 2, 3, (-1.5e38)]).foldl (fun acc x => x :: acc) [] 3 1 == []
+#guard (Float32Array.mk #[1, 2, 3, (-1.5e38)]).foldl (fun acc x => x :: acc) [] 9 12 == []
+#guard (Float32Array.mk #[1, 2, 3]).foldlM (m := Option)
+  (fun acc x => if x == 1 then none else some (x :: acc)) [] 1 == some [3, 2]
+
+/-! Copying slices -/
+
+#guard
+  let src := Float32Array.mk #[10, 11, 12, (-1.5e38)]
+  let dest := Float32Array.mk #[1, 2, 3, 4, 5]
+  (src.copySlice 1 dest 2 2).data == #[1, 2, 11, 12, 5] &&
+  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, (-1.5e38)] &&
+  (src.copySlice 0 dest 9 2).data == #[1, 2, 3, 4, 5, 10, 11] &&
+  (src.copySlice 9 dest 1 2).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 2 dest 0 10).data == #[12, (-1.5e38), 3, 4, 5] &&
+  (src.copySlice 0 dest 0 0).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 0 Float32Array.empty 0 4).data == #[10, 11, 12, (-1.5e38)] &&
+  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, (-1.5e38)]
+
+-- Copying from an array into itself.
+#guard
+  let a := Float32Array.mk #[1, 2, 3, (-1.5e38)]
+  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, (-1.5e38)]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toFloat32
+  let a := Float32Array.mk xs
+  (a.copySlice 70000 (Float32Array.replicate 10 0) 5 10).data ==
+    Array.replicate 5 0 ++ xs.extract 70000 70010
+
+#guard rawElemSize ((Float32Array.mk #[1]).copySlice 0 Float32Array.empty 0 1) == (4 : UInt32)
+
+@[noinline] def Float32Array.copiesSliceInPlace (x : Float32) : Bool :=
+  let dest := (Float32Array.emptyWithCapacity 10).push x |>.push x |>.push x
+  let p := rawAddr dest
+  let dest := (Float32Array.mk #[(-1.5e38), (-1.5e38)]).copySlice 0 dest 1 2
+  rawAddr dest == p && dest.data == #[x, (-1.5e38), (-1.5e38)]
+
+@[noinline] def Float32Array.copySliceGrowth (x : Float32) : Bool :=
+  let dest := (Float32Array.mk #[x, x, x, x])
+  rawCapacity ((Float32Array.mk #[x]).copySlice 0 dest 4 1 (exact := false)) ≥ 8 &&
+    rawCapacity ((Float32Array.mk #[x]).copySlice 0 dest 4 1) == 5
+
+#guard Float32Array.copiesSliceInPlace 1
+#guard Float32Array.copySliceGrowth 1
+
+/-! Linearity markers -/
+
+#guard ((Float32Array.mk #[1, 2]).markLinear.push (-1.5e38)).data == #[1, 2, (-1.5e38)]
+#guard ((Float32Array.mk #[1]).propagateMark (Float32Array.mk #[2, (-1.5e38)])).data == #[2, (-1.5e38)]
+
+/-! Search -/
+
+#guard (Float32Array.mk #[1, 2, (-1.5e38), 2]).findIdx? (· == 2) == some 1
+#guard (Float32Array.mk #[1, 2, (-1.5e38), 2]).findIdx? (· == 2) 2 == some 3
+#guard (Float32Array.mk #[1, 2, (-1.5e38), 2]).findIdx? (· == 3) == none
+#guard (Float32Array.mk #[1, 2, (-1.5e38), 2]).findIdx? (· == 1) 9 == none
+#guard ((Float32Array.mk #[1, 2, (-1.5e38), 2]).findFinIdx? (· == (-1.5e38))).map (·.val) == some 2
+
+/-! Lists -/
+
+#guard (Float32Array.ofList [1, 2, (-1.5e38)]).data == #[1, 2, (-1.5e38)]
+#guard (Float32Array.ofList []).data == #[]
+#guard [1, 2, (-1.5e38)].toFloat32Array == Float32Array.mk #[1, 2, (-1.5e38)]
+#guard (Float32Array.ofList ((List.range 100000).map Nat.toFloat32)).data ==
+  (Array.range 100000).map Nat.toFloat32
+#guard rawElemSize (Float32Array.ofList [1, 2]) == (4 : UInt32)
+
+/-! More lemmas -/
+
+example (a b c : Float32Array) : a ++ b ++ c = a ++ (b ++ c) := Float32Array.append_assoc ..
+example (a : Float32Array) : a ++ ∅ = a := by simp
+example (a b : Float32Array) : (a ++ b).extract 0 a.size = a := by simp
+example (a : Float32Array) (i : Nat) (v : Float32) : (a.set! i v).size = a.size := by simp
+example (l : List Float32) : (Float32Array.ofList l).toList = l := by simp
+example (a : Float32Array) : Float32Array.ofList a.toList = a := by simp

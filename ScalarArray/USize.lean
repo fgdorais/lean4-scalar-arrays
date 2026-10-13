@@ -45,16 +45,19 @@ public def usize (a : @& USizeArray) : USize :=
   a.size.toUSize
 
 @[extern c inline "((size_t*)lean_sarray_cptr(#1))[#2]", expose]
-public def uget : (a : @& USizeArray) → (i : USize) → (i.toNat < a.size) → USize
+public def uget : (a : @& USizeArray) → (i : USize) → (h : i.toNat < a.size := by get_elem_tactic) →
+    USize
   | mk a, i, h => a.uget i h
 
-@[inline]
-private unsafe def getImpl (a : @& USizeArray) (i : @& Nat) (_ : i < a.size) : USize :=
-  a.uget i.toUSize lcProof
-
-@[implemented_by getImpl, expose]
-public def get : (a : @& USizeArray) → (i : @& Nat) → (i < a.size) → USize
+@[expose]
+public def get : (a : @& USizeArray) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → USize
   | mk a, i, h => a[i]
+
+@[inline]
+private unsafe def getImpl : type_of% @get :=
+  fun a i _ => a.uget i.toUSize lcProof
+
+attribute [implemented_by getImpl] get
 
 /-- Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in bounds. -/
 @[extern c inline "#1;\n((size_t*)lean_sarray_cptr(#1))[#2] = #3"]
@@ -103,21 +106,27 @@ public instance : EmptyCollection USizeArray := ⟨empty⟩
 
 public instance : Inhabited USizeArray := ⟨empty⟩
 
-private unsafe def usetImpl (a : USizeArray) (i : USize) (v : USize) (_ : i.toNat < a.size) :
-    USizeArray :=
-  let a : USizeArray := unsafeCast <| ScalarArray.ensureExclusive (unsafeCast a)
-  setUSizeUnsafe a i v
-
-@[implemented_by usetImpl, expose]
-public def uset : (a : USizeArray) → (i : USize) → (v : USize) → (i.toNat < a.size) → USizeArray
+@[expose]
+public def uset :
+    (a : USizeArray) → (i : USize) → (v : USize) → (h : i.toNat < a.size := by get_elem_tactic) →
+    USizeArray
   | mk a, i, v, h => mk (a.uset i v h)
 
-private unsafe def setImpl (a : USizeArray) (i : Nat) (v : USize) (h : i < a.size) : USizeArray :=
-  usetImpl a i.toUSize v (Nat.lt_of_le_of_lt (Nat.mod_le ..) h)
+private unsafe def usetImpl : type_of% @uset :=
+  fun a i v _ => setUSizeUnsafe (unsafeCast <| ScalarArray.ensureExclusive (unsafeCast a)) i v
 
-@[implemented_by setImpl, expose]
-public def set : (a : USizeArray) → (i : Nat) → (v : USize) → (i < a.size) → USizeArray
+attribute [implemented_by usetImpl] uset
+
+@[expose]
+public def set :
+    (a : USizeArray) → (i : Nat) → (v : USize) → (h : i < a.size := by get_elem_tactic) →
+    USizeArray
   | mk a, i, v, h => mk (a.set i v h)
+
+private unsafe def setImpl : type_of% @set :=
+  fun a i v _ => usetImpl a i.toUSize v lcProof
+
+attribute [implemented_by setImpl] set
 
 public def get! (a : @& USizeArray) (i : @& Nat) : USize :=
   if h : i < a.size then a.get i h else panic! "index out of bounds"
@@ -125,8 +134,13 @@ public def get! (a : @& USizeArray) (i : @& Nat) : USize :=
 public def getD (a : @& USizeArray) (i : @& Nat) (v₀ : USize) : USize :=
   if h : i < a.size then a.get i h else v₀
 
-public def set! (a : USizeArray) (i : Nat) (v : USize) : USizeArray :=
-  if h : i < a.size then a.set i v h else panic! "index out of bounds"
+private unsafe def setBangImpl (a : USizeArray) (i : Nat) (v : USize) : USizeArray :=
+  if h : i < a.size then setImpl a i v h else a
+
+/-- Replaces the element at index `i`. If `i` is out of bounds, the array is returned unmodified. -/
+@[implemented_by setBangImpl, expose]
+public def set! : USizeArray → Nat → USize → USizeArray
+  | mk a, i, v => mk (a.set! i v)
 
 public instance : GetElem USizeArray Nat USize fun a i => i < a.size where
   getElem a i h := a.get i h
@@ -153,13 +167,17 @@ public def push : USizeArray → USize → USizeArray
   | mk a, v => mk (a.push v)
 
 /--
-Copies the `n` elements of `b` starting at index `start` to the end of `a` in place. Only valid
-when `a` is exclusive, has room for `n` more elements, is not the same object as `b`, and
-`start + n ≤ b.size`.
+Copies the `n` elements of `src` starting at index `srcOff` into `dest` starting at index `destOff`,
+in place, and grows the size of `dest` to `destOff + n` if it is smaller. Only valid when `dest` is
+exclusive, has capacity for `destOff + n` elements, and is not the same object as `src`, and when
+`destOff ≤ dest.size` and `srcOff + n ≤ src.size`.
 -/
-@[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + lean_sarray_elem_size(#1) * lean_sarray_size(#1), lean_sarray_cptr(#2) + lean_sarray_elem_size(#2) * #3, lean_sarray_elem_size(#2) * #4);\nlean_sarray_set_size(#1, lean_sarray_size(#1) + #4)"]
-private unsafe def appendSliceUnsafe : USizeArray → @& USizeArray → USize → USize → USizeArray
-  | mk a, mk b, start, n => mk (a ++ b.extract start.toNat (start.toNat + n.toNat))
+@[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + lean_sarray_elem_size(#1) * #4, lean_sarray_cptr(#2) + lean_sarray_elem_size(#2) * #3, lean_sarray_elem_size(#2) * #5);\nif (lean_sarray_size(#1) < #4 + #5) lean_sarray_set_size(#1, #4 + #5)"]
+private unsafe def copySliceUnsafe :
+    USizeArray → @& USizeArray → (srcOff destOff n : USize) → USizeArray
+  | mk dest, mk src, srcOff, destOff, n =>
+    mk (dest.extract 0 destOff.toNat ++ src.extract srcOff.toNat (srcOff.toNat + n.toNat) ++
+      dest.extract (destOff.toNat + n.toNat) dest.size)
 
 private unsafe def appendImpl (a b : USizeArray) : USizeArray :=
   let s : ScalarArray := unsafeCast a
@@ -169,10 +187,12 @@ private unsafe def appendImpl (a b : USizeArray) : USizeArray :=
   if n < s.size then
     panic! "out of memory"
   else if n ≤ cap then
-    appendSliceUnsafe (unsafeCast s.ensureExclusive) b 0 m
+    let s := s.ensureExclusive
+    copySliceUnsafe (unsafeCast s) b 0 s.size m
   else
     let cap := if cap < cap + cap && n ≤ cap + cap then cap + cap else n
-    appendSliceUnsafe (unsafeCast (s.copyWithCapacity cap lcProof)) b 0 m
+    let s := s.copyWithCapacity cap lcProof
+    copySliceUnsafe (unsafeCast s) b 0 s.size m
 
 /-- Appends the elements of `b` to `a`, in place when `a` is not shared and has room. -/
 @[implemented_by appendImpl, expose]
@@ -180,6 +200,33 @@ public def append : USizeArray → USizeArray → USizeArray
   | mk a, mk b => mk (a ++ b)
 
 public instance : Append USizeArray := ⟨append⟩
+
+private unsafe def copySliceImpl (src : @& USizeArray) (srcOff : Nat) (dest : USizeArray)
+    (destOff len : Nat) (exact : Bool := true) : USizeArray :=
+  let srcOff := min srcOff src.size
+  let n := min len (src.size - srcOff)
+  let destOff := min destOff dest.size
+  let newSize := max dest.size (destOff + n)
+  let s : ScalarArray := unsafeCast dest
+  let cap := s.capacity.toNat
+  let s :=
+    if newSize ≤ cap then
+      s.ensureExclusive
+    else
+      let cap := if exact then newSize else max newSize (cap + cap)
+      s.copyWithCapacity (toUSizeChecked cap) lcProof
+  copySliceUnsafe (unsafeCast s) src srcOff.toUSize destOff.toUSize n.toUSize
+
+/--
+Copies the elements of `src` from index `srcOff` up to, but not including, `srcOff + len` into
+`dest` starting at index `destOff`, growing `dest` if necessary. The copy works in place when `dest`
+is not shared and has room. If `exact` is `false`, the capacity is doubled when `dest` grows.
+-/
+@[implemented_by copySliceImpl, expose]
+public def copySlice (src : @& USizeArray) (srcOff : Nat) (dest : USizeArray) (destOff len : Nat)
+    (exact : Bool := true) : USizeArray :=
+  mk (dest.data.extract 0 destOff ++ src.data.extract srcOff (srcOff + len) ++
+    dest.data.extract (destOff + min len (src.data.size - srcOff)) dest.data.size)
 
 /-! ## Removing elements -/
 
@@ -208,7 +255,7 @@ private unsafe def extractImpl (a : @& USizeArray) (start stop : Nat) : USizeArr
   if start < stop then
     let n := (stop - start).toUSize
     let r : USizeArray := unsafeCast <| ScalarArray.allocate (System.Platform.numBits / 8).toUInt32 0 n lcProof
-    appendSliceUnsafe r a start.toUSize n
+    copySliceUnsafe r a start.toUSize 0 n
   else
     empty
 
@@ -219,6 +266,46 @@ new array.
 @[implemented_by extractImpl, expose]
 public def extract : (a : @& USizeArray) → (start stop : Nat) → USizeArray
   | mk a, start, stop => mk (a.extract start stop)
+
+/-! ## Linearity -/
+
+/--
+Marks `a` as linear, a debugging aid: if a marked array is ever shared and then modified, the
+runtime reports it. Logically this is the identity.
+-/
+@[never_extract, extern "lean_sarray_mark_linear", expose]
+public def markLinear (a : USizeArray) : USizeArray := a
+
+/-- Returns `b`, marking it as linear if `a` is marked. Logically this is `b`. -/
+@[never_extract, extern "lean_sarray_propagate_mark", expose]
+public def propagateMark (a : @& USizeArray) (b : USizeArray) : USizeArray := b
+
+/-! ## Search -/
+
+/--
+The index of the first element at or after `start` that satisfies `p`, with a proof that it is in
+bounds.
+-/
+@[inline]
+public def findFinIdx? (a : USizeArray) (p : USize → Bool) (start := 0) : Option (Fin a.size) :=
+  let rec @[specialize] loop (i : Nat) :=
+    if h : i < a.size then
+      if p a[i] then some ⟨i, h⟩ else loop (i + 1)
+    else
+      none
+    termination_by a.size - i
+  loop start
+
+/-- The index of the first element at or after `start` that satisfies `p`. -/
+@[inline]
+public def findIdx? (a : USizeArray) (p : USize → Bool) (start := 0) : Option Nat :=
+  let rec @[specialize] loop (i : Nat) :=
+    if h : i < a.size then
+      if p a[i] then some i else loop (i + 1)
+    else
+      none
+    termination_by a.size - i
+  loop start
 
 /-! ## Building arrays -/
 
@@ -246,21 +333,37 @@ where
 public def ofFn {n : Nat} (f : Fin n → USize) : USizeArray :=
   mk (Array.ofFn f)
 
+private unsafe def ofListImpl (l : List USize) : USizeArray :=
+  loop l (emptyWithCapacity l.length)
+where
+  loop : List USize → USizeArray → USizeArray
+    | [], r => r
+    | x :: xs, r => loop xs (r.push x)
+
+/-- The array with the elements of `l`. -/
+@[implemented_by ofListImpl, expose]
+public def ofList (l : List USize) : USizeArray :=
+  mk l.toArray
+
 /-! ## Iteration -/
 
 @[specialize]
 private unsafe def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : β → USize → m β)
-    (init : β) (a : @& USizeArray) : m β :=
-  loop 0 init
+    (init : β) (a : @& USizeArray) (start := 0) (stop := a.size) : m β :=
+  let stop := min stop a.size
+  if start < stop then loop stop.toUSize start.toUSize init else pure init
 where
-  loop (i : USize) (b : β) : m β :=
-    if h : i.toNat < a.size then do loop (i + 1) (← f b (a.uget i h)) else pure b
+  loop (stop i : USize) (b : β) : m β :=
+    if i < stop then do loop stop (i + 1) (← f b (a.uget i lcProof)) else pure b
 
-/-- Folds a monadic function over the elements of `a`, from first to last. -/
+/--
+Folds a monadic function over the elements of `a` from index `start` up to, but not including,
+`stop`, from first to last.
+-/
 @[implemented_by foldlMImpl, expose]
 public def foldlM {β : Type v} {m : Type v → Type w} [Monad m] (f : β → USize → m β) (init : β)
-    (a : @& USizeArray) : m β :=
-  a.data.foldlM f init
+    (a : @& USizeArray) (start := 0) (stop := a.size) : m β :=
+  a.data.foldlM f init start stop
 
 @[specialize]
 private unsafe def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : USize → β → m β)
@@ -278,8 +381,9 @@ public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : USize →
   a.data.foldrM f init
 
 @[inline, expose]
-public def foldl {β : Type v} (f : β → USize → β) (init : β) (a : @& USizeArray) : β :=
-  Id.run <| a.foldlM (pure <| f · ·) init
+public def foldl {β : Type v} (f : β → USize → β) (init : β) (a : @& USizeArray) (start := 0)
+    (stop := a.size) : β :=
+  Id.run <| a.foldlM (pure <| f · ·) init start stop
 
 @[inline, expose]
 public def foldr {β : Type v} (f : USize → β → β) (init : β) (a : @& USizeArray) : β :=
@@ -503,6 +607,114 @@ public theorem foldr_eq_foldr_data {β : Type v} (f : USize → β → β) (init
 
 @[simp] public theorem toList_data (a : USizeArray) : a.data.toList = a.toList := rfl
 
+@[simp] public theorem emptyc_eq_empty : (∅ : USizeArray) = empty := rfl
+
+@[simp] public theorem emptyWithCapacity_eq_empty (c : Nat) : emptyWithCapacity c = empty := rfl
+
+public theorem size_eq_zero_iff {a : USizeArray} : a.size = 0 ↔ a = empty := by
+  simp [USizeArray.ext_iff, ← Array.size_eq_zero_iff]
+
+@[simp] public theorem data_set! (a : USizeArray) (i : Nat) (v : USize) :
+    (a.set! i v).data = a.data.set! i v := by
+  cases a; rfl
+
+@[simp] public theorem size_set! (a : USizeArray) (i : Nat) (v : USize) :
+    (a.set! i v).size = a.size := by
+  simp [-size_data, size_eq_data_size]
+
+public theorem getElem!_eq_getElem!_data (a : USizeArray) (i : Nat) : a[i]! = a.data[i]! := by
+  rcases a with ⟨a⟩
+  by_cases h : i < a.size <;> simp [getElem!_def, getElem?_def, h] <;> rfl
+
+@[simp] public theorem data_ofList (l : List USize) : (ofList l).data = l.toArray := rfl
+
+@[simp] public theorem size_ofList (l : List USize) : (ofList l).size = l.length := rfl
+
+@[simp] public theorem getElem_ofList (l : List USize) (i : Nat) (h) :
+    (ofList l)[i]'h = l[i]'(by simpa using h) := rfl
+
+@[simp] public theorem toList_ofList (l : List USize) : (ofList l).toList = l := rfl
+
+@[simp] public theorem ofList_toList (a : USizeArray) : ofList a.toList = a := by
+  simp [USizeArray.ext_iff, ← toList_data]
+
+@[simp] public theorem markLinear_eq (a : USizeArray) : a.markLinear = a := rfl
+
+@[simp] public theorem propagateMark_eq (a b : USizeArray) : a.propagateMark b = b := rfl
+
+@[simp] public theorem append_empty (a : USizeArray) : a ++ empty = a := by
+  simp [USizeArray.ext_iff]
+
+@[simp] public theorem empty_append (a : USizeArray) : empty ++ a = a := by
+  simp [USizeArray.ext_iff]
+
+public theorem append_assoc (a b c : USizeArray) : a ++ b ++ c = a ++ (b ++ c) := by
+  simp [USizeArray.ext_iff]
+
+@[simp] public theorem append_eq_empty_iff {a b : USizeArray} :
+    a ++ b = empty ↔ a = empty ∧ b = empty := by
+  simp only [USizeArray.ext_iff, data_append, data_empty, Array.append_eq_empty_iff]
+
+@[simp] public theorem append_right_inj (a : USizeArray) {b c : USizeArray} :
+    a ++ b = a ++ c ↔ b = c := by
+  simp only [USizeArray.ext_iff, data_append, Array.append_right_inj]
+
+@[simp] public theorem append_left_inj {a b : USizeArray} (c : USizeArray) :
+    a ++ c = b ++ c ↔ a = b := by
+  simp only [USizeArray.ext_iff, data_append, Array.append_left_inj]
+
+public theorem getElem_append_left {a b : USizeArray} {i : Nat} (h : i < a.size) :
+    (a ++ b)[i]'(by simp; omega) = a[i] := by
+  simp [h]
+
+public theorem getElem_append_right {a b : USizeArray} {i : Nat} (h : a.size ≤ i)
+    (h' : i < (a ++ b).size) : (a ++ b)[i] = b[i - a.size]'(by simp at h'; omega) := by
+  simp [Nat.not_lt.mpr h]
+
+@[simp] public theorem extract_same (a : USizeArray) (i : Nat) : a.extract i i = empty := by
+  simp [USizeArray.ext_iff]; omega
+
+@[simp] public theorem extract_zero_size (a : USizeArray) : a.extract 0 a.size = a := by
+  simp [USizeArray.ext_iff]
+
+@[simp] public theorem extract_eq_empty_iff {a : USizeArray} {i j : Nat} :
+    a.extract i j = empty ↔ min j a.size ≤ i := by
+  simp [USizeArray.ext_iff]
+
+public theorem extract_extract (a : USizeArray) (i j k l : Nat) :
+    (a.extract i j).extract k l = a.extract (i + k) (min (i + l) j) := by
+  simp [USizeArray.ext_iff]
+
+public theorem extract_append_extract (a : USizeArray) (i j k : Nat) :
+    a.extract i j ++ a.extract j k = a.extract (min i j) (max j k) := by
+  simp [USizeArray.ext_iff]
+
+@[simp] public theorem extract_append_eq_left (a b : USizeArray) : (a ++ b).extract 0 a.size = a := by
+  simp [USizeArray.ext_iff]
+
+@[simp] public theorem extract_append_eq_right (a b : USizeArray) :
+    (a ++ b).extract a.size (a.size + b.size) = b := by
+  simp [USizeArray.ext_iff, -size_data, size_eq_data_size]
+
+@[simp] public theorem data_copySlice (src : USizeArray) (srcOff : Nat) (dest : USizeArray)
+    (destOff len : Nat) (exact : Bool) :
+    (src.copySlice srcOff dest destOff len exact).data =
+      dest.data.extract 0 destOff ++ src.data.extract srcOff (srcOff + len) ++
+        dest.data.extract (destOff + min len (src.size - srcOff)) dest.size := by
+  simp [copySlice]
+
+public theorem copySlice_eq_append (src : USizeArray) (srcOff : Nat) (dest : USizeArray)
+    (destOff len : Nat) (exact : Bool) :
+    src.copySlice srcOff dest destOff len exact =
+      dest.extract 0 destOff ++ src.extract srcOff (srcOff + len) ++
+        dest.extract (destOff + min len (src.size - srcOff)) dest.size := by
+  simp [USizeArray.ext_iff]
+
 end USizeArray
 
 end ScalarArray
+
+/-- The array with the elements of `l`. -/
+@[inline, expose]
+public def List.toUSizeArray (l : List USize) : ScalarArray.USizeArray :=
+  ScalarArray.USizeArray.ofList l
