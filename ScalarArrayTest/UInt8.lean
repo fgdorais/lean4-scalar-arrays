@@ -142,3 +142,78 @@ open ScalarArray ScalarArrayTest
 -- Growth is geometric, so pushing is amortized constant time.
 #guard rawCapacity ((UInt8Array.mk #[1, 2, 3, 4]).push 5) ≥ 8
 
+
+/-! Appending -/
+
+#guard (UInt8Array.mk #[1, 2] ++ UInt8Array.mk #[3, 255]).data == #[1, 2, 3, 255]
+#guard ((UInt8Array.mk #[1, 2]).append (UInt8Array.mk #[3])).data == #[1, 2, 3]
+#guard (UInt8Array.mk #[1, 2] ++ UInt8Array.empty).data == #[1, 2]
+#guard (UInt8Array.empty ++ UInt8Array.mk #[1, 2]).data == #[1, 2]
+#guard (UInt8Array.empty ++ UInt8Array.empty).data == #[]
+#guard (UInt8Array.mk #[0, 0] ++ UInt8Array.mk #[255] ++ UInt8Array.mk #[0]).data ==
+  #[0, 0, 255, 0]
+
+-- Appending an array to itself, with and without room.
+#guard
+  let a := UInt8Array.mk #[1, 2, 3]
+  (a ++ a).data == #[1, 2, 3, 1, 2, 3]
+
+#guard
+  let a := (UInt8Array.emptyWithCapacity 10).push 1 |>.push 2
+  (a ++ a).data == #[1, 2, 1, 2]
+
+-- Appending to a shared array must leave the original unchanged, with and without room. The
+-- results are checked first so that they are computed while the original is still live.
+#guard
+  let a := (UInt8Array.emptyWithCapacity 10).push 1
+  let b := a ++ UInt8Array.mk #[2, 3]
+  let c := a ++ UInt8Array.mk #[4]
+  c.data == #[1, 4] && b.data == #[1, 2, 3] && a.data == #[1]
+
+#guard
+  let a := UInt8Array.mk #[1]
+  let b := a ++ UInt8Array.mk #[2, 3]
+  b.data == #[1, 2, 3] && a.data == #[1]
+
+-- The right operand is never modified.
+#guard
+  let b := UInt8Array.mk #[2, 3]
+  let c := UInt8Array.mk #[1] ++ b
+  c.data == #[1, 2, 3] && b.data == #[2, 3]
+
+-- Many appends to an exclusive array.
+#guard Id.run do
+  let mut a := UInt8Array.empty
+  let mut r : Array UInt8 := #[]
+  for i in [0:1000] do
+    a := a ++ UInt8Array.mk #[i.toUInt8, (i * 7).toUInt8, 255]
+    r := r ++ #[i.toUInt8, (i * 7).toUInt8, 255]
+  return a.data == r
+
+-- Large arrays on both sides.
+#guard
+  let xs := (Array.range 50000).map Nat.toUInt8
+  let ys := (Array.range 50000).map fun i => (i * 3).toUInt8
+  (UInt8Array.mk xs ++ UInt8Array.mk ys).data == xs ++ ys
+
+-- An exclusive array with room is appended to in place, and growth is geometric.
+-- The array is built from a parameter so that it isn't extracted as a shared closed term.
+@[noinline] def UInt8Array.appendsInPlace (x : UInt8) : Bool :=
+  let a := (UInt8Array.emptyWithCapacity 10).push x
+  let p := rawAddr a
+  let a := a ++ UInt8Array.mk #[2, 3]
+  rawAddr a == p && a.data == #[x, 2, 3]
+
+@[noinline] def UInt8Array.appendsToCopyWhenShared (x : UInt8) : Bool :=
+  let a := (UInt8Array.emptyWithCapacity 10).push x
+  let p := rawAddr a
+  let b := a ++ UInt8Array.mk #[2, 3]
+  rawAddr b != p && b.data == #[x, 2, 3] && a.data == #[x]
+
+#guard UInt8Array.appendsInPlace 1
+#guard UInt8Array.appendsToCopyWhenShared 1
+
+#guard rawCapacity ((UInt8Array.emptyWithCapacity 10).push 1 ++ UInt8Array.mk #[2, 3]) ≥ 10
+#guard rawCapacity (UInt8Array.mk #[1, 2, 3, 4] ++ UInt8Array.mk #[5]) ≥ 8
+#guard rawCapacity (UInt8Array.mk #[1] ++ UInt8Array.mk (Array.replicate 10 0)) ≥ 11
+#guard rawElemSize (UInt8Array.mk #[1] ++ UInt8Array.mk #[2]) == (1 : UInt32)

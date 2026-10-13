@@ -25,4 +25,10 @@ private unsafe def rawCapacityImpl (a : α) : Nat := (unsafeCast a : ScalarArray
 @[implemented_by rawCapacityImpl]
 public def rawCapacity (_ : α) : Nat := 0
 
+private unsafe def rawAddrImpl (a : @& α) : USize := ptrAddrUnsafe a
+
+/-- The address of the runtime object, to check whether an operation worked in place. -/
+@[implemented_by rawAddrImpl]
+public def rawAddr {α : Type _} (_ : @& α) : USize := 0
+
 end ScalarArrayTest
