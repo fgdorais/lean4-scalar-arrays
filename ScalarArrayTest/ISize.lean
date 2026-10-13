@@ -344,6 +344,100 @@ example : (ISizeArray.replicate 3 (-9223372036854775808))[1] = (-922337203685477
 example (a b : ISizeArray) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
 example (a : ISizeArray) (i : Nat) (v : ISize) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
-example (a : ISizeArray) : a.extract 0 a.size = a := by simp [ISizeArray.ext_iff]
+example (a : ISizeArray) : a.extract 0 a.size = a := by simp
 example (a : ISizeArray) (v : ISize) : (a.push v).pop = a :=
   ISizeArray.ext_getElem (by simp) (by simp_all)
+
+/-! Default bounds proofs -/
+
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808)]).get 2 == (-9223372036854775808)
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808)]).uget 2 == (-9223372036854775808)
+#guard ((ISizeArray.mk #[1, 2, 3]).set 1 (-9223372036854775808)).data == #[1, (-9223372036854775808), 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).uset 1 (-9223372036854775808)).data == #[1, (-9223372036854775808), 3]
+
+/-! `set!` leaves the array unchanged when the index is out of bounds, like `ByteArray.set!`. -/
+
+#guard ((ISizeArray.mk #[1, 2, 3]).set! 3 (-9223372036854775808)).data == #[1, 2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).set! (2 ^ 70) (-9223372036854775808)).data == #[1, 2, 3]
+
+/-! Folds over part of an array -/
+
+#guard (ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]).foldl (fun acc x => x :: acc) [] 1 3 == [3, 2]
+#guard (ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]).foldl (fun acc x => x :: acc) [] 2 == [(-9223372036854775808), 3]
+#guard (ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]).foldl (fun acc x => x :: acc) [] 1 100 == [(-9223372036854775808), 3, 2]
+#guard (ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]).foldl (fun acc x => x :: acc) [] 3 1 == []
+#guard (ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]).foldl (fun acc x => x :: acc) [] 9 12 == []
+#guard (ISizeArray.mk #[1, 2, 3]).foldlM (m := Option)
+  (fun acc x => if x == 1 then none else some (x :: acc)) [] 1 == some [3, 2]
+
+/-! Copying slices -/
+
+#guard
+  let src := ISizeArray.mk #[10, 11, 12, (-9223372036854775808)]
+  let dest := ISizeArray.mk #[1, 2, 3, 4, 5]
+  (src.copySlice 1 dest 2 2).data == #[1, 2, 11, 12, 5] &&
+  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, (-9223372036854775808)] &&
+  (src.copySlice 0 dest 9 2).data == #[1, 2, 3, 4, 5, 10, 11] &&
+  (src.copySlice 9 dest 1 2).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 2 dest 0 10).data == #[12, (-9223372036854775808), 3, 4, 5] &&
+  (src.copySlice 0 dest 0 0).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 0 ISizeArray.empty 0 4).data == #[10, 11, 12, (-9223372036854775808)] &&
+  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, (-9223372036854775808)]
+
+-- Copying from an array into itself.
+#guard
+  let a := ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]
+  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, (-9223372036854775808)]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toISize
+  let a := ISizeArray.mk xs
+  (a.copySlice 70000 (ISizeArray.replicate 10 0) 5 10).data ==
+    Array.replicate 5 0 ++ xs.extract 70000 70010
+
+#guard rawElemSize ((ISizeArray.mk #[1]).copySlice 0 ISizeArray.empty 0 1) == ((System.Platform.numBits / 8).toUInt32 : UInt32)
+
+@[noinline] def ISizeArray.copiesSliceInPlace (x : ISize) : Bool :=
+  let dest := (ISizeArray.emptyWithCapacity 10).push x |>.push x |>.push x
+  let p := rawAddr dest
+  let dest := (ISizeArray.mk #[(-9223372036854775808), (-9223372036854775808)]).copySlice 0 dest 1 2
+  rawAddr dest == p && dest.data == #[x, (-9223372036854775808), (-9223372036854775808)]
+
+@[noinline] def ISizeArray.copySliceGrowth (x : ISize) : Bool :=
+  let dest := (ISizeArray.mk #[x, x, x, x])
+  rawCapacity ((ISizeArray.mk #[x]).copySlice 0 dest 4 1 (exact := false)) ≥ 8 &&
+    rawCapacity ((ISizeArray.mk #[x]).copySlice 0 dest 4 1) == 5
+
+#guard ISizeArray.copiesSliceInPlace 1
+#guard ISizeArray.copySliceGrowth 1
+
+/-! Linearity markers -/
+
+#guard ((ISizeArray.mk #[1, 2]).markLinear.push (-9223372036854775808)).data == #[1, 2, (-9223372036854775808)]
+#guard ((ISizeArray.mk #[1]).propagateMark (ISizeArray.mk #[2, (-9223372036854775808)])).data == #[2, (-9223372036854775808)]
+
+/-! Search -/
+
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808), 2]).findIdx? (· == 2) == some 1
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808), 2]).findIdx? (· == 2) 2 == some 3
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808), 2]).findIdx? (· == 3) == none
+#guard (ISizeArray.mk #[1, 2, (-9223372036854775808), 2]).findIdx? (· == 1) 9 == none
+#guard ((ISizeArray.mk #[1, 2, (-9223372036854775808), 2]).findFinIdx? (· == (-9223372036854775808))).map (·.val) == some 2
+
+/-! Lists -/
+
+#guard (ISizeArray.ofList [1, 2, (-9223372036854775808)]).data == #[1, 2, (-9223372036854775808)]
+#guard (ISizeArray.ofList []).data == #[]
+#guard [1, 2, (-9223372036854775808)].toISizeArray == ISizeArray.mk #[1, 2, (-9223372036854775808)]
+#guard (ISizeArray.ofList ((List.range 100000).map Nat.toISize)).data ==
+  (Array.range 100000).map Nat.toISize
+#guard rawElemSize (ISizeArray.ofList [1, 2]) == ((System.Platform.numBits / 8).toUInt32 : UInt32)
+
+/-! More lemmas -/
+
+example (a b c : ISizeArray) : a ++ b ++ c = a ++ (b ++ c) := ISizeArray.append_assoc ..
+example (a : ISizeArray) : a ++ ∅ = a := by simp
+example (a b : ISizeArray) : (a ++ b).extract 0 a.size = a := by simp
+example (a : ISizeArray) (i : Nat) (v : ISize) : (a.set! i v).size = a.size := by simp
+example (l : List ISize) : (ISizeArray.ofList l).toList = l := by simp
+example (a : ISizeArray) : ISizeArray.ofList a.toList = a := by simp

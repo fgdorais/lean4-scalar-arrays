@@ -45,16 +45,19 @@ public def usize (a : @& UInt64Array) : USize :=
   a.size.toUSize
 
 @[extern c inline "((uint64_t*)lean_sarray_cptr(#1))[#2]", expose]
-public def uget : (a : @& UInt64Array) → (i : USize) → (i.toNat < a.size) → UInt64
+public def uget : (a : @& UInt64Array) → (i : USize) → (h : i.toNat < a.size := by get_elem_tactic) →
+    UInt64
   | mk a, i, h => a.uget i h
 
-@[inline]
-private unsafe def getImpl (a : @& UInt64Array) (i : @& Nat) (_ : i < a.size) : UInt64 :=
-  a.uget i.toUSize lcProof
-
-@[implemented_by getImpl, expose]
-public def get : (a : @& UInt64Array) → (i : @& Nat) → (i < a.size) → UInt64
+@[expose]
+public def get : (a : @& UInt64Array) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → UInt64
   | mk a, i, h => a[i]
+
+@[inline]
+private unsafe def getImpl : type_of% @get :=
+  fun a i _ => a.uget i.toUSize lcProof
+
+attribute [implemented_by getImpl] get
 
 /-- Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in bounds. -/
 @[extern c inline "#1;\n((uint64_t*)lean_sarray_cptr(#1))[#2] = #3"]
@@ -103,21 +106,27 @@ public instance : EmptyCollection UInt64Array := ⟨empty⟩
 
 public instance : Inhabited UInt64Array := ⟨empty⟩
 
-private unsafe def usetImpl (a : UInt64Array) (i : USize) (v : UInt64) (_ : i.toNat < a.size) :
-    UInt64Array :=
-  let a : UInt64Array := unsafeCast <| ScalarArray.ensureExclusive (unsafeCast a)
-  setUInt64Unsafe a i v
-
-@[implemented_by usetImpl, expose]
-public def uset : (a : UInt64Array) → (i : USize) → (v : UInt64) → (i.toNat < a.size) → UInt64Array
+@[expose]
+public def uset :
+    (a : UInt64Array) → (i : USize) → (v : UInt64) → (h : i.toNat < a.size := by get_elem_tactic) →
+    UInt64Array
   | mk a, i, v, h => mk (a.uset i v h)
 
-private unsafe def setImpl (a : UInt64Array) (i : Nat) (v : UInt64) (h : i < a.size) : UInt64Array :=
-  usetImpl a i.toUSize v (Nat.lt_of_le_of_lt (Nat.mod_le ..) h)
+private unsafe def usetImpl : type_of% @uset :=
+  fun a i v _ => setUInt64Unsafe (unsafeCast <| ScalarArray.ensureExclusive (unsafeCast a)) i v
 
-@[implemented_by setImpl, expose]
-public def set : (a : UInt64Array) → (i : Nat) → (v : UInt64) → (i < a.size) → UInt64Array
+attribute [implemented_by usetImpl] uset
+
+@[expose]
+public def set :
+    (a : UInt64Array) → (i : Nat) → (v : UInt64) → (h : i < a.size := by get_elem_tactic) →
+    UInt64Array
   | mk a, i, v, h => mk (a.set i v h)
+
+private unsafe def setImpl : type_of% @set :=
+  fun a i v _ => usetImpl a i.toUSize v lcProof
+
+attribute [implemented_by setImpl] set
 
 public def get! (a : @& UInt64Array) (i : @& Nat) : UInt64 :=
   if h : i < a.size then a.get i h else panic! "index out of bounds"
@@ -125,8 +134,13 @@ public def get! (a : @& UInt64Array) (i : @& Nat) : UInt64 :=
 public def getD (a : @& UInt64Array) (i : @& Nat) (v₀ : UInt64) : UInt64 :=
   if h : i < a.size then a.get i h else v₀
 
-public def set! (a : UInt64Array) (i : Nat) (v : UInt64) : UInt64Array :=
-  if h : i < a.size then a.set i v h else panic! "index out of bounds"
+private unsafe def setBangImpl (a : UInt64Array) (i : Nat) (v : UInt64) : UInt64Array :=
+  if h : i < a.size then setImpl a i v h else a
+
+/-- Replaces the element at index `i`. If `i` is out of bounds, the array is returned unmodified. -/
+@[implemented_by setBangImpl, expose]
+public def set! : UInt64Array → Nat → UInt64 → UInt64Array
+  | mk a, i, v => mk (a.set! i v)
 
 public instance : GetElem UInt64Array Nat UInt64 fun a i => i < a.size where
   getElem a i h := a.get i h
@@ -153,13 +167,27 @@ public def push : UInt64Array → UInt64 → UInt64Array
   | mk a, v => mk (a.push v)
 
 /--
-Copies the `n` elements of `b` starting at index `start` to the end of `a` in place. Only valid
-when `a` is exclusive, has room for `n` more elements, is not the same object as `b`, and
-`start + n ≤ b.size`.
+Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting at
+byte `destOff`. Only valid when `dest` is exclusive and both ranges are within the capacities.
 -/
-@[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + lean_sarray_elem_size(#1) * lean_sarray_size(#1), lean_sarray_cptr(#2) + lean_sarray_elem_size(#2) * #3, lean_sarray_elem_size(#2) * #4);\nlean_sarray_set_size(#1, lean_sarray_size(#1) + #4)"]
-private unsafe def appendSliceUnsafe : UInt64Array → @& UInt64Array → USize → USize → UInt64Array
-  | mk a, mk b, start, n => mk (a ++ b.extract start.toNat (start.toNat + n.toNat))
+-- TODO: core has no runtime function that copies a slice of a scalar array with any element size;
+-- `lean_byte_array_copy_slice` only works for bytes. Replace this once core has one.
+@[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + #4, lean_sarray_cptr(#2) + #3, #5)"]
+private unsafe def memcpyUnsafe : UInt64Array → @& UInt64Array → (srcOff destOff n : USize) → UInt64Array
+  | dest, _, _, _, _ => dest
+
+/--
+Copies the `n` elements of `src` starting at index `srcOff` into `dest` starting at index `destOff`,
+in place, and grows the size of `dest` to `destOff + n` if it is smaller. Only valid when `dest` is
+exclusive, has capacity for `destOff + n` elements, and is not the same object as `src`, and when
+`destOff ≤ dest.size` and `srcOff + n ≤ src.size`.
+-/
+@[inline]
+private unsafe def copySliceUnsafe (dest : UInt64Array) (src : @& UInt64Array) (srcOff destOff n : USize) :
+    UInt64Array :=
+  let esz := (unsafeCast src : ScalarArray).elemSize.toUSize
+  let d : ScalarArray := unsafeCast (memcpyUnsafe dest src (srcOff * esz) (destOff * esz) (n * esz))
+  unsafeCast (d.resizeUnsafe (max d.size (destOff + n)) lcProof lcProof)
 
 private unsafe def appendImpl (a b : UInt64Array) : UInt64Array :=
   let s : ScalarArray := unsafeCast a
@@ -169,10 +197,12 @@ private unsafe def appendImpl (a b : UInt64Array) : UInt64Array :=
   if n < s.size then
     panic! "out of memory"
   else if n ≤ cap then
-    appendSliceUnsafe (unsafeCast s.ensureExclusive) b 0 m
+    let s := s.ensureExclusive
+    copySliceUnsafe (unsafeCast s) b 0 s.size m
   else
     let cap := if cap < cap + cap && n ≤ cap + cap then cap + cap else n
-    appendSliceUnsafe (unsafeCast (s.copyWithCapacity cap lcProof)) b 0 m
+    let s := s.copyWithCapacity cap lcProof
+    copySliceUnsafe (unsafeCast s) b 0 s.size m
 
 /-- Appends the elements of `b` to `a`, in place when `a` is not shared and has room. -/
 @[implemented_by appendImpl, expose]
@@ -180,6 +210,33 @@ public def append : UInt64Array → UInt64Array → UInt64Array
   | mk a, mk b => mk (a ++ b)
 
 public instance : Append UInt64Array := ⟨append⟩
+
+private unsafe def copySliceImpl (src : @& UInt64Array) (srcOff : Nat) (dest : UInt64Array)
+    (destOff len : Nat) (exact : Bool := true) : UInt64Array :=
+  let srcOff := min srcOff src.size
+  let n := min len (src.size - srcOff)
+  let destOff := min destOff dest.size
+  let newSize := max dest.size (destOff + n)
+  let s : ScalarArray := unsafeCast dest
+  let cap := s.capacity.toNat
+  let s :=
+    if newSize ≤ cap then
+      s.ensureExclusive
+    else
+      let cap := if exact then newSize else max newSize (cap + cap)
+      s.copyWithCapacity (toUSizeChecked cap) lcProof
+  copySliceUnsafe (unsafeCast s) src srcOff.toUSize destOff.toUSize n.toUSize
+
+/--
+Copies the elements of `src` from index `srcOff` up to, but not including, `srcOff + len` into
+`dest` starting at index `destOff`, growing `dest` if necessary. The copy works in place when `dest`
+is not shared and has room. If `exact` is `false`, the capacity is doubled when `dest` grows.
+-/
+@[implemented_by copySliceImpl, expose]
+public def copySlice (src : @& UInt64Array) (srcOff : Nat) (dest : UInt64Array) (destOff len : Nat)
+    (exact : Bool := true) : UInt64Array :=
+  mk (dest.data.extract 0 destOff ++ src.data.extract srcOff (srcOff + len) ++
+    dest.data.extract (destOff + min len (src.data.size - srcOff)) dest.data.size)
 
 /-! ## Removing elements -/
 
@@ -208,7 +265,7 @@ private unsafe def extractImpl (a : @& UInt64Array) (start stop : Nat) : UInt64A
   if start < stop then
     let n := (stop - start).toUSize
     let r : UInt64Array := unsafeCast <| ScalarArray.allocate 8 0 n lcProof
-    appendSliceUnsafe r a start.toUSize n
+    copySliceUnsafe r a start.toUSize 0 n
   else
     empty
 
@@ -219,6 +276,46 @@ new array.
 @[implemented_by extractImpl, expose]
 public def extract : (a : @& UInt64Array) → (start stop : Nat) → UInt64Array
   | mk a, start, stop => mk (a.extract start stop)
+
+/-! ## Linearity -/
+
+/--
+Marks `a` as linear, a debugging aid: if a marked array is ever shared and then modified, the
+runtime reports it. Logically this is the identity.
+-/
+@[never_extract, extern "lean_sarray_mark_linear", expose]
+public def markLinear (a : UInt64Array) : UInt64Array := a
+
+/-- Returns `b`, marking it as linear if `a` is marked. Logically this is `b`. -/
+@[never_extract, extern "lean_sarray_propagate_mark", expose]
+public def propagateMark (a : @& UInt64Array) (b : UInt64Array) : UInt64Array := b
+
+/-! ## Search -/
+
+/--
+The index of the first element at or after `start` that satisfies `p`, with a proof that it is in
+bounds.
+-/
+@[inline]
+public def findFinIdx? (a : UInt64Array) (p : UInt64 → Bool) (start := 0) : Option (Fin a.size) :=
+  let rec @[specialize] loop (i : Nat) :=
+    if h : i < a.size then
+      if p a[i] then some ⟨i, h⟩ else loop (i + 1)
+    else
+      none
+    termination_by a.size - i
+  loop start
+
+/-- The index of the first element at or after `start` that satisfies `p`. -/
+@[inline]
+public def findIdx? (a : UInt64Array) (p : UInt64 → Bool) (start := 0) : Option Nat :=
+  let rec @[specialize] loop (i : Nat) :=
+    if h : i < a.size then
+      if p a[i] then some i else loop (i + 1)
+    else
+      none
+    termination_by a.size - i
+  loop start
 
 /-! ## Building arrays -/
 
@@ -246,21 +343,37 @@ where
 public def ofFn {n : Nat} (f : Fin n → UInt64) : UInt64Array :=
   mk (Array.ofFn f)
 
+private unsafe def ofListImpl (l : List UInt64) : UInt64Array :=
+  loop l (emptyWithCapacity l.length)
+where
+  loop : List UInt64 → UInt64Array → UInt64Array
+    | [], r => r
+    | x :: xs, r => loop xs (r.push x)
+
+/-- The array with the elements of `l`. -/
+@[implemented_by ofListImpl, expose]
+public def ofList (l : List UInt64) : UInt64Array :=
+  mk l.toArray
+
 /-! ## Iteration -/
 
 @[specialize]
 private unsafe def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : β → UInt64 → m β)
-    (init : β) (a : @& UInt64Array) : m β :=
-  loop 0 init
+    (init : β) (a : @& UInt64Array) (start := 0) (stop := a.size) : m β :=
+  let stop := min stop a.size
+  if start < stop then loop stop.toUSize start.toUSize init else pure init
 where
-  loop (i : USize) (b : β) : m β :=
-    if h : i.toNat < a.size then do loop (i + 1) (← f b (a.uget i h)) else pure b
+  loop (stop i : USize) (b : β) : m β :=
+    if i < stop then do loop stop (i + 1) (← f b (a.uget i lcProof)) else pure b
 
-/-- Folds a monadic function over the elements of `a`, from first to last. -/
+/--
+Folds a monadic function over the elements of `a` from index `start` up to, but not including,
+`stop`, from first to last.
+-/
 @[implemented_by foldlMImpl, expose]
 public def foldlM {β : Type v} {m : Type v → Type w} [Monad m] (f : β → UInt64 → m β) (init : β)
-    (a : @& UInt64Array) : m β :=
-  a.data.foldlM f init
+    (a : @& UInt64Array) (start := 0) (stop := a.size) : m β :=
+  a.data.foldlM f init start stop
 
 @[specialize]
 private unsafe def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : UInt64 → β → m β)
@@ -278,8 +391,9 @@ public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : UInt64 �
   a.data.foldrM f init
 
 @[inline, expose]
-public def foldl {β : Type v} (f : β → UInt64 → β) (init : β) (a : @& UInt64Array) : β :=
-  Id.run <| a.foldlM (pure <| f · ·) init
+public def foldl {β : Type v} (f : β → UInt64 → β) (init : β) (a : @& UInt64Array) (start := 0)
+    (stop := a.size) : β :=
+  Id.run <| a.foldlM (pure <| f · ·) init start stop
 
 @[inline, expose]
 public def foldr {β : Type v} (f : UInt64 → β → β) (init : β) (a : @& UInt64Array) : β :=
@@ -503,6 +617,114 @@ public theorem foldr_eq_foldr_data {β : Type v} (f : UInt64 → β → β) (ini
 
 @[simp] public theorem toList_data (a : UInt64Array) : a.data.toList = a.toList := rfl
 
+@[simp] public theorem emptyc_eq_empty : (∅ : UInt64Array) = empty := rfl
+
+@[simp] public theorem emptyWithCapacity_eq_empty (c : Nat) : emptyWithCapacity c = empty := rfl
+
+public theorem size_eq_zero_iff {a : UInt64Array} : a.size = 0 ↔ a = empty := by
+  simp [UInt64Array.ext_iff, ← Array.size_eq_zero_iff]
+
+@[simp] public theorem data_set! (a : UInt64Array) (i : Nat) (v : UInt64) :
+    (a.set! i v).data = a.data.set! i v := by
+  cases a; rfl
+
+@[simp] public theorem size_set! (a : UInt64Array) (i : Nat) (v : UInt64) :
+    (a.set! i v).size = a.size := by
+  simp [-size_data, size_eq_data_size]
+
+public theorem getElem!_eq_getElem!_data (a : UInt64Array) (i : Nat) : a[i]! = a.data[i]! := by
+  rcases a with ⟨a⟩
+  by_cases h : i < a.size <;> simp [getElem!_def, getElem?_def, h] <;> rfl
+
+@[simp] public theorem data_ofList (l : List UInt64) : (ofList l).data = l.toArray := rfl
+
+@[simp] public theorem size_ofList (l : List UInt64) : (ofList l).size = l.length := rfl
+
+@[simp] public theorem getElem_ofList (l : List UInt64) (i : Nat) (h) :
+    (ofList l)[i]'h = l[i]'(by simpa using h) := rfl
+
+@[simp] public theorem toList_ofList (l : List UInt64) : (ofList l).toList = l := rfl
+
+@[simp] public theorem ofList_toList (a : UInt64Array) : ofList a.toList = a := by
+  simp [UInt64Array.ext_iff, ← toList_data]
+
+@[simp] public theorem markLinear_eq (a : UInt64Array) : a.markLinear = a := rfl
+
+@[simp] public theorem propagateMark_eq (a b : UInt64Array) : a.propagateMark b = b := rfl
+
+@[simp] public theorem append_empty (a : UInt64Array) : a ++ empty = a := by
+  simp [UInt64Array.ext_iff]
+
+@[simp] public theorem empty_append (a : UInt64Array) : empty ++ a = a := by
+  simp [UInt64Array.ext_iff]
+
+public theorem append_assoc (a b c : UInt64Array) : a ++ b ++ c = a ++ (b ++ c) := by
+  simp [UInt64Array.ext_iff]
+
+@[simp] public theorem append_eq_empty_iff {a b : UInt64Array} :
+    a ++ b = empty ↔ a = empty ∧ b = empty := by
+  simp only [UInt64Array.ext_iff, data_append, data_empty, Array.append_eq_empty_iff]
+
+@[simp] public theorem append_right_inj (a : UInt64Array) {b c : UInt64Array} :
+    a ++ b = a ++ c ↔ b = c := by
+  simp only [UInt64Array.ext_iff, data_append, Array.append_right_inj]
+
+@[simp] public theorem append_left_inj {a b : UInt64Array} (c : UInt64Array) :
+    a ++ c = b ++ c ↔ a = b := by
+  simp only [UInt64Array.ext_iff, data_append, Array.append_left_inj]
+
+public theorem getElem_append_left {a b : UInt64Array} {i : Nat} (h : i < a.size) :
+    (a ++ b)[i]'(by simp; omega) = a[i] := by
+  simp [h]
+
+public theorem getElem_append_right {a b : UInt64Array} {i : Nat} (h : a.size ≤ i)
+    (h' : i < (a ++ b).size) : (a ++ b)[i] = b[i - a.size]'(by simp at h'; omega) := by
+  simp [Nat.not_lt.mpr h]
+
+@[simp] public theorem extract_same (a : UInt64Array) (i : Nat) : a.extract i i = empty := by
+  simp [UInt64Array.ext_iff]; omega
+
+@[simp] public theorem extract_zero_size (a : UInt64Array) : a.extract 0 a.size = a := by
+  simp [UInt64Array.ext_iff]
+
+@[simp] public theorem extract_eq_empty_iff {a : UInt64Array} {i j : Nat} :
+    a.extract i j = empty ↔ min j a.size ≤ i := by
+  simp [UInt64Array.ext_iff]
+
+public theorem extract_extract (a : UInt64Array) (i j k l : Nat) :
+    (a.extract i j).extract k l = a.extract (i + k) (min (i + l) j) := by
+  simp [UInt64Array.ext_iff]
+
+public theorem extract_append_extract (a : UInt64Array) (i j k : Nat) :
+    a.extract i j ++ a.extract j k = a.extract (min i j) (max j k) := by
+  simp [UInt64Array.ext_iff]
+
+@[simp] public theorem extract_append_eq_left (a b : UInt64Array) : (a ++ b).extract 0 a.size = a := by
+  simp [UInt64Array.ext_iff]
+
+@[simp] public theorem extract_append_eq_right (a b : UInt64Array) :
+    (a ++ b).extract a.size (a.size + b.size) = b := by
+  simp [UInt64Array.ext_iff, -size_data, size_eq_data_size]
+
+@[simp] public theorem data_copySlice (src : UInt64Array) (srcOff : Nat) (dest : UInt64Array)
+    (destOff len : Nat) (exact : Bool) :
+    (src.copySlice srcOff dest destOff len exact).data =
+      dest.data.extract 0 destOff ++ src.data.extract srcOff (srcOff + len) ++
+        dest.data.extract (destOff + min len (src.size - srcOff)) dest.size := by
+  simp [copySlice]
+
+public theorem copySlice_eq_append (src : UInt64Array) (srcOff : Nat) (dest : UInt64Array)
+    (destOff len : Nat) (exact : Bool) :
+    src.copySlice srcOff dest destOff len exact =
+      dest.extract 0 destOff ++ src.extract srcOff (srcOff + len) ++
+        dest.extract (destOff + min len (src.size - srcOff)) dest.size := by
+  simp [UInt64Array.ext_iff]
+
 end UInt64Array
 
 end ScalarArray
+
+/-- The array with the elements of `l`. -/
+@[inline, expose]
+public def List.toUInt64Array (l : List UInt64) : ScalarArray.UInt64Array :=
+  ScalarArray.UInt64Array.ofList l

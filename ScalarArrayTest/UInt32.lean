@@ -344,6 +344,100 @@ example : (UInt32Array.replicate 3 4294967295)[1] = 4294967295 := by simp
 example (a b : UInt32Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
 example (a : UInt32Array) (i : Nat) (v : UInt32) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
-example (a : UInt32Array) : a.extract 0 a.size = a := by simp [UInt32Array.ext_iff]
+example (a : UInt32Array) : a.extract 0 a.size = a := by simp
 example (a : UInt32Array) (v : UInt32) : (a.push v).pop = a :=
   UInt32Array.ext_getElem (by simp) (by simp_all)
+
+/-! Default bounds proofs -/
+
+#guard (UInt32Array.mk #[1, 2, 4294967295]).get 2 == 4294967295
+#guard (UInt32Array.mk #[1, 2, 4294967295]).uget 2 == 4294967295
+#guard ((UInt32Array.mk #[1, 2, 3]).set 1 4294967295).data == #[1, 4294967295, 3]
+#guard ((UInt32Array.mk #[1, 2, 3]).uset 1 4294967295).data == #[1, 4294967295, 3]
+
+/-! `set!` leaves the array unchanged when the index is out of bounds, like `ByteArray.set!`. -/
+
+#guard ((UInt32Array.mk #[1, 2, 3]).set! 3 4294967295).data == #[1, 2, 3]
+#guard ((UInt32Array.mk #[1, 2, 3]).set! (2 ^ 70) 4294967295).data == #[1, 2, 3]
+
+/-! Folds over part of an array -/
+
+#guard (UInt32Array.mk #[1, 2, 3, 4294967295]).foldl (fun acc x => x :: acc) [] 1 3 == [3, 2]
+#guard (UInt32Array.mk #[1, 2, 3, 4294967295]).foldl (fun acc x => x :: acc) [] 2 == [4294967295, 3]
+#guard (UInt32Array.mk #[1, 2, 3, 4294967295]).foldl (fun acc x => x :: acc) [] 1 100 == [4294967295, 3, 2]
+#guard (UInt32Array.mk #[1, 2, 3, 4294967295]).foldl (fun acc x => x :: acc) [] 3 1 == []
+#guard (UInt32Array.mk #[1, 2, 3, 4294967295]).foldl (fun acc x => x :: acc) [] 9 12 == []
+#guard (UInt32Array.mk #[1, 2, 3]).foldlM (m := Option)
+  (fun acc x => if x == 1 then none else some (x :: acc)) [] 1 == some [3, 2]
+
+/-! Copying slices -/
+
+#guard
+  let src := UInt32Array.mk #[10, 11, 12, 4294967295]
+  let dest := UInt32Array.mk #[1, 2, 3, 4, 5]
+  (src.copySlice 1 dest 2 2).data == #[1, 2, 11, 12, 5] &&
+  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, 4294967295] &&
+  (src.copySlice 0 dest 9 2).data == #[1, 2, 3, 4, 5, 10, 11] &&
+  (src.copySlice 9 dest 1 2).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 2 dest 0 10).data == #[12, 4294967295, 3, 4, 5] &&
+  (src.copySlice 0 dest 0 0).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 0 UInt32Array.empty 0 4).data == #[10, 11, 12, 4294967295] &&
+  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, 4294967295]
+
+-- Copying from an array into itself.
+#guard
+  let a := UInt32Array.mk #[1, 2, 3, 4294967295]
+  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, 4294967295]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toUInt32
+  let a := UInt32Array.mk xs
+  (a.copySlice 70000 (UInt32Array.replicate 10 0) 5 10).data ==
+    Array.replicate 5 0 ++ xs.extract 70000 70010
+
+#guard rawElemSize ((UInt32Array.mk #[1]).copySlice 0 UInt32Array.empty 0 1) == (4 : UInt32)
+
+@[noinline] def UInt32Array.copiesSliceInPlace (x : UInt32) : Bool :=
+  let dest := (UInt32Array.emptyWithCapacity 10).push x |>.push x |>.push x
+  let p := rawAddr dest
+  let dest := (UInt32Array.mk #[4294967295, 4294967295]).copySlice 0 dest 1 2
+  rawAddr dest == p && dest.data == #[x, 4294967295, 4294967295]
+
+@[noinline] def UInt32Array.copySliceGrowth (x : UInt32) : Bool :=
+  let dest := (UInt32Array.mk #[x, x, x, x])
+  rawCapacity ((UInt32Array.mk #[x]).copySlice 0 dest 4 1 (exact := false)) ≥ 8 &&
+    rawCapacity ((UInt32Array.mk #[x]).copySlice 0 dest 4 1) == 5
+
+#guard UInt32Array.copiesSliceInPlace 1
+#guard UInt32Array.copySliceGrowth 1
+
+/-! Linearity markers -/
+
+#guard ((UInt32Array.mk #[1, 2]).markLinear.push 4294967295).data == #[1, 2, 4294967295]
+#guard ((UInt32Array.mk #[1]).propagateMark (UInt32Array.mk #[2, 4294967295])).data == #[2, 4294967295]
+
+/-! Search -/
+
+#guard (UInt32Array.mk #[1, 2, 4294967295, 2]).findIdx? (· == 2) == some 1
+#guard (UInt32Array.mk #[1, 2, 4294967295, 2]).findIdx? (· == 2) 2 == some 3
+#guard (UInt32Array.mk #[1, 2, 4294967295, 2]).findIdx? (· == 3) == none
+#guard (UInt32Array.mk #[1, 2, 4294967295, 2]).findIdx? (· == 1) 9 == none
+#guard ((UInt32Array.mk #[1, 2, 4294967295, 2]).findFinIdx? (· == 4294967295)).map (·.val) == some 2
+
+/-! Lists -/
+
+#guard (UInt32Array.ofList [1, 2, 4294967295]).data == #[1, 2, 4294967295]
+#guard (UInt32Array.ofList []).data == #[]
+#guard [1, 2, 4294967295].toUInt32Array == UInt32Array.mk #[1, 2, 4294967295]
+#guard (UInt32Array.ofList ((List.range 100000).map Nat.toUInt32)).data ==
+  (Array.range 100000).map Nat.toUInt32
+#guard rawElemSize (UInt32Array.ofList [1, 2]) == (4 : UInt32)
+
+/-! More lemmas -/
+
+example (a b c : UInt32Array) : a ++ b ++ c = a ++ (b ++ c) := UInt32Array.append_assoc ..
+example (a : UInt32Array) : a ++ ∅ = a := by simp
+example (a b : UInt32Array) : (a ++ b).extract 0 a.size = a := by simp
+example (a : UInt32Array) (i : Nat) (v : UInt32) : (a.set! i v).size = a.size := by simp
+example (l : List UInt32) : (UInt32Array.ofList l).toList = l := by simp
+example (a : UInt32Array) : UInt32Array.ofList a.toList = a := by simp

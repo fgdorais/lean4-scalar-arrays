@@ -64,30 +64,37 @@ example (a : UInt32Array) (x : UInt32) : (a.push x).size = a.size + 1 := by simp
 
 ## API
 
-Every type `XArray` with element type `X` has the same API. For `Float64Array`, `X` is `Float`.
+Every type `XArray` with element type `X` has the same API, which follows core's `ByteArray`. For
+`Float64Array`, `X` is `Float`.
 
 | Group        | Declarations                                                                |
 |--------------|-----------------------------------------------------------------------------|
-| Construction | `mk : Array X → XArray`, `empty`, `emptyWithCapacity`, `{}`, `replicate`, `ofFn` |
+| Construction | `mk : Array X → XArray`, `empty`, `emptyWithCapacity`, `{}`, `replicate`, `ofFn`, `ofList`, `List.toXArray` |
 | Conversion   | `data : XArray → Array X`, `toList`                                         |
 | Size         | `size : XArray → Nat`, `usize : XArray → USize`, `isEmpty`                  |
 | Reading      | `get`, `uget`, `get!`, `getD`, `back`, `back?`, `back!`, and `a[i]`, `a[i]?`, `a[i]!` with `Nat` or `USize` indices |
 | Writing      | `set`, `uset`, `set!`, `push`, `pop`                                        |
-| Slicing      | `append`, `a ++ b`, `extract`                                               |
+| Slicing      | `append`, `a ++ b`, `extract`, `copySlice`                                  |
 | Iteration    | `foldl`, `foldr`, `foldlM`, `foldrM`, `forM`, `for x in a`, `any`, `all`, `contains` |
+| Search       | `findIdx?`, `findFinIdx?`                                                   |
 | Equality     | `a == b`; for integer types also `DecidableEq` and `Hashable`               |
+| Linearity    | `markLinear`, `propagateMark`                                               |
 | Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
-| Lemmas       | `ext`, `ext_getElem`; `data_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; `foldl_eq_foldl_data`, `foldr_eq_foldr_data` |
+| Lemmas       | `ext`, `ext_getElem`; `data_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!` |
 
 As with `Array`:
 
 - writes update the array in place when it is not shared, and copy it first when it is;
 - `push` and `++` grow the capacity geometrically, so repeated pushes or appends take amortized
   constant time per element;
-- `get!` and `set!` panic on an out-of-bounds index, while `getD` and `a[i]?` don't.
+- `get!` panics on an out-of-bounds index, while `getD` and `a[i]?` don't.
+
+As with `ByteArray`, `set!` returns the array unchanged when the index is out of bounds, `get`,
+`uget`, `set` and `uset` prove their bounds with `get_elem_tactic` by default, and `foldl` and
+`foldlM` take optional `start` and `stop` indices.
 
 `a ++ b` copies the elements of `b` with a single `memcpy`, into `a` itself when it is not shared
-and has room, and `extract` copies its slice with a single `memcpy`. Iteration reads the elements
+and has room. `extract` and `copySlice` also copy with a single `memcpy`. Iteration reads the elements
 directly, without building an `Array`.
 
 Equality on the integer types compares the arrays' memory with `memcmp`, and their hash agrees
