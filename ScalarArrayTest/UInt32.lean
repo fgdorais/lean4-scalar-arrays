@@ -142,3 +142,78 @@ open ScalarArray ScalarArrayTest
 -- Growth is geometric, so pushing is amortized constant time.
 #guard rawCapacity ((UInt32Array.mk #[1, 2, 3, 4]).push 5) ≥ 8
 
+
+/-! Appending -/
+
+#guard (UInt32Array.mk #[1, 2] ++ UInt32Array.mk #[3, 4294967295]).data == #[1, 2, 3, 4294967295]
+#guard ((UInt32Array.mk #[1, 2]).append (UInt32Array.mk #[3])).data == #[1, 2, 3]
+#guard (UInt32Array.mk #[1, 2] ++ UInt32Array.empty).data == #[1, 2]
+#guard (UInt32Array.empty ++ UInt32Array.mk #[1, 2]).data == #[1, 2]
+#guard (UInt32Array.empty ++ UInt32Array.empty).data == #[]
+#guard (UInt32Array.mk #[0, 0] ++ UInt32Array.mk #[4294967295] ++ UInt32Array.mk #[0]).data ==
+  #[0, 0, 4294967295, 0]
+
+-- Appending an array to itself, with and without room.
+#guard
+  let a := UInt32Array.mk #[1, 2, 3]
+  (a ++ a).data == #[1, 2, 3, 1, 2, 3]
+
+#guard
+  let a := (UInt32Array.emptyWithCapacity 10).push 1 |>.push 2
+  (a ++ a).data == #[1, 2, 1, 2]
+
+-- Appending to a shared array must leave the original unchanged, with and without room. The
+-- results are checked first so that they are computed while the original is still live.
+#guard
+  let a := (UInt32Array.emptyWithCapacity 10).push 1
+  let b := a ++ UInt32Array.mk #[2, 3]
+  let c := a ++ UInt32Array.mk #[4]
+  c.data == #[1, 4] && b.data == #[1, 2, 3] && a.data == #[1]
+
+#guard
+  let a := UInt32Array.mk #[1]
+  let b := a ++ UInt32Array.mk #[2, 3]
+  b.data == #[1, 2, 3] && a.data == #[1]
+
+-- The right operand is never modified.
+#guard
+  let b := UInt32Array.mk #[2, 3]
+  let c := UInt32Array.mk #[1] ++ b
+  c.data == #[1, 2, 3] && b.data == #[2, 3]
+
+-- Many appends to an exclusive array.
+#guard Id.run do
+  let mut a := UInt32Array.empty
+  let mut r : Array UInt32 := #[]
+  for i in [0:1000] do
+    a := a ++ UInt32Array.mk #[i.toUInt32, (i * 7).toUInt32, 4294967295]
+    r := r ++ #[i.toUInt32, (i * 7).toUInt32, 4294967295]
+  return a.data == r
+
+-- Large arrays on both sides.
+#guard
+  let xs := (Array.range 50000).map Nat.toUInt32
+  let ys := (Array.range 50000).map fun i => (i * 3).toUInt32
+  (UInt32Array.mk xs ++ UInt32Array.mk ys).data == xs ++ ys
+
+-- An exclusive array with room is appended to in place, and growth is geometric.
+-- The array is built from a parameter so that it isn't extracted as a shared closed term.
+@[noinline] def UInt32Array.appendsInPlace (x : UInt32) : Bool :=
+  let a := (UInt32Array.emptyWithCapacity 10).push x
+  let p := rawAddr a
+  let a := a ++ UInt32Array.mk #[2, 3]
+  rawAddr a == p && a.data == #[x, 2, 3]
+
+@[noinline] def UInt32Array.appendsToCopyWhenShared (x : UInt32) : Bool :=
+  let a := (UInt32Array.emptyWithCapacity 10).push x
+  let p := rawAddr a
+  let b := a ++ UInt32Array.mk #[2, 3]
+  rawAddr b != p && b.data == #[x, 2, 3] && a.data == #[x]
+
+#guard UInt32Array.appendsInPlace 1
+#guard UInt32Array.appendsToCopyWhenShared 1
+
+#guard rawCapacity ((UInt32Array.emptyWithCapacity 10).push 1 ++ UInt32Array.mk #[2, 3]) ≥ 10
+#guard rawCapacity (UInt32Array.mk #[1, 2, 3, 4] ++ UInt32Array.mk #[5]) ≥ 8
+#guard rawCapacity (UInt32Array.mk #[1] ++ UInt32Array.mk (Array.replicate 10 0)) ≥ 11
+#guard rawElemSize (UInt32Array.mk #[1] ++ UInt32Array.mk #[2]) == (4 : UInt32)
