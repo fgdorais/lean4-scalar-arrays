@@ -1099,6 +1099,115 @@ public theorem copySlice_eq_append (src : Int64Array) (srcOff : Nat) (dest : Int
   simp only [Slice.copy, size_extract, Slice.size_eq]
   omega
 
+/-! ### Lists -/
+
+@[simp] public theorem toList_mk (a : Array Int64) : (mk a).toList = a.toList := rfl
+
+@[simp] public theorem length_toList (a : Int64Array) : a.toList.length = a.size := by
+  simp [← toList_data]
+
+@[simp] public theorem getElem_toList (a : Int64Array) (i : Nat) (h : i < a.toList.length) :
+    a.toList[i] = a[i]'(by simpa using h) := by
+  simp [← toList_data]
+
+@[simp] public theorem getElem?_toList (a : Int64Array) (i : Nat) : a.toList[i]? = a[i]? := by
+  by_cases h : i < a.size <;> simp [h, ← toList_data]
+
+public theorem toList_inj {a b : Int64Array} : a.toList = b.toList ↔ a = b :=
+  ⟨fun h => by rw [← ofList_toList a, h, ofList_toList], fun h => h ▸ rfl⟩
+
+@[simp] public theorem toList_empty : (empty : Int64Array).toList = [] := rfl
+
+@[simp] public theorem toList_push (a : Int64Array) (v : Int64) :
+    (a.push v).toList = a.toList ++ [v] := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_pop (a : Int64Array) : a.pop.toList = a.toList.dropLast := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_append (a b : Int64Array) :
+    (a ++ b).toList = a.toList ++ b.toList := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_set (a : Int64Array) (i : Nat) (v : Int64) (h) :
+    (a.set i v h).toList = a.toList.set i v := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_set! (a : Int64Array) (i : Nat) (v : Int64) :
+    (a.set! i v).toList = a.toList.set i v := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_extract (a : Int64Array) (start stop : Nat) :
+    (a.extract start stop).toList = a.toList.extract start stop := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_replicate (n : Nat) (v : Int64) :
+    (replicate n v).toList = List.replicate n v := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_ofFn {n : Nat} (f : Fin n → Int64) :
+    (ofFn f).toList = List.ofFn f := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_popWhile (p : Int64 → Bool) (a : Int64Array) :
+    (a.popWhile p).toList = (a.toList.reverse.dropWhile p).reverse := by
+  rw [← toList_data, data_popWhile, ← Array.toArray_toList (xs := a.data),
+    List.popWhile_toArray]
+  simp
+
+/-! ### Last element -/
+
+public theorem back?_eq_getElem? (a : Int64Array) : a.back? = a[a.size - 1]? := by
+  simp only [back?]
+
+public theorem back!_eq_getElem! (a : Int64Array) : a.back! = a[a.size - 1]! := by
+  simp only [back!]
+
+public theorem back_eq_getElem (a : Int64Array) (h : 0 < a.size) :
+    a.back h = a[a.size - 1]'(Nat.sub_lt h Nat.one_pos) := by
+  simp only [back]
+
+@[simp] public theorem getLast?_toList (a : Int64Array) : a.toList.getLast? = a.back? := by
+  rw [List.getLast?_eq_getElem?, getElem?_toList, length_toList, back?_eq_getElem?]
+
+@[simp] public theorem back?_empty : (empty : Int64Array).back? = none := by
+  rw [← getLast?_toList, toList_empty, List.getLast?_nil]
+
+@[simp] public theorem back?_push (a : Int64Array) (v : Int64) :
+    (a.push v).back? = some v := by
+  rw [← getLast?_toList, toList_push, List.getLast?_concat]
+
+/-! ### Slices -/
+
+@[simp] public theorem Slice.getElem_copy (s : Int64Array.Slice) (i : Nat)
+    (h : i < s.copy.size) :
+    s.copy[i] = s[i]'(by simpa using h) := by
+  simp [Slice.copy, Slice.getElem_eq]
+
+/-- Copying the slice from `start` to `stop` is the same as extracting those elements. -/
+@[simp] public theorem copy_toSlice (a : Int64Array) (start stop : Nat) :
+    (a.toSlice start stop).copy = a.extract start stop := by
+  rw [← toList_inj]
+  unfold toSlice
+  split <;> split <;>
+    simp [Slice.copy, Slice.array, Slice.start, Slice.stop] <;> omega
+
+private theorem Slice.foldrM_loop_eq {β : Type v} (f : Int64 → β → β)
+    (s : Int64Array.Slice) (i : Nat) (h : i ≤ s.size) (b : β) :
+    Slice.foldrM.loop (m := Id) (pure <| f · ·) s i h b = (s.copy.toList.take i).foldr f b := by
+  induction i generalizing b with
+  | zero => rfl
+  | succ i ih =>
+    have hi : i < s.copy.toList.length := by simp; omega
+    rw [Slice.foldrM.loop, List.take_add_one, List.getElem?_eq_getElem hi]
+    simp [ih]
+
+/-- Folding over a slice is folding over the list of its elements. -/
+public theorem Slice.foldr_eq_foldr_toList_copy {β : Type v} (f : Int64 → β → β)
+    (init : β) (s : Int64Array.Slice) : s.foldr f init = s.copy.toList.foldr f init := by
+  rw [Slice.foldr, Slice.foldrM, Id.run, Slice.foldrM_loop_eq,
+    List.take_of_length_le (by simp)]
+
 
 end Int64Array
 
