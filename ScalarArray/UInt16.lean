@@ -135,9 +135,11 @@ private unsafe def setImpl : type_of% @set :=
 
 attribute [implemented_by setImpl] set
 
+@[expose]
 public def get! (a : @& UInt16Array) (i : @& Nat) : UInt16 :=
   if h : i < a.size then a.get i h else panic! "index out of bounds"
 
+@[expose]
 public def getD (a : @& UInt16Array) (i : @& Nat) (v₀ : UInt16) : UInt16 :=
   if h : i < a.size then a.get i h else v₀
 
@@ -248,7 +250,7 @@ public def copySlice (src : @& UInt16Array) (srcOff : Nat) (dest : UInt16Array)
 
 /-! ## Removing elements -/
 
-public def isEmpty (a : @& UInt16Array) : Bool := a.size == 0
+@[expose] public def isEmpty (a : @& UInt16Array) : Bool := a.size == 0
 
 private unsafe def popImpl (a : UInt16Array) : UInt16Array :=
   if a.size == 0 then
@@ -425,7 +427,7 @@ public def foldl {β : Type v} (f : β → UInt16 → β) (init : β) (a : @& UI
 public def foldr {β : Type v} (f : UInt16 → β → β) (init : β) (a : @& UInt16Array) : β :=
   Id.run <| a.foldrM (pure <| f · ·) init
 
-@[inline]
+@[inline, expose]
 public def forM {m : Type v → Type w} [Monad m] (f : UInt16 → m PUnit) (a : @& UInt16Array) :
     m PUnit :=
   a.foldlM (fun _ x => f x) ⟨⟩
@@ -442,7 +444,7 @@ where
       | .yield b => loop (i + 1) b
     else pure b
 
-@[implemented_by forInImpl]
+@[implemented_by forInImpl, expose]
 public def forIn {β : Type v} {m : Type v → Type w} [Monad m] (a : @& UInt16Array) (init : β)
     (f : UInt16 → β → m (ForInStep β)) : m β :=
   ForIn.forIn a.data init f
@@ -458,7 +460,7 @@ where
     if h : i.toNat < a.size then p (a.uget i h) || loop (i + 1) else false
 
 /-- Whether some element of `a` satisfies `p`. -/
-@[implemented_by anyImpl]
+@[implemented_by anyImpl, expose]
 public def any (a : @& UInt16Array) (p : UInt16 → Bool) : Bool :=
   a.data.any p
 
@@ -470,7 +472,7 @@ where
     if h : i.toNat < a.size then p (a.uget i h) && loop (i + 1) else true
 
 /-- Whether every element of `a` satisfies `p`. -/
-@[implemented_by allImpl]
+@[implemented_by allImpl, expose]
 public def all (a : @& UInt16Array) (p : UInt16 → Bool) : Bool :=
   a.data.all p
 
@@ -478,7 +480,7 @@ private unsafe def containsImpl (a : @& UInt16Array) (v : UInt16) : Bool :=
   anyImpl a (v == ·)
 
 /-- Whether `v` is an element of `a`. -/
-@[implemented_by containsImpl]
+@[implemented_by containsImpl, expose]
 public def contains (a : @& UInt16Array) (v : UInt16) : Bool :=
   a.data.contains v
 
@@ -1113,7 +1115,7 @@ public theorem copySlice_eq_append (src : UInt16Array) (srcOff : Nat) (dest : UI
 @[simp] public theorem getElem?_toList (a : UInt16Array) (i : Nat) : a.toList[i]? = a[i]? := by
   by_cases h : i < a.size <;> simp [h, ← toList_data]
 
-public theorem toList_inj {a b : UInt16Array} : a.toList = b.toList ↔ a = b :=
+@[simp] public theorem toList_inj {a b : UInt16Array} : a.toList = b.toList ↔ a = b :=
   ⟨fun h => by rw [← ofList_toList a, h, ofList_toList], fun h => h ▸ rfl⟩
 
 @[simp] public theorem toList_empty : (empty : UInt16Array).toList = [] := rfl
@@ -1177,6 +1179,105 @@ public theorem back_eq_getElem (a : UInt16Array) (h : 0 < a.size) :
     (a.push v).back? = some v := by
   rw [← getLast?_toList, toList_push, List.getLast?_concat]
 
+@[simp] public theorem back!_push (a : UInt16Array) (v : UInt16) : (a.push v).back! = v := by
+  simp [back!_eq_getElem!]
+
+@[simp] public theorem back_push (a : UInt16Array) (v : UInt16) (h) : (a.push v).back h = v := by
+  simp [back_eq_getElem]
+
+/-! ### More lists -/
+
+@[simp] public theorem toList_uset (a : UInt16Array) (i : USize) (v : UInt16) (h) :
+    (a.uset i v h).toList = a.toList.set i.toNat v := by
+  simp [← toList_data]
+
+@[simp] public theorem toList_copySlice (src : UInt16Array) (srcOff : Nat) (dest : UInt16Array)
+    (destOff len : Nat) (exact : Bool) :
+    (src.copySlice srcOff dest destOff len exact).toList =
+      dest.toList.extract 0 destOff ++ src.toList.extract srcOff (srcOff + len) ++
+        dest.toList.extract (destOff + min len (src.size - srcOff)) dest.size := by
+  simp [copySlice_eq_append]
+
+/-! ### Accessors -/
+
+@[simp] public theorem get_eq_getElem (a : UInt16Array) (i : Nat) (h) : a.get i h = a[i] := rfl
+
+@[simp] public theorem uget_eq_getElem (a : UInt16Array) (i : USize) (h) :
+    a.uget i h = a[i.toNat] := by
+  cases a; rfl
+
+@[simp] public theorem get!_eq_getElem! (a : UInt16Array) (i : Nat) : a.get! i = a[i]! := by
+  rw [get!]
+  split
+  · simp_all [getElem!_pos]
+  · simp_all [getElem!_neg]
+
+@[simp] public theorem getD_eq_getD_getElem? (a : UInt16Array) (i : Nat) (v₀ : UInt16) :
+    a.getD i v₀ = a[i]?.getD v₀ := by
+  rw [getD]
+  split <;> simp_all
+
+@[simp] public theorem isEmpty_iff {a : UInt16Array} : a.isEmpty ↔ a = empty := by
+  simp [isEmpty, ← size_eq_zero_iff]
+
+/-! ### Queries -/
+
+@[simp] public theorem any_toList (a : UInt16Array) (p : UInt16 → Bool) :
+    a.toList.any p = a.any p := by
+  simp [any, ← toList_data]
+
+@[simp] public theorem all_toList (a : UInt16Array) (p : UInt16 → Bool) :
+    a.toList.all p = a.all p := by
+  simp [all, ← toList_data]
+
+@[simp] public theorem contains_toList (a : UInt16Array) (v : UInt16) :
+    a.toList.contains v = a.contains v := by
+  simp [contains, ← toList_data]
+
+@[simp] public theorem foldl_toList {β : Type v} (f : β → UInt16 → β) (init : β)
+    (a : UInt16Array) : a.toList.foldl f init = a.foldl f init := by
+  simp [foldl_eq_foldl_data, ← toList_data]
+
+@[simp] public theorem foldr_toList {β : Type v} (f : UInt16 → β → β) (init : β)
+    (a : UInt16Array) : a.toList.foldr f init = a.foldr f init := by
+  simp [foldr_eq_foldr_data, ← toList_data]
+
+@[simp] public theorem forIn_toList {β : Type v} {m : Type v → Type w} [Monad m] [LawfulMonad m]
+    (a : UInt16Array) (init : β) (f : UInt16 → β → m (ForInStep β)) :
+    ForIn.forIn a.toList init f = ForIn.forIn a init f := by
+  rw [← toList_data, Array.forIn_toList]
+  rfl
+
+private theorem findIdx?_loop_eq (a : UInt16Array) (p : UInt16 → Bool) (i : Nat) :
+    findIdx?.loop a p i = ((a.toList.drop i).findIdx? p).map (· + i) := by
+  fun_induction findIdx?.loop a p i with
+  | case1 i h hp =>
+    rw [List.drop_eq_getElem_cons (by simpa using h), List.findIdx?_cons]
+    simp [hp]
+  | case2 i h hp ih =>
+    rw [ih, List.drop_eq_getElem_cons (l := a.toList) (i := i) (by simpa using h),
+      List.findIdx?_cons]
+    simp [hp, Option.map_map, Function.comp_def, Nat.add_assoc, Nat.add_comm 1]
+  | case3 i h =>
+    rw [List.drop_of_length_le (by simpa using h)]
+    rfl
+
+public theorem findIdx?_eq (a : UInt16Array) (p : UInt16 → Bool) (start : Nat) :
+    a.findIdx? p start = ((a.toList.drop start).findIdx? p).map (· + start) := by
+  simp [findIdx?, findIdx?_loop_eq]
+
+@[simp] public theorem findIdx?_toList (a : UInt16Array) (p : UInt16 → Bool) :
+    a.toList.findIdx? p = a.findIdx? p := by
+  simp [findIdx?_eq]
+
+private theorem findFinIdx?_loop_eq (a : UInt16Array) (p : UInt16 → Bool) (i : Nat) :
+    (findFinIdx?.loop a p i).map Fin.val = findIdx?.loop a p i := by
+  fun_induction findFinIdx?.loop a p i <;> rw [findIdx?.loop] <;> simp_all <;> omega
+
+@[simp] public theorem map_val_findFinIdx? (a : UInt16Array) (p : UInt16 → Bool) (start : Nat) :
+    (a.findFinIdx? p start).map Fin.val = a.findIdx? p start := by
+  simp [findFinIdx?, findIdx?, findFinIdx?_loop_eq]
+
 /-! ### Slices -/
 
 @[simp] public theorem Slice.getElem_copy (s : UInt16Array.Slice) (i : Nat)
@@ -1191,6 +1292,84 @@ public theorem back_eq_getElem (a : UInt16Array) (h : 0 < a.size) :
   unfold toSlice
   split <;> split <;>
     simp [Slice.copy, Slice.array, Slice.start, Slice.stop] <;> omega
+
+@[simp] public theorem array_toSlice (a : UInt16Array) (start stop : Nat) :
+    (a.toSlice start stop).array = a := by
+  unfold toSlice
+  split <;> split <;> rfl
+
+@[simp] public theorem start_toSlice (a : UInt16Array) (start stop : Nat) :
+    (a.toSlice start stop).start = min start (min stop a.size) := by
+  unfold toSlice
+  split <;> split <;> simp only [Slice.start] <;> omega
+
+@[simp] public theorem stop_toSlice (a : UInt16Array) (start stop : Nat) :
+    (a.toSlice start stop).stop = min stop a.size := by
+  unfold toSlice
+  split <;> split <;> simp only [Slice.stop] <;> omega
+
+@[simp] public theorem size_toSlice (a : UInt16Array) (start stop : Nat) :
+    (a.toSlice start stop).size = min stop a.size - start := by
+  rw [Slice.size_eq, start_toSlice, stop_toSlice]
+  omega
+
+@[simp] public theorem getElem_toSlice (a : UInt16Array) (start stop i : Nat) (h) :
+    (a.toSlice start stop)[i]'h = a[start + i]'(by simp at h; omega) := by
+  simp only [size_toSlice] at h
+  simp only [Slice.getElem_eq, array_toSlice, start_toSlice]
+  congr 1
+  omega
+
+@[simp] public theorem Slice.size_slice (s : UInt16Array.Slice) (start stop : Nat) :
+    (s.slice start stop).size = min stop s.size - start := by
+  have := s.stop_le_array_size
+  rw [slice, size_toSlice, size_eq]
+  omega
+
+@[simp] public theorem Slice.getElem_slice (s : UInt16Array.Slice) (start stop i : Nat) (h) :
+    (s.slice start stop)[i]'h = s[start + i]'(by simp at h; omega) := by
+  have := s.stop_le_array_size
+  have := s.size_eq
+  have h' := h
+  rw [size_slice, size_eq] at h'
+  simp only [Slice.getElem_eq, slice, array_toSlice, start_toSlice]
+  congr 1
+  omega
+
+@[simp] public theorem Slice.copy_slice (s : UInt16Array.Slice) (start stop : Nat) :
+    (s.slice start stop).copy = s.copy.extract start stop := by
+  apply ext_getElem
+  · simp
+  · intro i _ _
+    simp
+
+@[simp] public theorem Slice.array_popFront (s : UInt16Array.Slice) :
+    s.popFront.array = s.array := by
+  simp only [popFront]
+  split <;> rfl
+
+@[simp] public theorem Slice.start_popFront (s : UInt16Array.Slice) :
+    s.popFront.start = min (s.start + 1) s.stop := by
+  rcases s with ⟨⟨_, start, stop, h, _⟩⟩
+  simp only [popFront, Slice.start, Slice.stop]
+  by_cases hc : start < stop <;> simp [hc] <;> omega
+
+@[simp] public theorem Slice.stop_popFront (s : UInt16Array.Slice) :
+    s.popFront.stop = s.stop := by
+  simp only [popFront]
+  split <;> rfl
+
+@[simp] public theorem Slice.size_popFront (s : UInt16Array.Slice) :
+    s.popFront.size = s.size - 1 := by
+  rw [size_eq, size_eq, start_popFront, stop_popFront]
+  omega
+
+@[simp] public theorem Slice.getElem_popFront (s : UInt16Array.Slice) (i : Nat) (h) :
+    s.popFront[i]'h = s[i + 1]'(by simp at h; omega) := by
+  have : s.start < s.stop := by rw [size_popFront, size_eq] at h; omega
+  simp only [Slice.getElem_eq, array_popFront, start_popFront]
+  congr 1
+  omega
 
 private theorem Slice.foldrM_loop_eq {β : Type v} (f : UInt16 → β → β)
     (s : UInt16Array.Slice) (i : Nat) (h : i ≤ s.size) (b : β) :
@@ -1207,7 +1386,6 @@ public theorem Slice.foldr_eq_foldr_toList_copy {β : Type v} (f : UInt16 → β
     (init : β) (s : UInt16Array.Slice) : s.foldr f init = s.copy.toList.foldr f init := by
   rw [Slice.foldr, Slice.foldrM, Id.run, Slice.foldrM_loop_eq,
     List.take_of_length_le (by simp)]
-
 
 end UInt16Array
 
