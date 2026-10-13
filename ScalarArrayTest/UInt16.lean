@@ -344,6 +344,100 @@ example : (UInt16Array.replicate 3 65535)[1] = 65535 := by simp
 example (a b : UInt16Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
 example (a : UInt16Array) (i : Nat) (v : UInt16) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
-example (a : UInt16Array) : a.extract 0 a.size = a := by simp [UInt16Array.ext_iff]
+example (a : UInt16Array) : a.extract 0 a.size = a := by simp
 example (a : UInt16Array) (v : UInt16) : (a.push v).pop = a :=
   UInt16Array.ext_getElem (by simp) (by simp_all)
+
+/-! Default bounds proofs -/
+
+#guard (UInt16Array.mk #[1, 2, 65535]).get 2 == 65535
+#guard (UInt16Array.mk #[1, 2, 65535]).uget 2 == 65535
+#guard ((UInt16Array.mk #[1, 2, 3]).set 1 65535).data == #[1, 65535, 3]
+#guard ((UInt16Array.mk #[1, 2, 3]).uset 1 65535).data == #[1, 65535, 3]
+
+/-! `set!` leaves the array unchanged when the index is out of bounds, like `ByteArray.set!`. -/
+
+#guard ((UInt16Array.mk #[1, 2, 3]).set! 3 65535).data == #[1, 2, 3]
+#guard ((UInt16Array.mk #[1, 2, 3]).set! (2 ^ 70) 65535).data == #[1, 2, 3]
+
+/-! Folds over part of an array -/
+
+#guard (UInt16Array.mk #[1, 2, 3, 65535]).foldl (fun acc x => x :: acc) [] 1 3 == [3, 2]
+#guard (UInt16Array.mk #[1, 2, 3, 65535]).foldl (fun acc x => x :: acc) [] 2 == [65535, 3]
+#guard (UInt16Array.mk #[1, 2, 3, 65535]).foldl (fun acc x => x :: acc) [] 1 100 == [65535, 3, 2]
+#guard (UInt16Array.mk #[1, 2, 3, 65535]).foldl (fun acc x => x :: acc) [] 3 1 == []
+#guard (UInt16Array.mk #[1, 2, 3, 65535]).foldl (fun acc x => x :: acc) [] 9 12 == []
+#guard (UInt16Array.mk #[1, 2, 3]).foldlM (m := Option)
+  (fun acc x => if x == 1 then none else some (x :: acc)) [] 1 == some [3, 2]
+
+/-! Copying slices -/
+
+#guard
+  let src := UInt16Array.mk #[10, 11, 12, 65535]
+  let dest := UInt16Array.mk #[1, 2, 3, 4, 5]
+  (src.copySlice 1 dest 2 2).data == #[1, 2, 11, 12, 5] &&
+  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, 65535] &&
+  (src.copySlice 0 dest 9 2).data == #[1, 2, 3, 4, 5, 10, 11] &&
+  (src.copySlice 9 dest 1 2).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 2 dest 0 10).data == #[12, 65535, 3, 4, 5] &&
+  (src.copySlice 0 dest 0 0).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 0 UInt16Array.empty 0 4).data == #[10, 11, 12, 65535] &&
+  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, 65535]
+
+-- Copying from an array into itself.
+#guard
+  let a := UInt16Array.mk #[1, 2, 3, 65535]
+  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, 65535]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toUInt16
+  let a := UInt16Array.mk xs
+  (a.copySlice 70000 (UInt16Array.replicate 10 0) 5 10).data ==
+    Array.replicate 5 0 ++ xs.extract 70000 70010
+
+#guard rawElemSize ((UInt16Array.mk #[1]).copySlice 0 UInt16Array.empty 0 1) == (2 : UInt32)
+
+@[noinline] def UInt16Array.copiesSliceInPlace (x : UInt16) : Bool :=
+  let dest := (UInt16Array.emptyWithCapacity 10).push x |>.push x |>.push x
+  let p := rawAddr dest
+  let dest := (UInt16Array.mk #[65535, 65535]).copySlice 0 dest 1 2
+  rawAddr dest == p && dest.data == #[x, 65535, 65535]
+
+@[noinline] def UInt16Array.copySliceGrowth (x : UInt16) : Bool :=
+  let dest := (UInt16Array.mk #[x, x, x, x])
+  rawCapacity ((UInt16Array.mk #[x]).copySlice 0 dest 4 1 (exact := false)) ≥ 8 &&
+    rawCapacity ((UInt16Array.mk #[x]).copySlice 0 dest 4 1) == 5
+
+#guard UInt16Array.copiesSliceInPlace 1
+#guard UInt16Array.copySliceGrowth 1
+
+/-! Linearity markers -/
+
+#guard ((UInt16Array.mk #[1, 2]).markLinear.push 65535).data == #[1, 2, 65535]
+#guard ((UInt16Array.mk #[1]).propagateMark (UInt16Array.mk #[2, 65535])).data == #[2, 65535]
+
+/-! Search -/
+
+#guard (UInt16Array.mk #[1, 2, 65535, 2]).findIdx? (· == 2) == some 1
+#guard (UInt16Array.mk #[1, 2, 65535, 2]).findIdx? (· == 2) 2 == some 3
+#guard (UInt16Array.mk #[1, 2, 65535, 2]).findIdx? (· == 3) == none
+#guard (UInt16Array.mk #[1, 2, 65535, 2]).findIdx? (· == 1) 9 == none
+#guard ((UInt16Array.mk #[1, 2, 65535, 2]).findFinIdx? (· == 65535)).map (·.val) == some 2
+
+/-! Lists -/
+
+#guard (UInt16Array.ofList [1, 2, 65535]).data == #[1, 2, 65535]
+#guard (UInt16Array.ofList []).data == #[]
+#guard [1, 2, 65535].toUInt16Array == UInt16Array.mk #[1, 2, 65535]
+#guard (UInt16Array.ofList ((List.range 100000).map Nat.toUInt16)).data ==
+  (Array.range 100000).map Nat.toUInt16
+#guard rawElemSize (UInt16Array.ofList [1, 2]) == (2 : UInt32)
+
+/-! More lemmas -/
+
+example (a b c : UInt16Array) : a ++ b ++ c = a ++ (b ++ c) := UInt16Array.append_assoc ..
+example (a : UInt16Array) : a ++ ∅ = a := by simp
+example (a b : UInt16Array) : (a ++ b).extract 0 a.size = a := by simp
+example (a : UInt16Array) (i : Nat) (v : UInt16) : (a.set! i v).size = a.size := by simp
+example (l : List UInt16) : (UInt16Array.ofList l).toList = l := by simp
+example (a : UInt16Array) : UInt16Array.ofList a.toList = a := by simp

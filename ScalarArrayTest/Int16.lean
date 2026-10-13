@@ -344,6 +344,100 @@ example : (Int16Array.replicate 3 (-32768))[1] = (-32768) := by simp
 example (a b : Int16Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
 example (a : Int16Array) (i : Nat) (v : Int16) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
-example (a : Int16Array) : a.extract 0 a.size = a := by simp [Int16Array.ext_iff]
+example (a : Int16Array) : a.extract 0 a.size = a := by simp
 example (a : Int16Array) (v : Int16) : (a.push v).pop = a :=
   Int16Array.ext_getElem (by simp) (by simp_all)
+
+/-! Default bounds proofs -/
+
+#guard (Int16Array.mk #[1, 2, (-32768)]).get 2 == (-32768)
+#guard (Int16Array.mk #[1, 2, (-32768)]).uget 2 == (-32768)
+#guard ((Int16Array.mk #[1, 2, 3]).set 1 (-32768)).data == #[1, (-32768), 3]
+#guard ((Int16Array.mk #[1, 2, 3]).uset 1 (-32768)).data == #[1, (-32768), 3]
+
+/-! `set!` leaves the array unchanged when the index is out of bounds, like `ByteArray.set!`. -/
+
+#guard ((Int16Array.mk #[1, 2, 3]).set! 3 (-32768)).data == #[1, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).set! (2 ^ 70) (-32768)).data == #[1, 2, 3]
+
+/-! Folds over part of an array -/
+
+#guard (Int16Array.mk #[1, 2, 3, (-32768)]).foldl (fun acc x => x :: acc) [] 1 3 == [3, 2]
+#guard (Int16Array.mk #[1, 2, 3, (-32768)]).foldl (fun acc x => x :: acc) [] 2 == [(-32768), 3]
+#guard (Int16Array.mk #[1, 2, 3, (-32768)]).foldl (fun acc x => x :: acc) [] 1 100 == [(-32768), 3, 2]
+#guard (Int16Array.mk #[1, 2, 3, (-32768)]).foldl (fun acc x => x :: acc) [] 3 1 == []
+#guard (Int16Array.mk #[1, 2, 3, (-32768)]).foldl (fun acc x => x :: acc) [] 9 12 == []
+#guard (Int16Array.mk #[1, 2, 3]).foldlM (m := Option)
+  (fun acc x => if x == 1 then none else some (x :: acc)) [] 1 == some [3, 2]
+
+/-! Copying slices -/
+
+#guard
+  let src := Int16Array.mk #[10, 11, 12, (-32768)]
+  let dest := Int16Array.mk #[1, 2, 3, 4, 5]
+  (src.copySlice 1 dest 2 2).data == #[1, 2, 11, 12, 5] &&
+  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, (-32768)] &&
+  (src.copySlice 0 dest 9 2).data == #[1, 2, 3, 4, 5, 10, 11] &&
+  (src.copySlice 9 dest 1 2).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 2 dest 0 10).data == #[12, (-32768), 3, 4, 5] &&
+  (src.copySlice 0 dest 0 0).data == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 0 Int16Array.empty 0 4).data == #[10, 11, 12, (-32768)] &&
+  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, (-32768)]
+
+-- Copying from an array into itself.
+#guard
+  let a := Int16Array.mk #[1, 2, 3, (-32768)]
+  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, (-32768)]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toInt16
+  let a := Int16Array.mk xs
+  (a.copySlice 70000 (Int16Array.replicate 10 0) 5 10).data ==
+    Array.replicate 5 0 ++ xs.extract 70000 70010
+
+#guard rawElemSize ((Int16Array.mk #[1]).copySlice 0 Int16Array.empty 0 1) == (2 : UInt32)
+
+@[noinline] def Int16Array.copiesSliceInPlace (x : Int16) : Bool :=
+  let dest := (Int16Array.emptyWithCapacity 10).push x |>.push x |>.push x
+  let p := rawAddr dest
+  let dest := (Int16Array.mk #[(-32768), (-32768)]).copySlice 0 dest 1 2
+  rawAddr dest == p && dest.data == #[x, (-32768), (-32768)]
+
+@[noinline] def Int16Array.copySliceGrowth (x : Int16) : Bool :=
+  let dest := (Int16Array.mk #[x, x, x, x])
+  rawCapacity ((Int16Array.mk #[x]).copySlice 0 dest 4 1 (exact := false)) ≥ 8 &&
+    rawCapacity ((Int16Array.mk #[x]).copySlice 0 dest 4 1) == 5
+
+#guard Int16Array.copiesSliceInPlace 1
+#guard Int16Array.copySliceGrowth 1
+
+/-! Linearity markers -/
+
+#guard ((Int16Array.mk #[1, 2]).markLinear.push (-32768)).data == #[1, 2, (-32768)]
+#guard ((Int16Array.mk #[1]).propagateMark (Int16Array.mk #[2, (-32768)])).data == #[2, (-32768)]
+
+/-! Search -/
+
+#guard (Int16Array.mk #[1, 2, (-32768), 2]).findIdx? (· == 2) == some 1
+#guard (Int16Array.mk #[1, 2, (-32768), 2]).findIdx? (· == 2) 2 == some 3
+#guard (Int16Array.mk #[1, 2, (-32768), 2]).findIdx? (· == 3) == none
+#guard (Int16Array.mk #[1, 2, (-32768), 2]).findIdx? (· == 1) 9 == none
+#guard ((Int16Array.mk #[1, 2, (-32768), 2]).findFinIdx? (· == (-32768))).map (·.val) == some 2
+
+/-! Lists -/
+
+#guard (Int16Array.ofList [1, 2, (-32768)]).data == #[1, 2, (-32768)]
+#guard (Int16Array.ofList []).data == #[]
+#guard [1, 2, (-32768)].toInt16Array == Int16Array.mk #[1, 2, (-32768)]
+#guard (Int16Array.ofList ((List.range 100000).map Nat.toInt16)).data ==
+  (Array.range 100000).map Nat.toInt16
+#guard rawElemSize (Int16Array.ofList [1, 2]) == (2 : UInt32)
+
+/-! More lemmas -/
+
+example (a b c : Int16Array) : a ++ b ++ c = a ++ (b ++ c) := Int16Array.append_assoc ..
+example (a : Int16Array) : a ++ ∅ = a := by simp
+example (a b : Int16Array) : (a ++ b).extract 0 a.size = a := by simp
+example (a : Int16Array) (i : Nat) (v : Int16) : (a.set! i v).size = a.size := by simp
+example (l : List Int16) : (Int16Array.ofList l).toList = l := by simp
+example (a : Int16Array) : Int16Array.ofList a.toList = a := by simp
