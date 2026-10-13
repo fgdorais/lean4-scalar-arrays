@@ -51,15 +51,6 @@ private abbrev elemSize : UInt32 := 8
 
 #guard ((Int64Array.mk #[1, 2, 3]).set 1 42 (by decide)).data == #[1, 42, 3]
 #guard ((Int64Array.mk #[1, 2, 3]).uset 2 42 (by simp)).data == #[1, 2, 42]
--- `uset` and `set` copy a shared array instead of writing into it.
-#guard
-  let a := Int64Array.mk #[1, 2, 3]
-  let b := a.uset 0 big (by simp [a])
-  a.data == #[1, 2, 3] && b.data == #[big, 2, 3]
-#guard
-  let a := Int64Array.mk #[1, 2, 3]
-  let b := a.set 2 big (by simp [a])
-  a.data == #[1, 2, 3] && b.data == #[1, 2, big]
 #guard ((Int64Array.mk #[1, 2, 3]).set! 0 big).data == #[big, 2, 3]
 
 -- Writing to a shared array must leave the original unchanged. The result is checked first so
@@ -68,6 +59,14 @@ private abbrev elemSize : UInt32 := 8
   let a := Int64Array.mk #[1, 2, 3]
   let b := a.set! 1 42
   b.data == #[1, 42, 3] && a.data == #[1, 2, 3]
+#guard
+  let a := Int64Array.mk #[1, 2, 3]
+  let b := a.uset 0 big (by simp [a])
+  b.data == #[big, 2, 3] && a.data == #[1, 2, 3]
+#guard
+  let a := Int64Array.mk #[1, 2, 3]
+  let b := a.set 2 big (by simp [a])
+  b.data == #[1, 2, big] && a.data == #[1, 2, 3]
 
 -- Repeated writes to an exclusive array.
 #guard Id.run do

@@ -69,13 +69,15 @@ Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in
 so that `uset` can be inlined into code in other modules.
 -/
 @[extern c inline "#1;\n((uint16_t*)lean_sarray_cptr(#1))[#2] = #3"]
-public unsafe def setInt16Unsafe : Int16Array → USize → Int16 → Int16Array
+public unsafe def setUnsafe : Int16Array → USize → Int16 → Int16Array
   | .mk a, i, v => .mk <| a.uset i v lcProof
 
 /--
 `a` itself when it is not shared, and a copy otherwise. Public only so that `uset` can be inlined
 into code in other modules.
 -/
+-- The same runtime function as the private `ScalarArray.ensureExclusive`, which code in other
+-- modules can't reach.
 @[extern "lean_sarray_ensure_exclusive"]
 public unsafe def ensureExclusiveUnsafe (a : Int16Array) : Int16Array := a
 
@@ -94,7 +96,7 @@ private unsafe def mkWithCapacityImpl (a : Array Int16) (capacity : Nat := a.siz
   loop sz r 0
 where
   loop (sz : USize) (r : Int16Array) (i : USize) : Int16Array :=
-    if i < sz then loop sz (setInt16Unsafe r i (a.uget i lcProof)) (i + 1) else r
+    if i < sz then loop sz (setUnsafe r i (a.uget i lcProof)) (i + 1) else r
 
 public unsafe def mkImpl (a : Array Int16) : Int16Array :=
   mkWithCapacityImpl a a.size
@@ -139,7 +141,7 @@ public def uset :
 -- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
 @[inline]
 public unsafe def usetImpl : type_of% @uset :=
-  fun a i v _ => setInt16Unsafe (ensureExclusiveUnsafe a) i v
+  fun a i v _ => setUnsafe (ensureExclusiveUnsafe a) i v
 
 attribute [implemented_by usetImpl] uset
 
@@ -189,7 +191,7 @@ private unsafe def pushImpl (a : Int16Array) (v : Int16) : Int16Array :=
 where
   loop (s : ScalarArray) : Int16Array :=
     let i := s.size
-    setInt16Unsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
+    setUnsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
 
 @[implemented_by pushImpl, expose]
 public def push : Int16Array → Int16 → Int16Array
@@ -372,7 +374,7 @@ private unsafe def replicateImpl (n : Nat) (v : Int16) : Int16Array :=
   loop sz (allocUnsafe sz sz) 0
 where
   loop (sz : USize) (r : Int16Array) (i : USize) : Int16Array :=
-    if i < sz then loop sz (setInt16Unsafe r i v) (i + 1) else r
+    if i < sz then loop sz (setUnsafe r i v) (i + 1) else r
 
 /-- An array of `n` copies of `v`. -/
 @[implemented_by replicateImpl, expose]
@@ -384,7 +386,7 @@ private unsafe def ofFnImpl {n : Nat} (f : Fin n → Int16) : Int16Array :=
   loop (allocUnsafe sz sz) 0
 where
   loop (r : Int16Array) (i : Nat) : Int16Array :=
-    if h : i < n then loop (setInt16Unsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
+    if h : i < n then loop (setUnsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
 
 /-- The array `#[f 0, …, f (n - 1)]`. -/
 @[implemented_by ofFnImpl, expose]

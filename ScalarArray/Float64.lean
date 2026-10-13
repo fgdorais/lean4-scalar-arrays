@@ -72,13 +72,15 @@ Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in
 so that `uset` can be inlined into code in other modules.
 -/
 @[extern c inline "#1;\n((double*)lean_sarray_cptr(#1))[#2] = #3"]
-public unsafe def setFloat64Unsafe : Float64Array → USize → Float → Float64Array
+public unsafe def setUnsafe : Float64Array → USize → Float → Float64Array
   | .mk a, i, v => .mk <| a.uset i v lcProof
 
 /--
 `a` itself when it is not shared, and a copy otherwise. Public only so that `uset` can be inlined
 into code in other modules.
 -/
+-- The same runtime function as the private `ScalarArray.ensureExclusive`, which code in other
+-- modules can't reach.
 @[extern "lean_sarray_ensure_exclusive"]
 public unsafe def ensureExclusiveUnsafe (a : Float64Array) : Float64Array := a
 
@@ -97,7 +99,7 @@ private unsafe def mkWithCapacityImpl (a : Array Float) (capacity : Nat := a.siz
   loop sz r 0
 where
   loop (sz : USize) (r : Float64Array) (i : USize) : Float64Array :=
-    if i < sz then loop sz (setFloat64Unsafe r i (a.uget i lcProof)) (i + 1) else r
+    if i < sz then loop sz (setUnsafe r i (a.uget i lcProof)) (i + 1) else r
 
 public unsafe def mkImpl (a : Array Float) : Float64Array :=
   mkWithCapacityImpl a a.size
@@ -142,7 +144,7 @@ public def uset :
 -- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
 @[inline]
 public unsafe def usetImpl : type_of% @uset :=
-  fun a i v _ => setFloat64Unsafe (ensureExclusiveUnsafe a) i v
+  fun a i v _ => setUnsafe (ensureExclusiveUnsafe a) i v
 
 attribute [implemented_by usetImpl] uset
 
@@ -192,7 +194,7 @@ private unsafe def pushImpl (a : Float64Array) (v : Float) : Float64Array :=
 where
   loop (s : ScalarArray) : Float64Array :=
     let i := s.size
-    setFloat64Unsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
+    setUnsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
 
 @[implemented_by pushImpl, expose]
 public def push : Float64Array → Float → Float64Array
@@ -375,7 +377,7 @@ private unsafe def replicateImpl (n : Nat) (v : Float) : Float64Array :=
   loop sz (allocUnsafe sz sz) 0
 where
   loop (sz : USize) (r : Float64Array) (i : USize) : Float64Array :=
-    if i < sz then loop sz (setFloat64Unsafe r i v) (i + 1) else r
+    if i < sz then loop sz (setUnsafe r i v) (i + 1) else r
 
 /-- An array of `n` copies of `v`. -/
 @[implemented_by replicateImpl, expose]
@@ -387,7 +389,7 @@ private unsafe def ofFnImpl {n : Nat} (f : Fin n → Float) : Float64Array :=
   loop (allocUnsafe sz sz) 0
 where
   loop (r : Float64Array) (i : Nat) : Float64Array :=
-    if h : i < n then loop (setFloat64Unsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
+    if h : i < n then loop (setUnsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
 
 /-- The array `#[f 0, …, f (n - 1)]`. -/
 @[implemented_by ofFnImpl, expose]

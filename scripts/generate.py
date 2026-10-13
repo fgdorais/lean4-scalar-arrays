@@ -106,7 +106,6 @@ def generate():
                         ('/-! ## Equality and hashing -/', '/-! ## Equality -/')])
         s = sub(s, [
             ('UInt16Array', name + 'Array'),
-            ('setUInt16Unsafe', f'set{name}Unsafe'),
             ('allocate 2 ', f'allocate {alloc} '),
             ('2 bytes per element', per_elem),
             ('uint16_t', ctype),
