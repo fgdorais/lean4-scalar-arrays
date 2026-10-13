@@ -115,9 +115,6 @@ public def getD (a : @& UInt32Array) (i : @& Nat) (v₀ : UInt32) : UInt32 :=
 public def set! (a : UInt32Array) (i : Nat) (v : UInt32) : UInt32Array :=
   if h : i < a.size then a.set i v h else panic! "index out of bounds"
 
-public def setD (a : UInt32Array) (i : Nat) (v : UInt32) : UInt32Array :=
-  if h : i < a.size then a.set i v h else a
-
 public instance : GetElem UInt32Array Nat UInt32 fun a i => i < a.size where
   getElem a i h := a.get i h
 
