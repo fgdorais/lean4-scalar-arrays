@@ -827,10 +827,7 @@ public def _root_.Std.Iter.toUInt16Array {α : Type} [Std.Iterator α Id UInt16]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) UInt16) : UInt16Array :=
   it.fold (·.push ·) empty
 
-/--
-Collects the values emitted by an iterator into a new array that starts with room for `capacity`
-elements, like `Std.Iter.toUInt16Array`.
--/
+/-- Like `Std.Iter.toUInt16Array`, but the new array starts with room for `capacity` elements. -/
 @[inline, expose]
 public def _root_.Std.Iter.toUInt16ArrayWithCapacity {α : Type} [Std.Iterator α Id UInt16]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) UInt16) (capacity : Nat) : UInt16Array :=

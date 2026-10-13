@@ -827,10 +827,7 @@ public def _root_.Std.Iter.toInt8Array {α : Type} [Std.Iterator α Id Int8]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int8) : Int8Array :=
   it.fold (·.push ·) empty
 
-/--
-Collects the values emitted by an iterator into a new array that starts with room for `capacity`
-elements, like `Std.Iter.toInt8Array`.
--/
+/-- Like `Std.Iter.toInt8Array`, but the new array starts with room for `capacity` elements. -/
 @[inline, expose]
 public def _root_.Std.Iter.toInt8ArrayWithCapacity {α : Type} [Std.Iterator α Id Int8]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int8) (capacity : Nat) : Int8Array :=

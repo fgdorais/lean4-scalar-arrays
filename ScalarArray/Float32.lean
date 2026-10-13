@@ -829,10 +829,7 @@ public def _root_.Std.Iter.toFloat32Array {α : Type} [Std.Iterator α Id Float3
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Float32) : Float32Array :=
   it.fold (·.push ·) empty
 
-/--
-Collects the values emitted by an iterator into a new array that starts with room for `capacity`
-elements, like `Std.Iter.toFloat32Array`.
--/
+/-- Like `Std.Iter.toFloat32Array`, but the new array starts with room for `capacity` elements. -/
 @[inline, expose]
 public def _root_.Std.Iter.toFloat32ArrayWithCapacity {α : Type} [Std.Iterator α Id Float32]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Float32) (capacity : Nat) : Float32Array :=

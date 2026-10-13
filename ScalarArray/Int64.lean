@@ -827,10 +827,7 @@ public def _root_.Std.Iter.toInt64Array {α : Type} [Std.Iterator α Id Int64]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int64) : Int64Array :=
   it.fold (·.push ·) empty
 
-/--
-Collects the values emitted by an iterator into a new array that starts with room for `capacity`
-elements, like `Std.Iter.toInt64Array`.
--/
+/-- Like `Std.Iter.toInt64Array`, but the new array starts with room for `capacity` elements. -/
 @[inline, expose]
 public def _root_.Std.Iter.toInt64ArrayWithCapacity {α : Type} [Std.Iterator α Id Int64]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Int64) (capacity : Nat) : Int64Array :=
