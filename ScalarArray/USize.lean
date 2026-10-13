@@ -488,6 +488,237 @@ public instance : Repr USizeArray where
 public instance : ToString USizeArray where
   toString a := "USizeArray.mk " ++ toString a.data
 
+/-! ## Slices -/
+
+/-- Internal representation of `USizeArray.Slice`. -/
+public structure SliceData where
+  /-- The underlying array. -/
+  array : USizeArray
+  /-- The starting index of the slice (inclusive). -/
+  start : Nat
+  /-- The ending index of the slice (exclusive). -/
+  stop : Nat
+  /-- The starting index is no later than the ending index. -/
+  start_le_stop : start ≤ stop
+  /-- The ending index is no later than the end of the array. -/
+  stop_le_array_size : stop ≤ array.size
+
+/--
+A region of a `USizeArray`: the elements from index `start` up to, but not including, `stop`.
+Taking a slice doesn't copy the array. Slices are written with core's slice notation, such as
+`a[i...j]`, `a[i...*]` or `a[*...j]`.
+-/
+public abbrev Slice := Std.Slice SliceData
+
+public instance : Std.Slice.Self (Std.Slice SliceData) Slice where
+
+namespace Slice
+
+@[always_inline, inline, expose, inherit_doc SliceData.array]
+public def array (s : Slice) : USizeArray := s.internalRepresentation.array
+
+@[always_inline, inline, expose, inherit_doc SliceData.start]
+public def start (s : Slice) : Nat := s.internalRepresentation.start
+
+@[always_inline, inline, expose, inherit_doc SliceData.stop]
+public def stop (s : Slice) : Nat := s.internalRepresentation.stop
+
+@[inherit_doc SliceData.start_le_stop]
+public theorem start_le_stop (s : Slice) : s.start ≤ s.stop := s.internalRepresentation.start_le_stop
+
+@[inherit_doc SliceData.stop_le_array_size]
+public theorem stop_le_array_size (s : Slice) : s.stop ≤ s.array.size :=
+  s.internalRepresentation.stop_le_array_size
+
+public instance : Std.Slice.SliceSize SliceData where
+  size s := s.internalRepresentation.stop - s.internalRepresentation.start
+
+public theorem size_eq (s : Slice) : s.size = s.stop - s.start := rfl
+
+/-- The element at index `i` of the slice, counted from the start of the slice. -/
+@[inline, expose]
+public def get (s : Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) : USize :=
+  s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega)
+
+public instance : GetElem Slice Nat USize fun s i => i < s.size where
+  getElem s i h := s.get i h
+
+/-- The element at index `i` of the slice, or `v₀` if `i` is out of bounds. -/
+@[inline]
+public def getD (s : Slice) (i : Nat) (v₀ : USize) : USize :=
+  if h : i < s.size then s[i] else v₀
+
+/-- The element at index `i` of the slice, or `default` if `i` is out of bounds. -/
+public abbrev get! (s : Slice) (i : Nat) : USize :=
+  getD s i default
+
+/-- Removes the first element of the slice, if any. -/
+@[expose]
+public def popFront (s : Slice) : Slice :=
+  if h : s.start < s.stop then
+    ⟨{ s.internalRepresentation with start := s.start + 1, start_le_stop := h }⟩
+  else
+    s
+
+/-- The empty slice, backed by an empty array. -/
+@[expose]
+public protected def empty : Slice :=
+  ⟨{ array := USizeArray.empty, start := 0, stop := 0, start_le_stop := Nat.le_refl 0,
+     stop_le_array_size := Nat.le_refl 0 }⟩
+
+public instance : EmptyCollection Slice := ⟨Slice.empty⟩
+
+public instance : Inhabited Slice := ⟨Slice.empty⟩
+
+/-- The elements of the slice, copied into a new array with a single `memcpy`. -/
+@[expose]
+public def copy (s : Slice) : USizeArray :=
+  s.array.extract s.start s.stop
+
+public instance : Coe Slice USizeArray := ⟨copy⟩
+
+public theorem getElem_eq (s : Slice) (i : Nat) (h : i < s.size) :
+    s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega) := rfl
+
+public instance : Repr Slice where
+  reprPrec s _ := repr s.copy ++ ".toSlice"
+
+public instance : ToString Slice where
+  toString s := toString s.copy
+
+end Slice
+
+/--
+The slice of `a` from index `start` up to, but not including, `stop`. If `start` or `stop` are not
+valid bounds, they are clamped to the size of `a`, and `start` is clamped to `stop`.
+-/
+@[expose]
+public def toSlice (a : USizeArray) (start : Nat := 0) (stop : Nat := a.size) : Slice :=
+  if h₂ : stop ≤ a.size then
+    if h₁ : start ≤ stop then
+      ⟨{ array := a, start, stop, start_le_stop := h₁, stop_le_array_size := h₂ }⟩
+    else
+      ⟨{ array := a, start := stop, stop, start_le_stop := Nat.le_refl _,
+         stop_le_array_size := h₂ }⟩
+  else
+    if h₁ : start ≤ a.size then
+      ⟨{ array := a, start, stop := a.size, start_le_stop := h₁,
+         stop_le_array_size := Nat.le_refl _ }⟩
+    else
+      ⟨{ array := a, start := a.size, stop := a.size, start_le_stop := Nat.le_refl _,
+         stop_le_array_size := Nat.le_refl _ }⟩
+
+public instance : Std.Rcc.Sliceable USizeArray Nat Slice where
+  mkSlice a range := a.toSlice range.lower (range.upper + 1)
+
+public instance : Std.Rco.Sliceable USizeArray Nat Slice where
+  mkSlice a range := a.toSlice range.lower range.upper
+
+public instance : Std.Rci.Sliceable USizeArray Nat Slice where
+  mkSlice a range := a.toSlice range.lower
+
+public instance : Std.Roc.Sliceable USizeArray Nat Slice where
+  mkSlice a range := a.toSlice (range.lower + 1) (range.upper + 1)
+
+public instance : Std.Roo.Sliceable USizeArray Nat Slice where
+  mkSlice a range := a.toSlice (range.lower + 1) range.upper
+
+public instance : Std.Roi.Sliceable USizeArray Nat Slice where
+  mkSlice a range := a.toSlice (range.lower + 1)
+
+public instance : Std.Ric.Sliceable USizeArray Nat Slice where
+  mkSlice a range := a.toSlice 0 (range.upper + 1)
+
+public instance : Std.Rio.Sliceable USizeArray Nat Slice where
+  mkSlice a range := a.toSlice 0 range.upper
+
+public instance : Std.Rii.Sliceable USizeArray Nat Slice where
+  mkSlice a _ := a.toSlice
+
+namespace Slice
+
+/-- The slice of `s` from index `start` up to, but not including, `stop`, clamped like `toSlice`. -/
+@[expose]
+public def slice (s : Slice) (start : Nat := 0) (stop : Nat := s.size) : Slice :=
+  s.array.toSlice (s.start + min start s.size) (s.start + min stop s.size)
+
+end Slice
+
+public instance : Std.Rcc.Sliceable Slice Nat Slice where
+  mkSlice s range := s.slice range.lower (range.upper + 1)
+
+public instance : Std.Rco.Sliceable Slice Nat Slice where
+  mkSlice s range := s.slice range.lower range.upper
+
+public instance : Std.Rci.Sliceable Slice Nat Slice where
+  mkSlice s range := s.slice range.lower
+
+public instance : Std.Roc.Sliceable Slice Nat Slice where
+  mkSlice s range := s.slice (range.lower + 1) (range.upper + 1)
+
+public instance : Std.Roo.Sliceable Slice Nat Slice where
+  mkSlice s range := s.slice (range.lower + 1) range.upper
+
+public instance : Std.Roi.Sliceable Slice Nat Slice where
+  mkSlice s range := s.slice (range.lower + 1)
+
+public instance : Std.Ric.Sliceable Slice Nat Slice where
+  mkSlice s range := s.slice 0 (range.upper + 1)
+
+public instance : Std.Rio.Sliceable Slice Nat Slice where
+  mkSlice s range := s.slice 0 range.upper
+
+public instance : Std.Rii.Sliceable Slice Nat Slice where
+  mkSlice s _ := s
+
+/-- The iterator over the elements of a slice, used for `for` loops and the generic slice API. -/
+public structure SliceIterator where
+  /-- The rest of the slice. -/
+  xs : Slice
+
+@[inline, expose]
+public def SliceIterator.step :
+    Std.IterM (α := SliceIterator) Id USize →
+      Std.IterStep (Std.IterM (α := SliceIterator) m USize) USize
+  | ⟨⟨xs⟩⟩ =>
+    if h : xs.start < xs.stop then
+      have := xs.stop_le_array_size
+      .yield ⟨⟨⟨xs.array, xs.start + 1, xs.stop, h, xs.stop_le_array_size⟩⟩⟩ xs.array[xs.start]
+    else
+      .done
+
+public instance : Std.Iterator SliceIterator Id USize where
+  IsPlausibleStep it step := step = SliceIterator.step it
+  step it := pure <| .deflate ⟨SliceIterator.step it, rfl⟩
+
+private def SliceIterator.finitenessRelation : Std.Iterators.FinitenessRelation SliceIterator Id where
+  Rel := InvImage WellFoundedRelation.rel
+    (fun it => it.internalState.xs.stop - it.internalState.xs.start)
+  wf := InvImage.wf _ WellFoundedRelation.wf
+  subrelation {it it'} h := by
+    rcases it with ⟨⟨⟨⟨array, start, stop, h₁, h₂⟩⟩⟩⟩
+    obtain ⟨step, h, h'⟩ := h
+    cases h'
+    simp only [SliceIterator.step] at h
+    split at h
+    next hs =>
+      simp only [Std.IterStep.successor, Option.some.injEq] at h
+      subst h
+      simp only [InvImage, WellFoundedRelation.rel, sizeOf_nat, Slice.start, Slice.stop] at hs ⊢
+      omega
+    next =>
+      simp [Std.IterStep.successor] at h
+
+public instance : Std.Iterators.Finite SliceIterator Id :=
+  .of_finitenessRelation SliceIterator.finitenessRelation
+
+public instance [Monad m] : Std.IteratorLoop SliceIterator Id m := .defaultImplementation
+
+public instance : Std.ToIterator (Std.Slice SliceData) Id SliceIterator USize :=
+  Std.ToIterator.of SliceIterator (⟨⟨·⟩⟩)
+
+public instance [Monad m] : ForIn m Slice USize := inferInstance
+
 @[simp] public theorem size_mk (a : Array USize) : (mk a).size = a.size := rfl
 
 @[simp] public theorem data_mk (a : Array USize) : (mk a).data = a := rfl
@@ -719,6 +950,11 @@ public theorem copySlice_eq_append (src : USizeArray) (srcOff : Nat) (dest : USi
       dest.extract 0 destOff ++ src.extract srcOff (srcOff + len) ++
         dest.extract (destOff + min len (src.size - srcOff)) dest.size := by
   simp [USizeArray.ext_iff]
+
+@[simp] public theorem Slice.size_copy (s : Slice) : s.copy.size = s.size := by
+  have := s.stop_le_array_size
+  simp only [Slice.copy, size_extract, Slice.size_eq]
+  omega
 
 end USizeArray
 

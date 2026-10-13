@@ -441,3 +441,60 @@ example (a b : UInt64Array) : (a ++ b).extract 0 a.size = a := by simp
 example (a : UInt64Array) (i : Nat) (v : UInt64) : (a.set! i v).size = a.size := by simp
 example (l : List UInt64) : (UInt64Array.ofList l).toList = l := by simp
 example (a : UInt64Array) : UInt64Array.ofList a.toList = a := by simp
+
+/-! Slices -/
+
+#guard
+  let a := UInt64Array.mk #[1, 2, 3, 18446744073709551615]
+  let s := a[1...3]
+  s.size == 2 && s[0]! == 2 && s[1]! == 3 && s.getD 2 7 == 7 && s.copy == UInt64Array.mk #[2, 3] &&
+    s.toList == [2, 3] && s.toArray == #[2, 3]
+
+#guard
+  let a := UInt64Array.mk #[1, 2, 3, 18446744073709551615]
+  a[1...=3].toList == [2, 3, 18446744073709551615] && a[*...2].toList == [1, 2] && a[2...*].toList == [3, 18446744073709551615] &&
+    a[*...*].toList == [1, 2, 3, 18446744073709551615] && a[0<...2].toList == [2] &&
+    a[0<...=2].toList == [2, 3] && a[*...=1].toList == [1, 2] && a[1<...*].toList == [3, 18446744073709551615]
+
+-- Bounds are clamped.
+#guard
+  let a := UInt64Array.mk #[1, 2, 3, 18446744073709551615]
+  a[2...100].toList == [3, 18446744073709551615] && a[3...1].size == 0 && a[9...12].size == 0 &&
+    (a.toSlice 1 (2 ^ 70)).toList == [2, 3, 18446744073709551615]
+
+-- Slices of slices.
+#guard
+  let s := (UInt64Array.mk #[1, 2, 3, 18446744073709551615])[1...4]
+  s[1...2].toList == [3] && s[0...100].toList == [2, 3, 18446744073709551615] && s[*...*].toList == [2, 3, 18446744073709551615] &&
+    s[2...*].toList == [18446744073709551615] && s[5...6].size == 0
+
+#guard
+  let s := (UInt64Array.mk #[1, 2, 3, 18446744073709551615])[1...4]
+  s.popFront.toList == [3, 18446744073709551615] && s.popFront.popFront.popFront.popFront.size == 0
+
+#guard (∅ : UInt64Array.Slice).size == 0 && (default : UInt64Array.Slice).toList == []
+
+#guard Id.run do
+  let mut r : List UInt64 := []
+  for x in (UInt64Array.mk #[1, 2, 3, 18446744073709551615])[1...*] do
+    r := x :: r
+  return r == [18446744073709551615, 3, 2]
+
+#guard (UInt64Array.mk #[1, 2, 3, 18446744073709551615])[1...*].foldl (fun acc x => x :: acc) [] == [18446744073709551615, 3, 2]
+
+#guard
+  let xs := (Array.range 100000).map Nat.toUInt64
+  let s := (UInt64Array.mk xs)[70000...70010]
+  s.toArray == xs.extract 70000 70010 && s.copy.data == xs.extract 70000 70010
+
+#guard toString (UInt64Array.mk #[1, 2, 3])[1...*] == toString (UInt64Array.mk #[2, 3])
+
+-- Taking a slice doesn't copy the array.
+@[noinline] def UInt64Array.slicesWithoutCopying (x : UInt64) : Bool :=
+  let a := UInt64Array.mk #[x, 2, 3]
+  let p := rawAddr a
+  rawAddr a[1...2].array == p
+
+#guard UInt64Array.slicesWithoutCopying 1
+
+example (s : UInt64Array.Slice) : s.copy.size = s.size := by simp
