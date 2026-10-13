@@ -441,3 +441,41 @@ example (a b : UInt64Array) : (a ++ b).extract 0 a.size = a := by simp
 example (a : UInt64Array) (i : Nat) (v : UInt64) : (a.set! i v).size = a.size := by simp
 example (l : List UInt64) : (UInt64Array.ofList l).toList = l := by simp
 example (a : UInt64Array) : UInt64Array.ofList a.toList = a := by simp
+
+/-! Iterators -/
+
+#guard
+  let it := (UInt64Array.mk #[1, 2, 18446744073709551615]).iter
+  it.curr == 1 && it.pos == 0 && !it.atEnd && it.hasNext && !it.hasPrev && it.remaining == 3 &&
+    it.next.curr == 2 && it.next.hasPrev && it.next.next.curr == 18446744073709551615 &&
+    it.next.next.next.atEnd && !it.next.next.next.hasNext && it.next.next.next.remaining == 0 &&
+    it.toEnd.atEnd && it.toEnd.pos == 3 && it.toEnd.prev.curr == 18446744073709551615 &&
+    (it.forward 2).curr == 18446744073709551615 && (it.nextn 1).curr == 2 && (it.toEnd.prevn 2).curr == 2 &&
+    (it.toEnd.prevn 10).pos == 0 && it.prev.pos == 0
+
+-- An invalid position gives the default element.
+#guard (UInt64Array.mk #[1]).iter.next.curr == default
+#guard ((UInt64Array.mk #[1, 2]).iter.forward 5).curr == default
+#guard UInt64Array.empty.iter.atEnd && UInt64Array.empty.iter.curr == default
+
+#guard (UInt64Array.mk #[1, 18446744073709551615]).iter.curr' (by decide) == 1
+#guard ((UInt64Array.mk #[1, 18446744073709551615]).iter.next' (by decide)).curr == 18446744073709551615
+
+#guard Id.run do
+  let mut it := (UInt64Array.mk #[1, 2, 18446744073709551615]).iter
+  let mut r : List UInt64 := []
+  while it.hasNext do
+    r := it.curr :: r
+    it := it.next
+  return r == [18446744073709551615, 2, 1]
+
+#guard Id.run do
+  let mut it := (UInt64Array.mk #[1, 2, 18446744073709551615]).iter.toEnd
+  let mut r : List UInt64 := []
+  while it.hasPrev do
+    it := it.prev
+    r := it.curr :: r
+  return r == [1, 2, 18446744073709551615]
+
+example (it : UInt64Array.Iterator) : sizeOf it = it.array.size - it.idx :=
+  UInt64Array.Iterator.sizeOf_eq it

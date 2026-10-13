@@ -433,3 +433,41 @@ example (a b : Float64Array) : (a ++ b).extract 0 a.size = a := by simp
 example (a : Float64Array) (i : Nat) (v : Float) : (a.set! i v).size = a.size := by simp
 example (l : List Float) : (Float64Array.ofList l).toList = l := by simp
 example (a : Float64Array) : Float64Array.ofList a.toList = a := by simp
+
+/-! Iterators -/
+
+#guard
+  let it := (Float64Array.mk #[1, 2, (-1.5e300)]).iter
+  it.curr == 1 && it.pos == 0 && !it.atEnd && it.hasNext && !it.hasPrev && it.remaining == 3 &&
+    it.next.curr == 2 && it.next.hasPrev && it.next.next.curr == (-1.5e300) &&
+    it.next.next.next.atEnd && !it.next.next.next.hasNext && it.next.next.next.remaining == 0 &&
+    it.toEnd.atEnd && it.toEnd.pos == 3 && it.toEnd.prev.curr == (-1.5e300) &&
+    (it.forward 2).curr == (-1.5e300) && (it.nextn 1).curr == 2 && (it.toEnd.prevn 2).curr == 2 &&
+    (it.toEnd.prevn 10).pos == 0 && it.prev.pos == 0
+
+-- An invalid position gives the default element.
+#guard (Float64Array.mk #[1]).iter.next.curr == default
+#guard ((Float64Array.mk #[1, 2]).iter.forward 5).curr == default
+#guard Float64Array.empty.iter.atEnd && Float64Array.empty.iter.curr == default
+
+#guard (Float64Array.mk #[1, (-1.5e300)]).iter.curr' (by decide) == 1
+#guard ((Float64Array.mk #[1, (-1.5e300)]).iter.next' (by decide)).curr == (-1.5e300)
+
+#guard Id.run do
+  let mut it := (Float64Array.mk #[1, 2, (-1.5e300)]).iter
+  let mut r : List Float := []
+  while it.hasNext do
+    r := it.curr :: r
+    it := it.next
+  return r == [(-1.5e300), 2, 1]
+
+#guard Id.run do
+  let mut it := (Float64Array.mk #[1, 2, (-1.5e300)]).iter.toEnd
+  let mut r : List Float := []
+  while it.hasPrev do
+    it := it.prev
+    r := it.curr :: r
+  return r == [1, 2, (-1.5e300)]
+
+example (it : Float64Array.Iterator) : sizeOf it = it.array.size - it.idx :=
+  Float64Array.Iterator.sizeOf_eq it

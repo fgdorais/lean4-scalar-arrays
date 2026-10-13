@@ -478,6 +478,121 @@ public def hash (a : @& UInt8Array) : UInt64 :=
 
 public instance : Hashable UInt8Array := ⟨hash⟩
 
+/-! ## Iterators -/
+
+/--
+An iterator over the elements of an array: the array and a position in it.
+
+An iterator is *valid* if its position `idx` satisfies `idx ≤ array.size`. Most operations return
+arbitrary values on invalid iterators. The API only creates invalid iterators through `next` at
+the end of the array, and through `forward` or `nextn` by more than the remaining elements.
+-/
+public structure Iterator where
+  /-- The array the iterator is for. -/
+  array : UInt8Array
+  /--
+  The current position. If it is not a valid position for the array, the current element is
+  `(default : UInt8)`.
+  -/
+  idx : Nat
+  deriving Inhabited
+
+/-- An iterator at the beginning of `a`. -/
+@[expose] public def mkIterator (a : UInt8Array) : Iterator :=
+  ⟨a, 0⟩
+
+@[inherit_doc mkIterator]
+public abbrev iter := mkIterator
+
+/-- The size of an iterator is the number of elements remaining. -/
+public instance : SizeOf Iterator where
+  sizeOf i := i.array.size - i.idx
+
+public theorem Iterator.sizeOf_eq (i : Iterator) : sizeOf i = i.array.size - i.idx :=
+  rfl
+
+namespace Iterator
+
+/-- The number of elements remaining. -/
+@[inline, expose]
+public def remaining : Iterator → Nat
+  | ⟨a, i⟩ => a.size - i
+
+@[inherit_doc Iterator.idx, expose]
+public def pos := Iterator.idx
+
+/-- Whether the iterator is past the last element of the array. -/
+@[inline, expose]
+public def atEnd : Iterator → Bool
+  | ⟨a, i⟩ => i ≥ a.size
+
+/-- The element at the current position, or `(default : UInt8)` if the position is invalid. -/
+@[inline, expose]
+public def curr : Iterator → UInt8
+  | ⟨a, i⟩ => if h : i < a.size then a[i] else default
+
+/--
+Moves the position forward by one element, unconditionally. The result is only valid if the
+iterator is not at the end of the array, that is, if `atEnd` is `false`.
+-/
+@[inline, expose]
+public def next : Iterator → Iterator
+  | ⟨a, i⟩ => ⟨a, i + 1⟩
+
+/-- Moves the position back by one element. At position zero, this is the identity. -/
+@[inline, expose]
+public def prev : Iterator → Iterator
+  | ⟨a, i⟩ => ⟨a, i - 1⟩
+
+/-- Whether the iterator is not past the last element of the array. -/
+@[inline, expose]
+public def hasNext : Iterator → Bool
+  | ⟨a, i⟩ => i < a.size
+
+/-- The element at the current position. -/
+@[inline, expose]
+public def curr' (it : Iterator) (h : it.hasNext) : UInt8 :=
+  match it with
+  | ⟨a, i⟩ =>
+    have : i < a.size := by
+      simp only [hasNext, decide_eq_true_eq] at h
+      assumption
+    a[i]
+
+/-- Moves the position forward by one element. -/
+@[inline, expose]
+public def next' (it : Iterator) (_h : it.hasNext) : Iterator :=
+  match it with
+  | ⟨a, i⟩ => ⟨a, i + 1⟩
+
+/-- Whether the position is not zero. -/
+@[inline, expose]
+public def hasPrev : Iterator → Bool
+  | ⟨_, i⟩ => i > 0
+
+/-- Moves the position to the end of the array, so that `atEnd` is `true`. -/
+@[inline, expose]
+public def toEnd : Iterator → Iterator
+  | ⟨a, _⟩ => ⟨a, a.size⟩
+
+/--
+Moves the position forward by `n` elements. The result is only valid if `n` is at most the number
+of elements remaining.
+-/
+@[inline, expose]
+public def forward : Iterator → Nat → Iterator
+  | ⟨a, i⟩, n => ⟨a, i + n⟩
+
+@[inherit_doc forward, inline, expose]
+public def nextn : Iterator → Nat → Iterator := forward
+
+/-- Moves the position back by `n` elements, stopping at the beginning of the array. -/
+@[inline, expose]
+public def prevn : Iterator → Nat → Iterator
+  | ⟨a, i⟩, n => ⟨a, i - n⟩
+
+end Iterator
+
 /-! ## Conversion and printing -/
 
 @[expose] public def toList (a : UInt8Array) : List UInt8 := a.data.toList

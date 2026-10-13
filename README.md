@@ -77,6 +77,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Slicing      | `append`, `a ++ b`, `extract`, `copySlice`                                  |
 | Iteration    | `foldl`, `foldr`, `foldlM`, `foldrM`, `forM`, `for x in a`, `any`, `all`, `contains` |
 | Search       | `findIdx?`, `findFinIdx?`                                                   |
+| Iterators    | `iter`/`mkIterator` and `Iterator` with `curr`, `next`, `prev`, `atEnd`, `hasNext`, `hasPrev`, `forward`, `nextn`, `prevn`, `toEnd`, `remaining`, … |
 | Equality     | `a == b`; for integer types also `DecidableEq` and `Hashable`               |
 | Linearity    | `markLinear`, `propagateMark`                                               |
 | Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
@@ -96,6 +97,11 @@ As with `ByteArray`, `set!` returns the array unchanged when the index is out of
 `a ++ b` copies the elements of `b` with a single `memcpy`, into `a` itself when it is not shared
 and has room. `extract` and `copySlice` also copy with a single `memcpy`. Iteration reads the elements
 directly, without building an `Array`.
+
+`UInt8Array` converts to and from core's `ByteArray` with `toByteArray`, `ofByteArray` and
+`ByteArray.toUInt8Array`, and `Float64Array` to and from core's `FloatArray` with `toFloatArray`,
+`ofFloatArray` and `FloatArray.toFloat64Array` (`import ScalarArray.Conversions`). These conversions
+never copy, so core's functions can be used directly on these arrays and vice versa.
 
 Equality on the integer types compares the arrays' memory with `memcmp`, and their hash agrees
 with the hash of `data`. `Float32Array` and `Float64Array` compare elements with floating-point

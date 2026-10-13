@@ -441,3 +441,41 @@ example (a b : ISizeArray) : (a ++ b).extract 0 a.size = a := by simp
 example (a : ISizeArray) (i : Nat) (v : ISize) : (a.set! i v).size = a.size := by simp
 example (l : List ISize) : (ISizeArray.ofList l).toList = l := by simp
 example (a : ISizeArray) : ISizeArray.ofList a.toList = a := by simp
+
+/-! Iterators -/
+
+#guard
+  let it := (ISizeArray.mk #[1, 2, (-9223372036854775808)]).iter
+  it.curr == 1 && it.pos == 0 && !it.atEnd && it.hasNext && !it.hasPrev && it.remaining == 3 &&
+    it.next.curr == 2 && it.next.hasPrev && it.next.next.curr == (-9223372036854775808) &&
+    it.next.next.next.atEnd && !it.next.next.next.hasNext && it.next.next.next.remaining == 0 &&
+    it.toEnd.atEnd && it.toEnd.pos == 3 && it.toEnd.prev.curr == (-9223372036854775808) &&
+    (it.forward 2).curr == (-9223372036854775808) && (it.nextn 1).curr == 2 && (it.toEnd.prevn 2).curr == 2 &&
+    (it.toEnd.prevn 10).pos == 0 && it.prev.pos == 0
+
+-- An invalid position gives the default element.
+#guard (ISizeArray.mk #[1]).iter.next.curr == default
+#guard ((ISizeArray.mk #[1, 2]).iter.forward 5).curr == default
+#guard ISizeArray.empty.iter.atEnd && ISizeArray.empty.iter.curr == default
+
+#guard (ISizeArray.mk #[1, (-9223372036854775808)]).iter.curr' (by decide) == 1
+#guard ((ISizeArray.mk #[1, (-9223372036854775808)]).iter.next' (by decide)).curr == (-9223372036854775808)
+
+#guard Id.run do
+  let mut it := (ISizeArray.mk #[1, 2, (-9223372036854775808)]).iter
+  let mut r : List ISize := []
+  while it.hasNext do
+    r := it.curr :: r
+    it := it.next
+  return r == [(-9223372036854775808), 2, 1]
+
+#guard Id.run do
+  let mut it := (ISizeArray.mk #[1, 2, (-9223372036854775808)]).iter.toEnd
+  let mut r : List ISize := []
+  while it.hasPrev do
+    it := it.prev
+    r := it.curr :: r
+  return r == [1, 2, (-9223372036854775808)]
+
+example (it : ISizeArray.Iterator) : sizeOf it = it.array.size - it.idx :=
+  ISizeArray.Iterator.sizeOf_eq it

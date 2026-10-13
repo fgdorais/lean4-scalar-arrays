@@ -128,12 +128,14 @@ def generate():
     head = root.split('public import ScalarArray.')[0]
     doc = '\n/-!' + root.split('\n/-!', 1)[1]
     files['ScalarArray.lean'] = (
-        head + ''.join(f'public import ScalarArray.{n}\n' for n in names) + doc)
+        head + ''.join(f'public import ScalarArray.{n}\n' for n in names)
+        + 'public import ScalarArray.Conversions\n' + doc)
     test_root = (ROOT / 'ScalarArrayTest.lean').read_text()
     files['ScalarArrayTest.lean'] = (
         test_root.split('import ')[0]
         + ''.join(f'import ScalarArrayTest.{n}\n' for n in names)
-        + 'import ScalarArrayTest.Float\n')
+        + 'import ScalarArrayTest.Float\n'
+        + 'import ScalarArrayTest.Conversions\n')
     return files
 
 

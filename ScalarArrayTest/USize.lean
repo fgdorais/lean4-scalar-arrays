@@ -441,3 +441,41 @@ example (a b : USizeArray) : (a ++ b).extract 0 a.size = a := by simp
 example (a : USizeArray) (i : Nat) (v : USize) : (a.set! i v).size = a.size := by simp
 example (l : List USize) : (USizeArray.ofList l).toList = l := by simp
 example (a : USizeArray) : USizeArray.ofList a.toList = a := by simp
+
+/-! Iterators -/
+
+#guard
+  let it := (USizeArray.mk #[1, 2, 18446744073709551615]).iter
+  it.curr == 1 && it.pos == 0 && !it.atEnd && it.hasNext && !it.hasPrev && it.remaining == 3 &&
+    it.next.curr == 2 && it.next.hasPrev && it.next.next.curr == 18446744073709551615 &&
+    it.next.next.next.atEnd && !it.next.next.next.hasNext && it.next.next.next.remaining == 0 &&
+    it.toEnd.atEnd && it.toEnd.pos == 3 && it.toEnd.prev.curr == 18446744073709551615 &&
+    (it.forward 2).curr == 18446744073709551615 && (it.nextn 1).curr == 2 && (it.toEnd.prevn 2).curr == 2 &&
+    (it.toEnd.prevn 10).pos == 0 && it.prev.pos == 0
+
+-- An invalid position gives the default element.
+#guard (USizeArray.mk #[1]).iter.next.curr == default
+#guard ((USizeArray.mk #[1, 2]).iter.forward 5).curr == default
+#guard USizeArray.empty.iter.atEnd && USizeArray.empty.iter.curr == default
+
+#guard (USizeArray.mk #[1, 18446744073709551615]).iter.curr' (by decide) == 1
+#guard ((USizeArray.mk #[1, 18446744073709551615]).iter.next' (by decide)).curr == 18446744073709551615
+
+#guard Id.run do
+  let mut it := (USizeArray.mk #[1, 2, 18446744073709551615]).iter
+  let mut r : List USize := []
+  while it.hasNext do
+    r := it.curr :: r
+    it := it.next
+  return r == [18446744073709551615, 2, 1]
+
+#guard Id.run do
+  let mut it := (USizeArray.mk #[1, 2, 18446744073709551615]).iter.toEnd
+  let mut r : List USize := []
+  while it.hasPrev do
+    it := it.prev
+    r := it.curr :: r
+  return r == [1, 2, 18446744073709551615]
+
+example (it : USizeArray.Iterator) : sizeOf it = it.array.size - it.idx :=
+  USizeArray.Iterator.sizeOf_eq it

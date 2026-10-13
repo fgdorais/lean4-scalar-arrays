@@ -441,3 +441,41 @@ example (a b : Int32Array) : (a ++ b).extract 0 a.size = a := by simp
 example (a : Int32Array) (i : Nat) (v : Int32) : (a.set! i v).size = a.size := by simp
 example (l : List Int32) : (Int32Array.ofList l).toList = l := by simp
 example (a : Int32Array) : Int32Array.ofList a.toList = a := by simp
+
+/-! Iterators -/
+
+#guard
+  let it := (Int32Array.mk #[1, 2, (-2147483648)]).iter
+  it.curr == 1 && it.pos == 0 && !it.atEnd && it.hasNext && !it.hasPrev && it.remaining == 3 &&
+    it.next.curr == 2 && it.next.hasPrev && it.next.next.curr == (-2147483648) &&
+    it.next.next.next.atEnd && !it.next.next.next.hasNext && it.next.next.next.remaining == 0 &&
+    it.toEnd.atEnd && it.toEnd.pos == 3 && it.toEnd.prev.curr == (-2147483648) &&
+    (it.forward 2).curr == (-2147483648) && (it.nextn 1).curr == 2 && (it.toEnd.prevn 2).curr == 2 &&
+    (it.toEnd.prevn 10).pos == 0 && it.prev.pos == 0
+
+-- An invalid position gives the default element.
+#guard (Int32Array.mk #[1]).iter.next.curr == default
+#guard ((Int32Array.mk #[1, 2]).iter.forward 5).curr == default
+#guard Int32Array.empty.iter.atEnd && Int32Array.empty.iter.curr == default
+
+#guard (Int32Array.mk #[1, (-2147483648)]).iter.curr' (by decide) == 1
+#guard ((Int32Array.mk #[1, (-2147483648)]).iter.next' (by decide)).curr == (-2147483648)
+
+#guard Id.run do
+  let mut it := (Int32Array.mk #[1, 2, (-2147483648)]).iter
+  let mut r : List Int32 := []
+  while it.hasNext do
+    r := it.curr :: r
+    it := it.next
+  return r == [(-2147483648), 2, 1]
+
+#guard Id.run do
+  let mut it := (Int32Array.mk #[1, 2, (-2147483648)]).iter.toEnd
+  let mut r : List Int32 := []
+  while it.hasPrev do
+    it := it.prev
+    r := it.curr :: r
+  return r == [1, 2, (-2147483648)]
+
+example (it : Int32Array.Iterator) : sizeOf it = it.array.size - it.idx :=
+  Int32Array.Iterator.sizeOf_eq it

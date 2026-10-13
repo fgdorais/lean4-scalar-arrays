@@ -441,3 +441,41 @@ example (a b : Int8Array) : (a ++ b).extract 0 a.size = a := by simp
 example (a : Int8Array) (i : Nat) (v : Int8) : (a.set! i v).size = a.size := by simp
 example (l : List Int8) : (Int8Array.ofList l).toList = l := by simp
 example (a : Int8Array) : Int8Array.ofList a.toList = a := by simp
+
+/-! Iterators -/
+
+#guard
+  let it := (Int8Array.mk #[1, 2, (-128)]).iter
+  it.curr == 1 && it.pos == 0 && !it.atEnd && it.hasNext && !it.hasPrev && it.remaining == 3 &&
+    it.next.curr == 2 && it.next.hasPrev && it.next.next.curr == (-128) &&
+    it.next.next.next.atEnd && !it.next.next.next.hasNext && it.next.next.next.remaining == 0 &&
+    it.toEnd.atEnd && it.toEnd.pos == 3 && it.toEnd.prev.curr == (-128) &&
+    (it.forward 2).curr == (-128) && (it.nextn 1).curr == 2 && (it.toEnd.prevn 2).curr == 2 &&
+    (it.toEnd.prevn 10).pos == 0 && it.prev.pos == 0
+
+-- An invalid position gives the default element.
+#guard (Int8Array.mk #[1]).iter.next.curr == default
+#guard ((Int8Array.mk #[1, 2]).iter.forward 5).curr == default
+#guard Int8Array.empty.iter.atEnd && Int8Array.empty.iter.curr == default
+
+#guard (Int8Array.mk #[1, (-128)]).iter.curr' (by decide) == 1
+#guard ((Int8Array.mk #[1, (-128)]).iter.next' (by decide)).curr == (-128)
+
+#guard Id.run do
+  let mut it := (Int8Array.mk #[1, 2, (-128)]).iter
+  let mut r : List Int8 := []
+  while it.hasNext do
+    r := it.curr :: r
+    it := it.next
+  return r == [(-128), 2, 1]
+
+#guard Id.run do
+  let mut it := (Int8Array.mk #[1, 2, (-128)]).iter.toEnd
+  let mut r : List Int8 := []
+  while it.hasPrev do
+    it := it.prev
+    r := it.curr :: r
+  return r == [1, 2, (-128)]
+
+example (it : Int8Array.Iterator) : sizeOf it = it.array.size - it.idx :=
+  Int8Array.Iterator.sizeOf_eq it
