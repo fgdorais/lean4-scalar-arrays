@@ -126,8 +126,15 @@ evaluating the Lean model. They cover every operation, sharing (writes to a shar
 not affect other references to it), indices beyond 16 bits, huge `Nat` indices, the runtime
 element size and capacity, and bit-exact round-trips of special floating-point values.
 
-The source files for the twelve types are identical apart from the type names, the C element
-type and the element size. A change to one should be made to all of them.
+The source and test files for the twelve types are generated from the `UInt16` versions,
+`ScalarArray/UInt16.lean` and `ScalarArrayTest/UInt16.lean`. Make changes there, then regenerate
+the other types:
+
+```bash
+python3 scripts/generate.py
+```
+
+`python3 scripts/generate.py --check` changes nothing and fails if a generated file is out of date.
 
 -----
 

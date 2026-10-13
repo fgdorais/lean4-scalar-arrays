@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+# Copyright © 2026 François G. Dorais. All rights reserved.
+# Released under Apache 2.0 license as described in the file LICENSE.
+"""
+Generates the array modules and their tests from the `UInt16` versions.
+
+`ScalarArray/UInt16.lean` and `ScalarArrayTest/UInt16.lean` are the templates: make changes there,
+then run this script from anywhere to regenerate the other types and the root import lists.
+With `--check`, it changes nothing and exits with status 1 if any generated file is out of date.
+"""
+
+import pathlib
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+WORD = '(System.Platform.numBits / 8).toUInt32'
+# Each entry: type name, element type, C element type, element size expression, element size in
+# prose (twice), a large test value, and the `Nat` conversion function.
+types = [
+  ('UInt8',  'UInt8',  'uint8_t',  '1', '1 byte per element',  'element size 1', '255', 'toUInt8'),
+  ('UInt16', 'UInt16', 'uint16_t', '2', '2 bytes per element', 'element size 2', '65535', 'toUInt16'),
+  ('UInt32', 'UInt32', 'uint32_t', '4', '4 bytes per element', 'element size 4', '4294967295', 'toUInt32'),
+  ('UInt64', 'UInt64', 'uint64_t', '8', '8 bytes per element', 'element size 8', '18446744073709551615', 'toUInt64'),
+  ('USize',  'USize',  'size_t',   WORD, 'one machine word per element', 'element size `System.Platform.numBits / 8`', '18446744073709551615', 'toUSize'),
+  ('Int8',   'Int8',   'uint8_t',  '1', '1 byte per element',  'element size 1', '-128', 'toInt8'),
+  ('Int16',  'Int16',  'uint16_t', '2', '2 bytes per element', 'element size 2', '-32768', 'toInt16'),
+  ('Int32',  'Int32',  'uint32_t', '4', '4 bytes per element', 'element size 4', '-2147483648', 'toInt32'),
+  ('Int64',  'Int64',  'uint64_t', '8', '8 bytes per element', 'element size 8', '-9223372036854775808', 'toInt64'),
+  ('ISize',  'ISize',  'size_t',   WORD, 'one machine word per element', 'element size `System.Platform.numBits / 8`', '-9223372036854775808', 'toISize'),
+  ('Float32','Float32','float',    '4', '4 bytes per element', 'element size 4', '-1.5e38', 'toFloat32'),
+  ('Float64','Float',  'double',   '8', '8 bytes per element', 'element size 8', '-1.5e300', 'toFloat'),
+]
+
+# The float types have no `DecidableEq` or `Hashable`: they get a `BEq` instance instead.
+FLOAT_EQ_OLD = """/-- Decides equality by comparing the two arrays' memory. -/
+@[extern "lean_sarray_dec_eq"]
+public def decEq (a b : @& UInt16Array) : Decidable (a = b) :=
+  decidable_of_iff (a.data = b.data) ⟨data_injective, fun h => h ▸ rfl⟩
+
+public instance : DecidableEq UInt16Array := decEq
+
+private unsafe def hashImpl (a : @& UInt16Array) : UInt64 :=
+  foldlMImpl (m := Id) (fun r x => mixHash r (Hashable.hash x)) 7 a
+
+/-- The same hash as `a.data`. -/
+@[implemented_by hashImpl]
+public def hash (a : @& UInt16Array) : UInt64 :=
+  Hashable.hash a.data
+
+public instance : Hashable UInt16Array := ⟨hash⟩
+"""
+FLOAT_EQ_NEW = """private unsafe def beqImpl (a b : @& UInt16Array) : Bool :=
+  a.usize == b.usize && loop 0
+where
+  loop (i : USize) : Bool :=
+    if h : i.toNat < a.size then
+      if h' : i.toNat < b.size then a.uget i h == b.uget i h' && loop (i + 1) else false
+    else
+      true
+
+/--
+Compares the elements with `==`, like `Array`. Floating-point equality is not decidable equality:
+`NaN` is not equal to itself and `0.0 == -0.0`.
+-/
+@[implemented_by beqImpl]
+public def beq (a b : @& UInt16Array) : Bool :=
+  a.data == b.data
+
+public instance : BEq UInt16Array := ⟨beq⟩
+"""
+FLOAT_TEST_OLD = """/-! Decidable equality and hashing -/
+
+#guard decide (UInt16Array.mk #[1, 2, 65535] = UInt16Array.mk #[1, 2, 65535])
+#guard !decide (UInt16Array.mk #[1, 2, 65535] = UInt16Array.mk #[1, 2, 0])
+#guard hash (UInt16Array.mk #[1, 2, 65535]) == hash #[(1 : UInt16), 2, 65535]
+#guard hash (UInt16Array.empty) == hash (#[] : Array UInt16)
+#guard hash ((UInt16Array.emptyWithCapacity 100).push 1) == hash (UInt16Array.mk #[1])
+
+"""
+
+
+def sub(s, pairs):
+    for a, b in pairs:
+        assert a in s, f"template text not found: {a!r}"
+        s = s.replace(a, b)
+    return s
+
+
+def generate():
+    """Returns a map from paths relative to the repository root to their generated contents."""
+    src = (ROOT / 'ScalarArray/UInt16.lean').read_text()
+    tst = (ROOT / 'ScalarArrayTest/UInt16.lean').read_text()
+    files = {}
+    for name, elem, ctype, alloc, per_elem, elem_size, big, conv in types:
+        is_float = name.startswith('Float')
+        s = src
+        if is_float:
+            s = sub(s, [(FLOAT_EQ_OLD, FLOAT_EQ_NEW),
+                        ('/-! ## Equality and hashing -/', '/-! ## Equality -/')])
+        s = sub(s, [
+            ('UInt16Array', name + 'Array'),
+            ('setUInt16Unsafe', f'set{name}Unsafe'),
+            ('allocate 2 ', f'allocate {alloc} '),
+            ('2 bytes per element', per_elem),
+            ('element size 2', elem_size),
+            ('uint16_t', ctype),
+            ('UInt16', elem),
+        ])
+        if name == 'Float64':
+            s = sub(s, [('it otherwise, like `Array` and `ByteArray`.\n',
+                         'it otherwise, like `Array` and `ByteArray`.\n\n'
+                         '`Float64Array` has the same runtime representation as the core `FloatArray`, '
+                         'with the same API\nas the other arrays in this library.\n')])
+        files[f'ScalarArray/{name}.lean'] = s
+        t = sub(tst, [(FLOAT_TEST_OLD, '')]) if is_float else tst
+        t = sub(t, [
+            ('import ScalarArray.UInt16', 'import ScalarArray.' + name),
+            ('(2 : UInt32)', f'({alloc} : UInt32)'),
+            ('UInt16Array', name + 'Array'),
+            ('toUInt16', conv),
+            ('65535', f'({big})' if big.startswith('-') else big),
+            ('UInt16', elem),
+        ])
+        files[f'ScalarArrayTest/{name}.lean'] = t
+    names = [t[0] for t in types]
+    root = (ROOT / 'ScalarArray.lean').read_text()
+    head = root.split('public import ScalarArray.')[0]
+    doc = '\n/-!' + root.split('\n/-!', 1)[1]
+    files['ScalarArray.lean'] = (
+        head + ''.join(f'public import ScalarArray.{n}\n' for n in names) + doc)
+    test_root = (ROOT / 'ScalarArrayTest.lean').read_text()
+    files['ScalarArrayTest.lean'] = (
+        test_root.split('import ')[0]
+        + ''.join(f'import ScalarArrayTest.{n}\n' for n in names)
+        + 'import ScalarArrayTest.Float\n')
+    return files
+
+
+def main():
+    check = sys.argv[1:] == ['--check']
+    stale = []
+    for path, contents in generate().items():
+        file = ROOT / path
+        if not file.exists() or file.read_text() != contents:
+            stale.append(path)
+            if not check:
+                file.write_text(contents)
+    if check and stale:
+        print('Out of date; run scripts/generate.py:', *stale, sep='\n  ')
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
