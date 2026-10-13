@@ -67,10 +67,22 @@ public unsafe def getImpl : type_of% @get :=
 
 attribute [implemented_by getImpl] get
 
-/-- Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in bounds. -/
+/--
+Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in bounds. Public only
+so that `uset` can be inlined into code in other modules.
+-/
 @[extern c inline "#1;\n((double*)lean_sarray_cptr(#1))[#2] = #3"]
-private unsafe def setFloat64Unsafe : Float64Array → USize → Float → Float64Array
+public unsafe def setUnsafe : Float64Array → USize → Float → Float64Array
   | .mk a, i, v => .mk <| a.uset i v lcProof
+
+/--
+`a` itself when it is not shared, and a copy otherwise. Public only so that `uset` can be inlined
+into code in other modules.
+-/
+-- The same runtime function as the private `ScalarArray.ensureExclusive`, which code in other
+-- modules can't reach.
+@[extern "lean_sarray_ensure_exclusive"]
+public unsafe def ensureExclusiveUnsafe (a : Float64Array) : Float64Array := a
 
 private unsafe def toUSizeChecked (n : Nat) : USize :=
   if n < USize.size >>> 1 then n.toUSize else panic! "out of memory"
@@ -87,7 +99,7 @@ private unsafe def mkWithCapacityImpl (a : Array Float) (capacity : Nat := a.siz
   loop sz r 0
 where
   loop (sz : USize) (r : Float64Array) (i : USize) : Float64Array :=
-    if i < sz then loop sz (setFloat64Unsafe r i (a.uget i lcProof)) (i + 1) else r
+    if i < sz then loop sz (setUnsafe r i (a.uget i lcProof)) (i + 1) else r
 
 public unsafe def mkImpl (a : Array Float) : Float64Array :=
   mkWithCapacityImpl a a.size
@@ -119,14 +131,20 @@ public instance : EmptyCollection Float64Array := ⟨empty⟩
 
 public instance : Inhabited Float64Array := ⟨empty⟩
 
+/--
+Replaces the element at index `i`, in place when `a` is not shared. It compiles to inline C: one
+check that `a` is exclusive, copying it if not, and one store.
+-/
 @[expose]
 public def uset :
     (a : Float64Array) → (i : USize) → (v : Float) →
     (h : i.toNat < a.size := by get_elem_tactic) → Float64Array
   | mk a, i, v, h => mk (a.uset i v h)
 
+-- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
+@[inline]
 public unsafe def usetImpl : type_of% @uset :=
-  fun a i v _ => setFloat64Unsafe (unsafeCast <| ScalarArray.ensureExclusive (unsafeCast a)) i v
+  fun a i v _ => setUnsafe (ensureExclusiveUnsafe a) i v
 
 attribute [implemented_by usetImpl] uset
 
@@ -136,8 +154,9 @@ public def set :
     Float64Array
   | mk a, i, v, h => mk (a.set i v h)
 
+@[inline]
 public unsafe def setImpl : type_of% @set :=
-  fun a i v _ => usetImpl a i.toUSize v lcProof
+  fun a i v _ => a.uset i.toUSize v lcProof
 
 attribute [implemented_by setImpl] set
 
@@ -175,7 +194,7 @@ private unsafe def pushImpl (a : Float64Array) (v : Float) : Float64Array :=
 where
   loop (s : ScalarArray) : Float64Array :=
     let i := s.size
-    setFloat64Unsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
+    setUnsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
 
 @[implemented_by pushImpl, expose]
 public def push : Float64Array → Float → Float64Array
@@ -358,7 +377,7 @@ private unsafe def replicateImpl (n : Nat) (v : Float) : Float64Array :=
   loop sz (allocUnsafe sz sz) 0
 where
   loop (sz : USize) (r : Float64Array) (i : USize) : Float64Array :=
-    if i < sz then loop sz (setFloat64Unsafe r i v) (i + 1) else r
+    if i < sz then loop sz (setUnsafe r i v) (i + 1) else r
 
 /-- An array of `n` copies of `v`. -/
 @[implemented_by replicateImpl, expose]
@@ -370,7 +389,7 @@ private unsafe def ofFnImpl {n : Nat} (f : Fin n → Float) : Float64Array :=
   loop (allocUnsafe sz sz) 0
 where
   loop (r : Float64Array) (i : Nat) : Float64Array :=
-    if h : i < n then loop (setFloat64Unsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
+    if h : i < n then loop (setUnsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
 
 /-- The array `#[f 0, …, f (n - 1)]`. -/
 @[implemented_by ofFnImpl, expose]
@@ -397,7 +416,7 @@ private unsafe def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f
   let stop := min stop a.size
   if start < stop then loop stop.toUSize start.toUSize init else pure init
 where
-  loop (stop i : USize) (b : β) : m β :=
+  @[specialize] loop (stop i : USize) (b : β) : m β :=
     if i < stop then do loop stop (i + 1) (← f b (a.uget i lcProof)) else pure b
 
 /--
@@ -414,7 +433,7 @@ private unsafe def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f
     (init : β) (a : @& Float64Array) : m β :=
   loop a.usize init
 where
-  loop (i : USize) (b : β) : m β :=
+  @[specialize] loop (i : USize) (b : β) : m β :=
     if h : 0 < i ∧ (i - 1).toNat < a.size then do loop (i - 1) (← f (a.uget (i - 1) h.2) b)
     else pure b
 
@@ -443,7 +462,7 @@ private unsafe def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a 
     (init : β) (f : Float → β → m (ForInStep β)) : m β :=
   loop 0 init
 where
-  loop (i : USize) (b : β) : m β :=
+  @[specialize] loop (i : USize) (b : β) : m β :=
     if h : i.toNat < a.size then do
       match ← f (a.uget i h) b with
       | .done b => pure b
@@ -462,7 +481,7 @@ public instance [Monad m] : ForIn m Float64Array Float where
 private unsafe def anyImpl (a : @& Float64Array) (p : Float → Bool) : Bool :=
   loop 0
 where
-  loop (i : USize) : Bool :=
+  @[specialize] loop (i : USize) : Bool :=
     if h : i.toNat < a.size then p (a.uget i h) || loop (i + 1) else false
 
 /-- Whether some element of `a` satisfies `p`. -/
@@ -474,7 +493,7 @@ public def any (a : @& Float64Array) (p : Float → Bool) : Bool :=
 private unsafe def allImpl (a : @& Float64Array) (p : Float → Bool) : Bool :=
   loop 0
 where
-  loop (i : USize) : Bool :=
+  @[specialize] loop (i : USize) : Bool :=
     if h : i.toNat < a.size then p (a.uget i h) && loop (i + 1) else true
 
 /-- Whether every element of `a` satisfies `p`. -/
@@ -1165,6 +1184,21 @@ public theorem copySlice_eq_append (src : Float64Array) (srcOff : Nat) (dest : F
     List.popWhile_toArray]
   simp
 
+/-! ### Machine-word indices -/
+
+/--
+`usize` is the size when the size fits in a `USize`, which holds for every array in memory. Loops
+over `USize` indices take this as a hypothesis, since the model `Array` has no bound on its size.
+-/
+public theorem toNat_usize_of_lt (a : Float64Array) (h : a.size < USize.size) :
+    a.usize.toNat = a.size := by
+  simp [Nat.mod_eq_of_lt h]
+
+/-- The guard `i < a.usize` of a loop over `USize` indices bounds the index. -/
+public theorem lt_usize_iff (a : Float64Array) (h : a.size < USize.size) {i : USize} :
+    i < a.usize ↔ i.toNat < a.size := by
+  rw [USize.lt_iff_toNat_lt, toNat_usize_of_lt a h]
+
 /-! ### Last element -/
 
 public theorem back?_eq_getElem? (a : Float64Array) : a.back? = a[a.size - 1]? := by
@@ -1378,6 +1412,14 @@ private theorem findFinIdx?_loop_eq (a : Float64Array) (p : Float → Bool) (i :
   simp only [Slice.getElem_eq, array_popFront, start_popFront]
   congr 1
   omega
+
+public theorem Slice.getD_eq (s : Float64Array.Slice) (i : Nat) (v₀ : Float) :
+    s.getD i v₀ = if h : i < s.size then s[i] else v₀ := by
+  rw [Slice.getD]
+
+public theorem Slice.get!_eq (s : Float64Array.Slice) (i : Nat) :
+    s.get! i = if h : i < s.size then s[i] else default := by
+  rw [Slice.get!, Slice.getD]
 
 private theorem Slice.foldrM_loop_eq {β : Type v} (f : Float → β → β)
     (s : Float64Array.Slice) (i : Nat) (h : i ≤ s.size) (b : β) :

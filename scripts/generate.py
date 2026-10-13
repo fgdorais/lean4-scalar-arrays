@@ -52,6 +52,9 @@ public def hash (a : @& UInt16Array) : UInt64 :=
   Hashable.hash a.data
 
 public instance : Hashable UInt16Array := ⟨hash⟩
+
+public theorem hash_eq_hash_data (a : UInt16Array) : Hashable.hash a = Hashable.hash a.data := by
+  rfl
 """
 FLOAT_EQ_NEW = """private unsafe def beqImpl (a b : @& UInt16Array) : Bool :=
   a.usize == b.usize && loop 0
@@ -103,7 +106,6 @@ def generate():
                         ('/-! ## Equality and hashing -/', '/-! ## Equality -/')])
         s = sub(s, [
             ('UInt16Array', name + 'Array'),
-            ('setUInt16Unsafe', f'set{name}Unsafe'),
             ('allocate 2 ', f'allocate {alloc} '),
             ('2 bytes per element', per_elem),
             ('uint16_t', ctype),
