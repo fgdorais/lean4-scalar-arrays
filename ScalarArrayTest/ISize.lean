@@ -309,6 +309,22 @@ open ScalarArray ScalarArrayTest
 
 #guard ISizeArray.popsInPlace 1
 
+#guard (ISizeArray.mk #[1, 0, (-9223372036854775808), 0, 0]).popWhile (· == 0) == ISizeArray.mk #[1, 0, (-9223372036854775808)]
+#guard (ISizeArray.mk #[1, 0, (-9223372036854775808)]).popWhile (· == 0) == ISizeArray.mk #[1, 0, (-9223372036854775808)]
+#guard (ISizeArray.mk #[0, 0]).popWhile (· == 0) == ISizeArray.empty
+#guard ISizeArray.empty.popWhile (· == 0) == ISizeArray.empty
+
+-- Popping several elements from an exclusive array.
+@[noinline] def ISizeArray.popsWhileInPlace (x : ISize) : Bool :=
+  let a := (ISizeArray.mk #[x]).push 0 |>.push 0
+  let p := rawAddr a
+  let a := a.popWhile (· == 0)
+  rawAddr a == p && a.data == #[x]
+
+#guard ISizeArray.popsWhileInPlace 1
+
+example (p : ISize → Bool) (a : ISizeArray) : (a.popWhile p).data = a.data.popWhile p := by simp
+
 #guard ((ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]).extract 1 3).data == #[2, 3]
 #guard ((ISizeArray.mk #[1, 2, 3, (-9223372036854775808)]).extract 2 100).data == #[3, (-9223372036854775808)]
 #guard ((ISizeArray.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]

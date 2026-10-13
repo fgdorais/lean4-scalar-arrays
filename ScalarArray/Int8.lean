@@ -261,6 +261,24 @@ public def back! (a : @& Int8Array) : Int8 := a[a.size - 1]!
 
 public def back (a : @& Int8Array) (h : 0 < a.size) : Int8 := a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
 
+private def popWhileImpl (p : Int8 → Bool) (a : Int8Array) : Int8Array :=
+  if h : 0 < a.size then
+    if p (a.back h) then popWhileImpl p a.pop else a
+  else
+    a
+termination_by a.size
+decreasing_by
+  have : a.pop.size = a.size - 1 := by cases a; exact Array.size_pop ..
+  omega
+
+/--
+Removes the longest run of elements at the end of `a` that satisfy `p`, in place when `a` is not
+shared.
+-/
+@[implemented_by popWhileImpl, expose]
+public def popWhile (p : Int8 → Bool) : Int8Array → Int8Array
+  | mk a => mk (a.popWhile p)
+
 private unsafe def extractImpl (a : @& Int8Array) (start stop : Nat) : Int8Array :=
   let stop := min stop a.size
   if start < stop then
@@ -910,6 +928,10 @@ public theorem ext_getElem {a b : Int8Array} (h₁ : a.size = b.size)
 @[simp] public theorem getElem_pop (a : Int8Array) (i : Nat) (h) :
     a.pop[i]'h = a[i]'(by simp at h; omega) := by
   simp [-getElem_data, getElem_eq_getElem_data]
+
+@[simp] public theorem data_popWhile (p : Int8 → Bool) (a : Int8Array) :
+    (a.popWhile p).data = a.data.popWhile p := by
+  cases a; rfl
 
 @[simp] public theorem getElem_append (a b : Int8Array) (i : Nat) (h) :
     (a ++ b)[i]'h = if h' : i < a.size then a[i] else b[i - a.size]'(by simp at h; omega) := by

@@ -309,6 +309,22 @@ open ScalarArray ScalarArrayTest
 
 #guard Int8Array.popsInPlace 1
 
+#guard (Int8Array.mk #[1, 0, (-128), 0, 0]).popWhile (· == 0) == Int8Array.mk #[1, 0, (-128)]
+#guard (Int8Array.mk #[1, 0, (-128)]).popWhile (· == 0) == Int8Array.mk #[1, 0, (-128)]
+#guard (Int8Array.mk #[0, 0]).popWhile (· == 0) == Int8Array.empty
+#guard Int8Array.empty.popWhile (· == 0) == Int8Array.empty
+
+-- Popping several elements from an exclusive array.
+@[noinline] def Int8Array.popsWhileInPlace (x : Int8) : Bool :=
+  let a := (Int8Array.mk #[x]).push 0 |>.push 0
+  let p := rawAddr a
+  let a := a.popWhile (· == 0)
+  rawAddr a == p && a.data == #[x]
+
+#guard Int8Array.popsWhileInPlace 1
+
+example (p : Int8 → Bool) (a : Int8Array) : (a.popWhile p).data = a.data.popWhile p := by simp
+
 #guard ((Int8Array.mk #[1, 2, 3, (-128)]).extract 1 3).data == #[2, 3]
 #guard ((Int8Array.mk #[1, 2, 3, (-128)]).extract 2 100).data == #[3, (-128)]
 #guard ((Int8Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]

@@ -301,6 +301,22 @@ open ScalarArray ScalarArrayTest
 
 #guard Float32Array.popsInPlace 1
 
+#guard (Float32Array.mk #[1, 0, (-1.5e38), 0, 0]).popWhile (· == 0) == Float32Array.mk #[1, 0, (-1.5e38)]
+#guard (Float32Array.mk #[1, 0, (-1.5e38)]).popWhile (· == 0) == Float32Array.mk #[1, 0, (-1.5e38)]
+#guard (Float32Array.mk #[0, 0]).popWhile (· == 0) == Float32Array.empty
+#guard Float32Array.empty.popWhile (· == 0) == Float32Array.empty
+
+-- Popping several elements from an exclusive array.
+@[noinline] def Float32Array.popsWhileInPlace (x : Float32) : Bool :=
+  let a := (Float32Array.mk #[x]).push 0 |>.push 0
+  let p := rawAddr a
+  let a := a.popWhile (· == 0)
+  rawAddr a == p && a.data == #[x]
+
+#guard Float32Array.popsWhileInPlace 1
+
+example (p : Float32 → Bool) (a : Float32Array) : (a.popWhile p).data = a.data.popWhile p := by simp
+
 #guard ((Float32Array.mk #[1, 2, 3, (-1.5e38)]).extract 1 3).data == #[2, 3]
 #guard ((Float32Array.mk #[1, 2, 3, (-1.5e38)]).extract 2 100).data == #[3, (-1.5e38)]
 #guard ((Float32Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]

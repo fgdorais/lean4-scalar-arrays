@@ -309,6 +309,22 @@ open ScalarArray ScalarArrayTest
 
 #guard UInt8Array.popsInPlace 1
 
+#guard (UInt8Array.mk #[1, 0, 255, 0, 0]).popWhile (· == 0) == UInt8Array.mk #[1, 0, 255]
+#guard (UInt8Array.mk #[1, 0, 255]).popWhile (· == 0) == UInt8Array.mk #[1, 0, 255]
+#guard (UInt8Array.mk #[0, 0]).popWhile (· == 0) == UInt8Array.empty
+#guard UInt8Array.empty.popWhile (· == 0) == UInt8Array.empty
+
+-- Popping several elements from an exclusive array.
+@[noinline] def UInt8Array.popsWhileInPlace (x : UInt8) : Bool :=
+  let a := (UInt8Array.mk #[x]).push 0 |>.push 0
+  let p := rawAddr a
+  let a := a.popWhile (· == 0)
+  rawAddr a == p && a.data == #[x]
+
+#guard UInt8Array.popsWhileInPlace 1
+
+example (p : UInt8 → Bool) (a : UInt8Array) : (a.popWhile p).data = a.data.popWhile p := by simp
+
 #guard ((UInt8Array.mk #[1, 2, 3, 255]).extract 1 3).data == #[2, 3]
 #guard ((UInt8Array.mk #[1, 2, 3, 255]).extract 2 100).data == #[3, 255]
 #guard ((UInt8Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]

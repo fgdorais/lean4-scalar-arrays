@@ -18,12 +18,7 @@ open ScalarArray
 namespace ScalarArrayTest.Bignum
 
 /-- Removes the trailing zero limbs. -/
-def trim (a : UInt32Array) : UInt32Array :=
-  if h : 0 < a.size then
-    if a.back h == 0 then trim a.pop else a
-  else a
-termination_by a.size
-decreasing_by simp; omega
+def trim (a : UInt32Array) : UInt32Array := a.popWhile (· == 0)
 
 /-- Whether the most significant limb is nonzero. -/
 def isTrimmed (a : UInt32Array) : Bool := a.back? != some 0
