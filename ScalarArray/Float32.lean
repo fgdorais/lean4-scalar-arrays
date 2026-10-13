@@ -394,7 +394,7 @@ private unsafe def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f
   let stop := min stop a.size
   if start < stop then loop stop.toUSize start.toUSize init else pure init
 where
-  loop (stop i : USize) (b : β) : m β :=
+  @[specialize] loop (stop i : USize) (b : β) : m β :=
     if i < stop then do loop stop (i + 1) (← f b (a.uget i lcProof)) else pure b
 
 /--
@@ -411,7 +411,7 @@ private unsafe def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f
     (init : β) (a : @& Float32Array) : m β :=
   loop a.usize init
 where
-  loop (i : USize) (b : β) : m β :=
+  @[specialize] loop (i : USize) (b : β) : m β :=
     if h : 0 < i ∧ (i - 1).toNat < a.size then do loop (i - 1) (← f (a.uget (i - 1) h.2) b)
     else pure b
 
@@ -440,7 +440,7 @@ private unsafe def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a 
     (init : β) (f : Float32 → β → m (ForInStep β)) : m β :=
   loop 0 init
 where
-  loop (i : USize) (b : β) : m β :=
+  @[specialize] loop (i : USize) (b : β) : m β :=
     if h : i.toNat < a.size then do
       match ← f (a.uget i h) b with
       | .done b => pure b
@@ -459,7 +459,7 @@ public instance [Monad m] : ForIn m Float32Array Float32 where
 private unsafe def anyImpl (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
   loop 0
 where
-  loop (i : USize) : Bool :=
+  @[specialize] loop (i : USize) : Bool :=
     if h : i.toNat < a.size then p (a.uget i h) || loop (i + 1) else false
 
 /-- Whether some element of `a` satisfies `p`. -/
@@ -471,7 +471,7 @@ public def any (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
 private unsafe def allImpl (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
   loop 0
 where
-  loop (i : USize) : Bool :=
+  @[specialize] loop (i : USize) : Bool :=
     if h : i.toNat < a.size then p (a.uget i h) && loop (i + 1) else true
 
 /-- Whether every element of `a` satisfies `p`. -/
@@ -1375,6 +1375,12 @@ private theorem findFinIdx?_loop_eq (a : Float32Array) (p : Float32 → Bool) (i
   simp only [Slice.getElem_eq, array_popFront, start_popFront]
   congr 1
   omega
+
+public theorem Slice.getD_eq (s : Float32Array.Slice) (i : Nat) (v₀ : Float32) :
+    s.getD i v₀ = if h : i < s.size then s[i] else v₀ := rfl
+
+public theorem Slice.get!_eq (s : Float32Array.Slice) (i : Nat) :
+    s.get! i = if h : i < s.size then s[i] else default := rfl
 
 private theorem Slice.foldrM_loop_eq {β : Type v} (f : Float32 → β → β)
     (s : Float32Array.Slice) (i : Nat) (h : i ≤ s.size) (b : β) :
