@@ -827,6 +827,19 @@ public def _root_.Std.Iter.toISizeArray {α : Type} [Std.Iterator α Id ISize]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) ISize) : ISizeArray :=
   it.fold (·.push ·) empty
 
+/--
+Collects the values emitted by an iterator into a new array that starts with room for `capacity`
+elements, like `Std.Iter.toISizeArray`.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toISizeArrayWithCapacity {α : Type} [Std.Iterator α Id ISize]
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) ISize) (capacity : Nat) : ISizeArray :=
+  it.fold (·.push ·) (emptyWithCapacity capacity)
+
+@[simp] public theorem _root_.Std.Iter.toISizeArrayWithCapacity_eq {α : Type}
+    [Std.Iterator α Id ISize] [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) ISize)
+    (capacity : Nat) : it.toISizeArrayWithCapacity capacity = it.toISizeArray := rfl
+
 @[simp] public theorem size_mk (a : Array ISize) : (mk a).size = a.size := rfl
 
 @[simp] public theorem data_mk (a : Array ISize) : (mk a).data = a := rfl

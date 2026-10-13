@@ -827,6 +827,19 @@ public def _root_.Std.Iter.toUInt16Array {α : Type} [Std.Iterator α Id UInt16]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) UInt16) : UInt16Array :=
   it.fold (·.push ·) empty
 
+/--
+Collects the values emitted by an iterator into a new array that starts with room for `capacity`
+elements, like `Std.Iter.toUInt16Array`.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toUInt16ArrayWithCapacity {α : Type} [Std.Iterator α Id UInt16]
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) UInt16) (capacity : Nat) : UInt16Array :=
+  it.fold (·.push ·) (emptyWithCapacity capacity)
+
+@[simp] public theorem _root_.Std.Iter.toUInt16ArrayWithCapacity_eq {α : Type}
+    [Std.Iterator α Id UInt16] [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) UInt16)
+    (capacity : Nat) : it.toUInt16ArrayWithCapacity capacity = it.toUInt16Array := rfl
+
 @[simp] public theorem size_mk (a : Array UInt16) : (mk a).size = a.size := rfl
 
 @[simp] public theorem data_mk (a : Array UInt16) : (mk a).data = a := rfl

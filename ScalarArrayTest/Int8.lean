@@ -562,3 +562,5 @@ example (s : Int8Array.Slice) : s.copy.size = s.size := by simp
   let xs := (Array.range 100000).map Nat.toInt8
   ((Int8Array.mk xs).iter.map (· + 1)).toInt8Array.data == xs.map (· + 1)
 #guard rawElemSize ((Int8Array.mk #[1]).iter.toInt8Array) == (1 : UInt32)
+#guard ((Int8Array.mk #[1, 2, 3]).iter.toInt8ArrayWithCapacity 100) == Int8Array.mk #[1, 2, 3]
+#guard rawCapacity ((Int8Array.mk #[1, 2, 3]).iter.toInt8ArrayWithCapacity 100) ≥ 100

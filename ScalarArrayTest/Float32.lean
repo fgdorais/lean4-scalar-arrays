@@ -554,3 +554,5 @@ example (s : Float32Array.Slice) : s.copy.size = s.size := by simp
   let xs := (Array.range 100000).map Nat.toFloat32
   ((Float32Array.mk xs).iter.map (· + 1)).toFloat32Array.data == xs.map (· + 1)
 #guard rawElemSize ((Float32Array.mk #[1]).iter.toFloat32Array) == (4 : UInt32)
+#guard ((Float32Array.mk #[1, 2, 3]).iter.toFloat32ArrayWithCapacity 100) == Float32Array.mk #[1, 2, 3]
+#guard rawCapacity ((Float32Array.mk #[1, 2, 3]).iter.toFloat32ArrayWithCapacity 100) ≥ 100

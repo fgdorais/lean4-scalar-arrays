@@ -43,6 +43,10 @@ rev = "main"
 
 Then `import ScalarArray` for every type, or `import ScalarArray.UInt32` and so on for just one.
 
+The operations are implemented in C, so the library is built with `precompileModules`, and Lake
+loads the compiled code whenever a file that imports it runs `#eval` or `#guard`. This works in the
+editor, with `lake build` and with `lake lean`, but not with a bare `lake env lean`.
+
 ## Usage
 
 ```lean
@@ -78,7 +82,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Iteration    | `foldl`, `foldr`, `foldlM`, `foldrM`, `forM`, `for x in a`, `any`, `all`, `contains` |
 | Search       | `findIdx?`, `findFinIdx?`                                                   |
 | Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `get`, `getD`, `get!`, `popFront`, `copy`, `for x in s`, `foldl`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findSomeRevM?`, `toArray`, `toList` |
-| Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, and `Std.Iter.toXArray` to collect an iterator into an array |
+| Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, and `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array |
 | Equality     | `a == b`; for integer types also `DecidableEq` and `Hashable`               |
 | Linearity    | `markLinear`, `propagateMark`                                               |
 | Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
@@ -118,6 +122,12 @@ a[2...*].copy                                -- drop
 a.iter.length                                -- size
 ```
 
+`Std.Iter.toXArrayWithCapacity` allocates up front when the number of elements is known or
+bounded, for example `(a.iter.map f).toUInt32ArrayWithCapacity a.size`.
+
+Slices use core's range notation, `a[i...j]`. The older `a[i:j]` notation is specific to `Array`
+and doesn't apply to these arrays.
+
 Equality on the integer types compares the arrays' memory with `memcmp`, and their hash agrees
 with the hash of `data`. `Float32Array` and `Float64Array` compare elements with floating-point
 `==`, like `Array Float`, so they have no `DecidableEq` or `Hashable` instance: `NaN` is not equal
@@ -148,9 +158,9 @@ lake test
 ```
 
 The tests in `ScalarArrayTest` are `#guard` checks that run when the test library is built, so
-`lake build` runs them as well, and CI builds with `--wfail`. The
-library uses `precompileModules`, so the checks call the compiled C implementation rather than
-evaluating the Lean model. They cover every operation, sharing (writes to a shared array must
+`lake build` runs them as well, and CI builds with `--wfail`. Both libraries use
+`precompileModules`, so the checks call the compiled C implementation rather than evaluating the
+Lean model. They cover every operation, sharing (writes to a shared array must
 not affect other references to it), indices beyond 16 bits, huge `Nat` indices, the runtime
 element size and capacity, and bit-exact round-trips of special floating-point values.
 

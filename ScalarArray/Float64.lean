@@ -832,6 +832,19 @@ public def _root_.Std.Iter.toFloat64Array {α : Type} [Std.Iterator α Id Float]
     [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Float) : Float64Array :=
   it.fold (·.push ·) empty
 
+/--
+Collects the values emitted by an iterator into a new array that starts with room for `capacity`
+elements, like `Std.Iter.toFloat64Array`.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toFloat64ArrayWithCapacity {α : Type} [Std.Iterator α Id Float]
+    [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Float) (capacity : Nat) : Float64Array :=
+  it.fold (·.push ·) (emptyWithCapacity capacity)
+
+@[simp] public theorem _root_.Std.Iter.toFloat64ArrayWithCapacity_eq {α : Type}
+    [Std.Iterator α Id Float] [Std.IteratorLoop α Id Id] (it : Std.Iter (α := α) Float)
+    (capacity : Nat) : it.toFloat64ArrayWithCapacity capacity = it.toFloat64Array := rfl
+
 @[simp] public theorem size_mk (a : Array Float) : (mk a).size = a.size := rfl
 
 @[simp] public theorem data_mk (a : Array Float) : (mk a).data = a := rfl
