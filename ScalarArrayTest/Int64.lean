@@ -259,6 +259,36 @@ private abbrev elemSize : UInt32 := 8
 #guard hash (Int64Array.empty) == hash (#[] : Array Int64)
 #guard hash ((Int64Array.emptyWithCapacity 100).push 1) == hash (Int64Array.mk #[1])
 
+/-! Decidable membership and slice hashing -/
+
+#guard (2 : Int64) ∈ Int64Array.mk #[1, 2, big]
+#guard big ∈ Int64Array.mk #[1, 2, big]
+#guard (3 : Int64) ∉ Int64Array.mk #[1, 2, big]
+#guard (0 : Int64) ∉ Int64Array.empty
+#guard big ∈ (Int64Array.mk #[0, 1, 2, big])[1...4]
+#guard (0 : Int64) ∉ (Int64Array.mk #[0, 1, 2, big])[1...4]
+#guard (2 : Int64) ∉ (Int64Array.mk #[0, 1, 2, big])[0...2]
+#guard hash (Int64Array.mk #[0, 1, 2, big])[1...3] == hash (Int64Array.mk #[1, 2])
+#guard hash (Int64Array.mk #[0, 1, 2, big])[1...3] == hash (Int64Array.mk #[big, 1, 2])[1...3]
+#guard hash (∅ : Int64Array.Slice) == hash Int64Array.empty
+#guard hash (Int64Array.mk #[1, 2])[1...1] == hash (∅ : Int64Array.Slice)
+
+-- `decide` evaluates equality and membership for arrays and slices of literals.
+example : Int64Array.mk #[1, 2] = Int64Array.mk #[1, 2] := by decide
+example : Int64Array.mk #[1, 2] ≠ Int64Array.mk #[1, 3] := by decide
+example : Int64Array.mk #[1, 2] ≠ Int64Array.mk #[1, 2, 3] := by decide
+example : (2 : Int64) ∈ Int64Array.mk #[1, 2] := by decide
+example : (3 : Int64) ∉ Int64Array.mk #[1, 2] := by decide
+example : (2 : Int64) ∈ (Int64Array.mk #[1, 2, 3])[1...3] := by decide
+example : (1 : Int64) ∉ (Int64Array.mk #[1, 2, 3])[1...3] := by decide
+
+-- Lemmas that need decidable equality, used from another module.
+example (a : Int64Array) (x : Int64) : a.contains x ↔ x ∈ a.toList := by simp
+example (s : Int64Array.Slice) (x : Int64) : s.contains x ↔ x ∈ s.copy := by simp
+example (s t : Int64Array.Slice) (h : s.copy = t.copy) : s == t := by simp [h]
+example (s t : Int64Array.Slice) (h : s == t) : hash s = hash t :=
+  LawfulHashable.hash_eq s t h
+
 /-! Iteration -/
 
 #guard (Int64Array.mk #[1, 2, big]).foldl (fun acc x => x :: acc) [] == [big, 2, 1]
@@ -680,3 +710,87 @@ example (s : Int64Array.Slice) : s.copy.size = s.size := by simp
 #guard (Int64Array.mk #[1, 2, 3]).iter.toInt64ArrayWithCapacity 100 ==
   Int64Array.mk #[1, 2, 3]
 #guard rawCapacity ((Int64Array.mk #[1, 2, 3]).iter.toInt64ArrayWithCapacity 100) ≥ 100
+
+/-! Membership, `ForM` and slice equality -/
+
+#guard
+  let a := Int64Array.mk #[1, 2, big]
+  let r : StateM (List Int64) PUnit := forM a fun x => modify (x :: ·)
+  (r.run []).2 == [big, 2, 1]
+#guard
+  let s := (Int64Array.mk #[0, 1, 2, big])[1...3]
+  let r : StateM (List Int64) PUnit := forM s fun x => modify (x :: ·)
+  (r.run []).2 == [2, 1]
+#guard
+  let r : StateM (List Int64) PUnit := forM Int64Array.empty fun x => modify (x :: ·)
+  (r.run []).2 == []
+#guard (Int64Array.mk #[0, 1, 2, big])[1...3] == (Int64Array.mk #[1, 2, 5])[0...2]
+#guard (Int64Array.mk #[1, big, 1, big])[0...2] == (Int64Array.mk #[1, big, 1, big])[2...4]
+#guard (Int64Array.mk #[0, 1, 2, big])[1...3] != (Int64Array.mk #[1, 2, 5])[0...3]
+#guard (Int64Array.mk #[0, 1, 2, big])[1...3] != (Int64Array.mk #[1, big])[0...2]
+#guard (Int64Array.mk #[0, 1, 2, big])[1...3] != (Int64Array.mk #[2, 1])[0...2]
+#guard (∅ : Int64Array.Slice) == (Int64Array.mk #[1, 2])[1...1]
+#guard (Int64Array.mk #[1, 2, big] : Int64Array.Slice) ==
+  (Int64Array.mk #[0, 1, 2, big])[1...*]
+#guard
+  let xs := (Array.range 100000).map Nat.toInt64
+  (Int64Array.mk (#[0] ++ xs))[1...*] == (Int64Array.mk (xs ++ #[0]))[0...100000] &&
+    (Int64Array.mk (#[0] ++ xs))[1...*] != (Int64Array.mk (xs.set! 99999 0))[0...100000]
+
+/-! Lemmas from another module -/
+
+example (a : Int64Array) (i : USize) (v : Int64) (h) (j : Nat) (hj) :
+    (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
+  simp
+example (a : Int64Array) (v : Int64) :
+    (a.set! 0 v)[0]? = if 0 < a.size then some v else none := by
+  simp
+example (a : Int64Array) (v : Int64) (h : 1 < (a.set! 0 v).size) :
+    (a.set! 0 v)[1] = a[1]'(by simpa using h) := by
+  simp
+example (a : Int64Array) (p : Int64 → Bool) : (a.popWhile p).size ≤ a.size :=
+  Int64Array.size_popWhile_le p a
+example (src dest : Int64Array) :
+    (src.copySlice 0 dest 0 src.size).size = max dest.size src.size := by
+  simp
+example (a : Int64Array) (f : Nat → Int64 → Option Nat) :
+    a.toList.foldlM f 0 = a.foldlM f 0 := by
+  simp
+example (a : Int64Array) (f : Int64 → Nat → Option Nat) :
+    a.toList.foldrM f 0 = a.foldrM f 0 := by
+  simp
+example (a : Int64Array) (f : Int64 → StateM Nat PUnit) : forM a.toList f = forM a f := by
+  simp
+example (a b : Int64Array) (x : Int64) (h : x ∈ a) : x ∈ (a ++ b).toList := by
+  simp [h]
+example (a : Int64Array) (x : Int64) : x ∈ a.push x := by
+  simp
+example (a : Int64Array) (i : Nat) (h : i < a.size) : a[i] ∈ a.toList := by
+  simpa using Int64Array.getElem_mem h
+example (a : Int64Array) (start stop : Nat) (p : Int64 → Bool) :
+    (a.toSlice start stop).any p = (a.extract start stop).any p := by
+  simp
+example (a : Int64Array) (start stop : Nat) :
+    (a.toSlice start stop).toList = (a.toList.extract start stop) := by
+  simp
+example (s : Int64Array.Slice) (p : Int64 → Bool) : s.count p = s.copy.toList.countP p := by
+  simp
+example (s : Int64Array.Slice) (p : Int64 → Bool) :
+    s.find? p = s.copy.toList.find? p ∧ s.findRev? p = s.copy.toList.reverse.find? p := by
+  simp
+example (s : Int64Array.Slice) (f : Nat → Int64 → Nat) :
+    s.foldl f 0 = s.copy.toList.foldl f 0 := by
+  simp
+example (s : Int64Array.Slice) (f : Int64 → StateM Nat PUnit) :
+    forM s f = forM s.copy.toList f := by
+  simp
+example (s : Int64Array.Slice) (x : Int64) : x ∈ s ↔ x ∈ s.copy.toList := by
+  simp
+example (s t : Int64Array.Slice) : (s == t) = (s.copy == t.copy) := by
+  simp
+example (a : Int64Array) : a.iter.toInt64Array = a := by
+  simp
+example (s : Int64Array.Slice) : s.iter.toInt64Array = s.copy := by
+  simp
+example : (∅ : Int64Array.Slice).size = 0 := by
+  simp

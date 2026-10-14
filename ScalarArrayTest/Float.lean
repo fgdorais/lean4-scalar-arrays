@@ -50,3 +50,10 @@ def float64Specials : Array Float :=
 #guard !(Float64Array.mk #[0.0 / 0.0]).contains (0.0 / 0.0)
 #guard (Float64Array.mk #[1.0, 2.0] == Float64Array.mk #[1.0, 2.0]) ==
   (#[(1.0 : Float), 2.0] == #[1.0, 2.0])
+
+/-! `==` on float slices agrees with `==` on their copies. -/
+
+#guard (Float32Array.mk #[1.0, 0.0 / 0.0])[1...2] != (Float32Array.mk #[0.0 / 0.0])[0...1]
+#guard (Float64Array.mk #[1.0, 0.0 / 0.0])[1...2] != (Float64Array.mk #[0.0 / 0.0])[0...1]
+#guard (Float32Array.mk #[1.0, 0.0])[1...2] == (Float32Array.mk #[-0.0, 1.0])[0...1]
+#guard (Float64Array.mk #[1.0, 0.0])[1...2] == (Float64Array.mk #[-0.0, 1.0])[0...1]

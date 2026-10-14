@@ -37,9 +37,9 @@ types = [
 
 # The float types have no `DecidableEq` or `Hashable`: they get a `BEq` instance instead.
 FLOAT_EQ_OLD = """/-- Decides equality by comparing the two arrays' memory. -/
-@[extern "lean_sarray_dec_eq"]
+@[extern "lean_sarray_dec_eq", expose]
 public def decEq (a b : @& UInt16Array) : Decidable (a = b) :=
-  decidable_of_iff (a.data = b.data) ⟨data_injective, fun h => h ▸ rfl⟩
+  decidable_of_iff (a.data = b.data) ⟨fun h => by cases a; cases b; cases h; rfl, fun h => h ▸ rfl⟩
 
 public instance : DecidableEq UInt16Array := decEq
 
@@ -75,15 +75,13 @@ public def beq (a b : @& UInt16Array) : Bool :=
 
 public instance : BEq UInt16Array := ⟨beq⟩
 """
-FLOAT_TEST_OLD = """/-! Decidable equality and hashing -/
-
-#guard decide (UInt16Array.mk #[1, 2, big] = UInt16Array.mk #[1, 2, big])
-#guard !decide (UInt16Array.mk #[1, 2, big] = UInt16Array.mk #[1, 2, 0])
-#guard hash (UInt16Array.mk #[1, 2, big]) == hash #[(1 : UInt16), 2, big]
-#guard hash (UInt16Array.empty) == hash (#[] : Array UInt16)
-#guard hash ((UInt16Array.emptyWithCapacity 100).push 1) == hash (UInt16Array.mk #[1])
-
-"""
+# Also left out for the float types, from the first line up to, but not including, the second: the
+# lemmas and instances that need decidable equality or hashing, and their tests.
+FLOAT_DEC = ('/-! ### Decidable membership and slice hashing -/\n', 'end UInt16Array\n')
+FLOAT_TEST_DEC = ('/-! Decidable equality and hashing -/\n', '/-! Iteration -/\n')
+# Left out of the `USize` and `ISize` tests: `decide` can't evaluate their literals, since
+# `System.Platform.numBits` is opaque.
+WORD_TEST_DECIDE = ('-- `decide` evaluates', '-- Lemmas that need decidable equality')
 
 
 def sub(s, pairs):
@@ -91,6 +89,15 @@ def sub(s, pairs):
         assert a in s, f"template text not found: {a!r}"
         s = s.replace(a, b)
     return s
+
+
+def cut(s, span):
+    start, stop = span
+    i = s.find(start)
+    assert i >= 0 and s.count(start) == 1, f"template text not found: {start!r}"
+    j = s.find(stop, i)
+    assert j >= 0, f"template text not found: {stop!r}"
+    return s[:i] + s[j:]
 
 
 def generate():
@@ -104,6 +111,7 @@ def generate():
         if is_float:
             s = sub(s, [(FLOAT_EQ_OLD, FLOAT_EQ_NEW),
                         ('/-! ## Equality and hashing -/', '/-! ## Equality -/')])
+            s = cut(s, FLOAT_DEC)
         s = sub(s, [
             ('UInt16Array', name + 'Array'),
             ('allocate 2 ', f'allocate {alloc} '),
@@ -118,7 +126,9 @@ def generate():
                          '`FloatArray`, with the same API\n'
                          'as the other arrays in this library.\n')])
         files[f'ScalarArray/{name}.lean'] = s
-        t = sub(tst, [(FLOAT_TEST_OLD, '')]) if is_float else tst
+        t = cut(tst, FLOAT_TEST_DEC) if is_float else tst
+        if alloc == WORD:
+            t = cut(t, WORD_TEST_DECIDE)
         t = sub(t, [
             ('import ScalarArray.UInt16', 'import ScalarArray.' + name),
             ('elemSize : UInt32 := 2', f'elemSize : UInt32 := {alloc}'),
