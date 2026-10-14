@@ -6,6 +6,8 @@ module
 
 import all ScalarArray.Internal
 public import Std.Data.Iterators
+import Init.Data.Iterators.Lemmas.Basic
+import Init.Data.Slice.InternalLemmas
 
 /-!
 # Arrays of `Int8`
@@ -473,6 +475,9 @@ public def forIn {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Int8Arr
 public instance [Monad m] : ForIn m Int8Array Int8 where
   forIn a b f := Int8Array.forIn a b f
 
+public instance [Monad m] : ForM m Int8Array Int8 where
+  forM a f := a.forM f
+
 @[specialize]
 private unsafe def anyImpl (a : @& Int8Array) (p : Int8 → Bool) : Bool :=
   loop a.usize 0
@@ -505,15 +510,19 @@ private unsafe def containsImpl (a : @& Int8Array) (v : Int8) : Bool :=
 public def contains (a : @& Int8Array) (v : Int8) : Bool :=
   a.data.contains v
 
+/-- `x ∈ a` when `x` is an element of `a`. -/
+public instance : Membership Int8 Int8Array where
+  mem a x := x ∈ a.data
+
 /-! ## Equality and hashing -/
 
 private theorem data_injective : {a b : Int8Array} → a.data = b.data → a = b
   | mk _, mk _, rfl => rfl
 
 /-- Decides equality by comparing the two arrays' memory. -/
-@[extern "lean_sarray_dec_eq"]
+@[extern "lean_sarray_dec_eq", expose]
 public def decEq (a b : @& Int8Array) : Decidable (a = b) :=
-  decidable_of_iff (a.data = b.data) ⟨data_injective, fun h => h ▸ rfl⟩
+  decidable_of_iff (a.data = b.data) ⟨fun h => by cases a; cases b; cases h; rfl, fun h => h ▸ rfl⟩
 
 public instance : DecidableEq Int8Array := decEq
 
@@ -816,6 +825,9 @@ public instance :
 
 public instance [Monad m] : ForIn m Int8Array.Slice Int8 := inferInstance
 
+public instance [Monad m] : ForM m Int8Array.Slice Int8 where
+  forM s f := s.foldlM (fun _ x => f x) ⟨⟩
+
 /-- An iterator over the elements of `a`, for use with the `Std.Iterators` API. -/
 @[inline, expose]
 public def iter (a : Int8Array) : Std.Iter (α := Int8Array.SliceIterator) Int8 :=
@@ -912,6 +924,29 @@ public def contains (s : Int8Array.Slice) (v : Int8) : Bool :=
 @[inline, expose]
 public def count (s : Int8Array.Slice) (p : Int8 → Bool) : Nat :=
   s.iter.fold (fun n x => if p x then n + 1 else n) 0
+
+/-- `x ∈ s` when `x` is an element of `s`. -/
+public instance : Membership Int8 Int8Array.Slice where
+  mem s x := x ∈ s.copy
+
+private unsafe def beqImpl (s t : Int8Array.Slice) : Bool :=
+  s.size == t.size && loop s.array t.array s.stop.toUSize s.start.toUSize t.start.toUSize
+where
+  loop (a b : Int8Array) (stop i j : USize) : Bool :=
+    if i < stop then a.uget i lcProof == b.uget j lcProof && loop a b stop (i + 1) (j + 1)
+    else true
+
+/--
+Compares the elements of two slices with `==`: slices of different arrays, or at different offsets,
+are equal when their elements are. Logically it compares the copies.
+-/
+-- There is no `DecidableEq` instance: structural equality of slices compares the underlying arrays
+-- and the bounds, so it would disagree with `==`.
+@[implemented_by beqImpl]
+public def beq (s t : Int8Array.Slice) : Bool :=
+  s.copy == t.copy
+
+public instance : BEq Int8Array.Slice := ⟨beq⟩
 
 end Slice
 
@@ -1490,6 +1525,332 @@ public theorem Slice.foldr_eq_foldr_toList_copy {β : Type v} (f : Int8 → β �
     (init : β) (s : Int8Array.Slice) : s.foldr f init = s.copy.toList.foldr f init := by
   rw [Slice.foldr, Slice.foldrM, Id.run, Slice.foldrM_loop_eq,
     List.take_of_length_le (by simp)]
+
+/-! ### Writes -/
+
+@[simp] public theorem getElem_uset (a : Int8Array) (i : USize) (v : Int8) (h) (j : Nat)
+    (hj) : (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
+  simp [-getElem_data, getElem_eq_getElem_data, Array.getElem_set]
+
+@[simp] public theorem getElem_set! (a : Int8Array) (i : Nat) (v : Int8) (j : Nat) (hj) :
+    (a.set! i v)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
+  simp only [getElem_eq_getElem_data, data_set!, Array.set!_eq_setIfInBounds]
+  rw [Array.getElem_setIfInBounds]
+
+@[simp] public theorem getElem?_set! (a : Int8Array) (i : Nat) (v : Int8) (j : Nat) :
+    (a.set! i v)[j]? = if i = j then if i < a.size then some v else none else a[j]? := by
+  by_cases hj : j < a.size <;> by_cases hij : i = j <;> simp_all
+
+public theorem size_popWhile_le (p : Int8 → Bool) (a : Int8Array) :
+    (a.popWhile p).size ≤ a.size := by
+  rw [← length_toList, ← length_toList, toList_popWhile, List.length_reverse]
+  simpa using (List.dropWhile_sublist (l := a.toList.reverse) p).length_le
+
+@[simp] public theorem size_copySlice (src : Int8Array) (srcOff : Nat) (dest : Int8Array)
+    (destOff len : Nat) (exact : Bool) :
+    (src.copySlice srcOff dest destOff len exact).size =
+      max dest.size (min destOff dest.size + min len (src.size - srcOff)) := by
+  simp [-size_data, size_eq_data_size]
+  omega
+
+public theorem getElem_copySlice (src : Int8Array) (srcOff : Nat) (dest : Int8Array)
+    (destOff len : Nat) (exact : Bool) (i : Nat) (h) :
+    (src.copySlice srcOff dest destOff len exact)[i]'h =
+      if h₁ : i < min destOff dest.size then dest[i]'(by omega)
+      else if h₂ : i - min destOff dest.size < min len (src.size - srcOff) then
+        src[srcOff + (i - min destOff dest.size)]'(by omega)
+      else dest[i]'(by simp at h; omega) := by
+  have hs := size_copySlice src srcOff dest destOff len exact
+  simp only [copySlice_eq_append, getElem_append, getElem_extract, size_append, size_extract,
+    Nat.sub_zero, Nat.zero_add]
+  by_cases h₁ : i < min destOff dest.size
+  · have : i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by omega
+    simp [h₁, this]
+  · by_cases h₂ : i - min destOff dest.size < min len (src.size - srcOff)
+    · have : i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by omega
+      simp [h₁, h₂, this]
+    · have : ¬i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by omega
+      simp only [h₁, h₂, this, ↓reduceDIte]
+      congr 1
+      omega
+
+/-! ### Monadic folds -/
+
+@[simp] public theorem foldlM_toList {β : Type v} {m : Type v → Type w} [Monad m]
+    (f : β → Int8 → m β) (init : β) (a : Int8Array) :
+    a.toList.foldlM f init = a.foldlM f init := by
+  rw [← toList_data, Array.foldlM_toList, foldlM, size_eq_data_size]
+
+@[simp] public theorem foldrM_toList {β : Type v} {m : Type v → Type w} [Monad m]
+    (f : Int8 → β → m β) (init : β) (a : Int8Array) :
+    a.toList.foldrM f init = a.foldrM f init := by
+  rw [← toList_data, Array.foldrM_toList]
+  rfl
+
+@[simp] public theorem forM_eq_forM {m : Type v → Type w} [Monad m] (f : Int8 → m PUnit)
+    (a : Int8Array) : a.forM f = ForM.forM a f := rfl
+
+@[simp] public theorem forM_toList {m : Type v → Type w} [Monad m] (f : Int8 → m PUnit)
+    (a : Int8Array) : ForM.forM a.toList f = ForM.forM a f := by
+  rcases a with ⟨⟨l⟩⟩
+  exact (List.forM_toArray l f).symm
+
+/-! ### Membership -/
+
+public theorem mem_def {x : Int8} {a : Int8Array} : x ∈ a ↔ x ∈ a.data := Iff.rfl
+
+@[simp] public theorem mem_data {x : Int8} {a : Int8Array} : x ∈ a.data ↔ x ∈ a := Iff.rfl
+
+@[simp] public theorem mem_mk {x : Int8} {xs : Array Int8} : x ∈ mk xs ↔ x ∈ xs := Iff.rfl
+
+@[simp] public theorem mem_toList {x : Int8} {a : Int8Array} : x ∈ a.toList ↔ x ∈ a := by
+  rw [← toList_data, Array.mem_toList_iff, mem_data]
+
+public theorem mem_iff_getElem {x : Int8} {a : Int8Array} :
+    x ∈ a ↔ ∃ (i : Nat) (h : i < a.size), a[i] = x := by
+  rw [← mem_data, Array.mem_iff_getElem]
+  simp
+
+public theorem getElem_mem {a : Int8Array} {i : Nat} (h : i < a.size) : a[i] ∈ a :=
+  mem_iff_getElem.mpr ⟨i, h, rfl⟩
+
+@[simp] public theorem not_mem_empty (x : Int8) : ¬x ∈ (empty : Int8Array) := by
+  simp [← mem_data]
+
+@[simp] public theorem mem_push {x v : Int8} {a : Int8Array} :
+    x ∈ a.push v ↔ x ∈ a ∨ x = v := by
+  simp [← mem_data]
+
+@[simp] public theorem mem_append {x : Int8} {a b : Int8Array} :
+    x ∈ a ++ b ↔ x ∈ a ∨ x ∈ b := by
+  simp [← mem_data]
+
+/-! ### Iterators -/
+
+private theorem toList_foldl_push (a : Int8Array) (l : List Int8) :
+    (l.foldl (·.push ·) a).toList = a.toList ++ l := by
+  induction l generalizing a <;> simp_all
+
+@[simp] public theorem _root_.Std.Iter.toList_toInt8Array {α : Type} [Std.Iterator α Id Int8]
+    [Std.Iterators.Finite α Id] [Std.IteratorLoop α Id Id] [Std.LawfulIteratorLoop α Id Id]
+    (it : Std.Iter (α := α) Int8) : it.toInt8Array.toList = it.toList := by
+  rw [Std.Iter.toInt8Array, ← Std.Iter.foldl_toList, toList_foldl_push, toList_empty,
+    List.nil_append]
+
+private theorem Slice.cons_take_drop (a : Int8Array) (s t : Nat) (h : s < t)
+    (h' : s < a.size) :
+    a[s] :: (a.toList.drop (s + 1)).take (t - (s + 1)) = (a.toList.drop s).take (t - s) := by
+  rw [List.drop_eq_getElem_cons (by simpa using h' : s < a.toList.length),
+    show t - s = t - (s + 1) + 1 by omega, List.take_succ_cons, getElem_toList]
+
+private theorem SliceIterator.toList_eq (it : Std.Iter (α := Int8Array.SliceIterator) Int8) :
+    it.toList = it.internalState.xs.copy.toList := by
+  induction it using Std.Iter.inductSteps with | step it ihy ihs
+  rw [Std.Iter.toList_eq_match_step]
+  have hs : it.step.val = (SliceIterator.step it.toIterM).mapIterator Std.IterM.toIter := by
+    simp [Std.Iter.step, Std.IterM.step, Std.Iterator.step, Std.IterM.Step.toPure]
+  rw [hs]
+  have h₂ := it.internalState.xs.stop_le_array_size
+  by_cases h : it.internalState.xs.start < it.internalState.xs.stop
+  · simp only [SliceIterator.step, Std.Iter.toIterM, h, ↓reduceDIte,
+      Std.IterStep.mapIterator_yield]
+    rw [ihy (out := it.internalState.xs.array[it.internalState.xs.start])]
+    · simp only [Slice.copy, Slice.array, Slice.start, Slice.stop, toList_extract,
+        List.extract_eq_take_drop, Std.IterM.toIter] at h h₂ ⊢
+      exact Slice.cons_take_drop _ _ _ h (by omega)
+    · show _ = SliceIterator.step _
+      simp only [SliceIterator.step, Std.Iter.toIterM, h, ↓reduceDIte]
+      rfl
+  · simp only [SliceIterator.step, Std.Iter.toIterM, h, ↓reduceDIte,
+      Std.IterStep.mapIterator_done]
+    simp [Slice.copy]
+    omega
+
+/-! ### Slices as copies -/
+
+@[simp] public theorem Slice.size_empty : (Slice.empty : Int8Array.Slice).size = 0 := rfl
+
+@[simp] public theorem Slice.emptyc_eq_empty : (∅ : Int8Array.Slice) = Slice.empty := rfl
+
+@[simp] public theorem Slice.copy_empty : (Slice.empty : Int8Array.Slice).copy = empty := by
+  simp [Slice.copy, Slice.empty, Slice.array, Slice.start, Slice.stop]
+
+@[simp] public theorem Slice.toList_eq_toList_copy (s : Int8Array.Slice) :
+    s.toList = s.copy.toList := by
+  rw [Std.Slice.Internal.toList_eq_toList_iter, SliceIterator.toList_eq,
+    Std.Slice.Internal.iter_eq_toIteratorIter, Std.ToIterator.iter_eq]
+  rfl
+
+@[simp] public theorem Slice.toInt8Array_iter (s : Int8Array.Slice) :
+    s.iter.toInt8Array = s.copy := by
+  rw [← toList_inj, Std.Iter.toList_toInt8Array, Std.Slice.toList_iter, toList_eq_toList_copy]
+
+@[simp] public theorem toInt8Array_iter (a : Int8Array) : a.iter.toInt8Array = a := by
+  rw [iter, Slice.toInt8Array_iter, copy_toSlice, extract_zero_size]
+
+@[simp] public theorem Slice.foldl_eq_foldl_copy {β : Type v} (f : β → Int8 → β) (init : β)
+    (s : Int8Array.Slice) : s.foldl f init = s.copy.foldl f init := by
+  rw [← Std.Slice.foldl_toList, toList_eq_toList_copy, foldl_toList]
+
+@[simp] public theorem Slice.foldlM_eq_foldlM_copy {β : Type v} {m : Type v → Type w} [Monad m]
+    [LawfulMonad m] (f : β → Int8 → m β) (init : β) (s : Int8Array.Slice) :
+    s.foldlM f init = s.copy.foldlM f init := by
+  rw [← Std.Slice.foldlM_toList, toList_eq_toList_copy, foldlM_toList]
+
+@[simp] public theorem Slice.forIn_eq_forIn_copy {β : Type v} {m : Type v → Type w} [Monad m]
+    [LawfulMonad m] (s : Int8Array.Slice) (init : β) (f : Int8 → β → m (ForInStep β)) :
+    ForIn.forIn s init f = ForIn.forIn s.copy init f := by
+  rw [← Std.Slice.forIn_toList, toList_eq_toList_copy, forIn_toList]
+
+@[simp] public theorem Slice.forM_eq_forM_copy {m : Type v → Type w} [Monad m] [LawfulMonad m]
+    (s : Int8Array.Slice) (f : Int8 → m PUnit) : ForM.forM s f = ForM.forM s.copy f :=
+  foldlM_eq_foldlM_copy ..
+
+@[simp] public theorem Slice.foldr_eq_foldr_copy {β : Type v} (f : Int8 → β → β) (init : β)
+    (s : Int8Array.Slice) : s.foldr f init = s.copy.foldr f init := by
+  rw [foldr_eq_foldr_toList_copy, foldr_toList]
+
+private theorem Slice.foldrM_loop_eq_foldrM {β : Type v} {m : Type v → Type w} [Monad m]
+    [LawfulMonad m] (f : Int8 → β → m β) (s : Int8Array.Slice) (i : Nat) (h : i ≤ s.size)
+    (b : β) : Slice.foldrM.loop f s i h b = (s.copy.toList.take i).foldrM f b := by
+  induction i generalizing b with
+  | zero => simp [Slice.foldrM.loop]
+  | succ i ih =>
+    have hi : i < s.copy.toList.length := by simp; omega
+    rw [Slice.foldrM.loop, List.take_add_one, List.getElem?_eq_getElem hi]
+    simp [ih]
+
+@[simp] public theorem Slice.foldrM_eq_foldrM_copy {β : Type v} {m : Type v → Type w} [Monad m]
+    [LawfulMonad m] (f : Int8 → β → m β) (init : β) (s : Int8Array.Slice) :
+    s.foldrM f init = s.copy.foldrM f init := by
+  rw [Slice.foldrM, foldrM_loop_eq_foldrM, List.take_of_length_le (by simp), foldrM_toList]
+
+@[simp] public theorem Slice.any_eq_any_copy (s : Int8Array.Slice) (p : Int8 → Bool) :
+    s.any p = s.copy.any p := by
+  rw [Slice.any, ← Std.Iter.any_toList, Std.Slice.toList_iter, toList_eq_toList_copy, any_toList]
+
+@[simp] public theorem Slice.all_eq_all_copy (s : Int8Array.Slice) (p : Int8 → Bool) :
+    s.all p = s.copy.all p := by
+  rw [Slice.all, ← Std.Iter.all_toList, Std.Slice.toList_iter, toList_eq_toList_copy, all_toList]
+
+@[simp] public theorem Slice.contains_eq_contains_copy (s : Int8Array.Slice) (v : Int8) :
+    s.contains v = s.copy.contains v := by
+  rw [Slice.contains, any_eq_any_copy]
+  rfl
+
+@[simp] public theorem Slice.find?_eq_find?_toList_copy (s : Int8Array.Slice)
+    (p : Int8 → Bool) : s.find? p = s.copy.toList.find? p := by
+  rw [Slice.find?, ← Std.Iter.find?_toList, Std.Slice.toList_iter, toList_eq_toList_copy]
+
+private theorem foldl_count_eq (p : Int8 → Bool) (l : List Int8) (n : Nat) :
+    l.foldl (fun n x => if p x then n + 1 else n) n = n + l.countP p := by
+  induction l generalizing n with
+  | nil => rfl
+  | cons x l ih => by_cases hx : p x <;> simp [ih, hx] <;> omega
+
+@[simp] public theorem Slice.count_eq_countP_toList_copy (s : Int8Array.Slice)
+    (p : Int8 → Bool) : s.count p = s.copy.toList.countP p := by
+  rw [Slice.count, ← Std.Iter.foldl_toList, Std.Slice.toList_iter, toList_eq_toList_copy,
+    foldl_count_eq, Nat.zero_add]
+
+private theorem Slice.findSomeRevM?_loop_eq (p : Int8 → Bool) (s : Int8Array.Slice) (i : Nat)
+    (h : i ≤ s.size) :
+    Slice.findSomeRevM?.loop (m := Id) s (fun x => pure (if p x then some x else none)) i h =
+      (s.copy.toList.take i).reverse.find? p := by
+  induction i with
+  | zero => rfl
+  | succ i ih =>
+    have hi : i < s.copy.toList.length := by simp; omega
+    rw [Slice.findSomeRevM?.loop, List.take_add_one, List.getElem?_eq_getElem hi]
+    by_cases hp : p s[i] <;> simp [ih, hp] <;> rfl
+
+@[simp] public theorem Slice.findRev?_eq_find?_reverse_toList_copy (s : Int8Array.Slice)
+    (p : Int8 → Bool) : s.findRev? p = s.copy.toList.reverse.find? p := by
+  have := Slice.findSomeRevM?_loop_eq p s s.size (Nat.le_refl _)
+  rw [List.take_of_length_le (by simp)] at this
+  exact this
+
+/-! ### Membership in slices -/
+
+@[simp] public theorem Slice.mem_iff_mem_copy {x : Int8} {s : Int8Array.Slice} :
+    x ∈ s ↔ x ∈ s.copy := Iff.rfl
+
+public theorem Slice.mem_iff_getElem {x : Int8} {s : Int8Array.Slice} :
+    x ∈ s ↔ ∃ (i : Nat) (h : i < s.size), s[i] = x := by
+  rw [mem_iff_mem_copy, Int8Array.mem_iff_getElem]
+  simp
+
+public theorem Slice.getElem_mem {s : Int8Array.Slice} {i : Nat} (h : i < s.size) : s[i] ∈ s :=
+  mem_iff_getElem.mpr ⟨i, h, rfl⟩
+
+/-! ### Slice equality -/
+
+@[simp] public theorem Slice.beq_eq_beq_copy (s t : Int8Array.Slice) :
+    (s == t) = (s.copy == t.copy) := by
+  rfl
+
+/-! ### Decidable membership and slice hashing -/
+
+@[simp] public theorem contains_iff_mem {a : Int8Array} {x : Int8} :
+    a.contains x = true ↔ x ∈ a := by
+  simp only [contains, Array.contains_iff_mem, mem_data]
+
+private def decMemImpl (x : Int8) (a : Int8Array) : Decidable (x ∈ a) :=
+  decidable_of_iff _ contains_iff_mem
+
+/--
+Decides membership with `contains`. Logically it decides membership in `a.toList`, so that `decide`
+can evaluate it.
+-/
+@[implemented_by decMemImpl, expose]
+public def decMem (x : Int8) (a : Int8Array) : Decidable (x ∈ a) :=
+  decidable_of_iff _ mem_toList
+
+public instance (x : Int8) (a : Int8Array) : Decidable (x ∈ a) := decMem x a
+
+public theorem Slice.contains_iff_mem {s : Int8Array.Slice} {x : Int8} :
+    s.contains x = true ↔ x ∈ s := by
+  simp
+
+private def Slice.decMemImpl (x : Int8) (s : Int8Array.Slice) : Decidable (x ∈ s) :=
+  decidable_of_iff _ Slice.contains_iff_mem
+
+/--
+Decides membership with `contains`. Logically it decides membership in `s.copy.toList`, so that
+`decide` can evaluate it.
+-/
+@[implemented_by Slice.decMemImpl, expose]
+public def Slice.decMem (x : Int8) (s : Int8Array.Slice) : Decidable (x ∈ s) :=
+  decidable_of_iff (x ∈ s.copy.toList) (by simp)
+
+public instance (x : Int8) (s : Int8Array.Slice) : Decidable (x ∈ s) := Slice.decMem x s
+
+private def Slice.hashImpl (s : Int8Array.Slice) : UInt64 :=
+  s.foldl (fun r x => mixHash r (Hashable.hash x)) 7
+
+/-- The same hash as `s.copy`, so slices with the same elements have the same hash. -/
+@[implemented_by Slice.hashImpl]
+public def Slice.hash (s : Int8Array.Slice) : UInt64 :=
+  Hashable.hash s.copy
+
+public instance : Hashable Int8Array.Slice := ⟨Slice.hash⟩
+
+public theorem Slice.hash_eq_hash_copy (s : Int8Array.Slice) :
+    Hashable.hash s = Hashable.hash s.copy := by
+  rfl
+
+public theorem Slice.beq_iff_copy_eq {s t : Int8Array.Slice} :
+    (s == t) = true ↔ s.copy = t.copy := by
+  simp
+
+public instance : EquivBEq Int8Array.Slice where
+  rfl := by simp
+  symm h := by simp_all
+  trans h₁ h₂ := by simp_all
+
+public instance : LawfulHashable Int8Array.Slice where
+  hash_eq s t h := by
+    rw [Slice.hash_eq_hash_copy, Slice.hash_eq_hash_copy, Slice.beq_iff_copy_eq.mp h]
 
 end Int8Array
 

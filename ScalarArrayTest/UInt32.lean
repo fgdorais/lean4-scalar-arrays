@@ -259,6 +259,36 @@ private abbrev elemSize : UInt32 := 4
 #guard hash (UInt32Array.empty) == hash (#[] : Array UInt32)
 #guard hash ((UInt32Array.emptyWithCapacity 100).push 1) == hash (UInt32Array.mk #[1])
 
+/-! Decidable membership and slice hashing -/
+
+#guard (2 : UInt32) ∈ UInt32Array.mk #[1, 2, big]
+#guard big ∈ UInt32Array.mk #[1, 2, big]
+#guard (3 : UInt32) ∉ UInt32Array.mk #[1, 2, big]
+#guard (0 : UInt32) ∉ UInt32Array.empty
+#guard big ∈ (UInt32Array.mk #[0, 1, 2, big])[1...4]
+#guard (0 : UInt32) ∉ (UInt32Array.mk #[0, 1, 2, big])[1...4]
+#guard (2 : UInt32) ∉ (UInt32Array.mk #[0, 1, 2, big])[0...2]
+#guard hash (UInt32Array.mk #[0, 1, 2, big])[1...3] == hash (UInt32Array.mk #[1, 2])
+#guard hash (UInt32Array.mk #[0, 1, 2, big])[1...3] == hash (UInt32Array.mk #[big, 1, 2])[1...3]
+#guard hash (∅ : UInt32Array.Slice) == hash UInt32Array.empty
+#guard hash (UInt32Array.mk #[1, 2])[1...1] == hash (∅ : UInt32Array.Slice)
+
+-- `decide` evaluates equality and membership for arrays and slices of literals.
+example : UInt32Array.mk #[1, 2] = UInt32Array.mk #[1, 2] := by decide
+example : UInt32Array.mk #[1, 2] ≠ UInt32Array.mk #[1, 3] := by decide
+example : UInt32Array.mk #[1, 2] ≠ UInt32Array.mk #[1, 2, 3] := by decide
+example : (2 : UInt32) ∈ UInt32Array.mk #[1, 2] := by decide
+example : (3 : UInt32) ∉ UInt32Array.mk #[1, 2] := by decide
+example : (2 : UInt32) ∈ (UInt32Array.mk #[1, 2, 3])[1...3] := by decide
+example : (1 : UInt32) ∉ (UInt32Array.mk #[1, 2, 3])[1...3] := by decide
+
+-- Lemmas that need decidable equality, used from another module.
+example (a : UInt32Array) (x : UInt32) : a.contains x ↔ x ∈ a.toList := by simp
+example (s : UInt32Array.Slice) (x : UInt32) : s.contains x ↔ x ∈ s.copy := by simp
+example (s t : UInt32Array.Slice) (h : s.copy = t.copy) : s == t := by simp [h]
+example (s t : UInt32Array.Slice) (h : s == t) : hash s = hash t :=
+  LawfulHashable.hash_eq s t h
+
 /-! Iteration -/
 
 #guard (UInt32Array.mk #[1, 2, big]).foldl (fun acc x => x :: acc) [] == [big, 2, 1]
@@ -680,3 +710,87 @@ example (s : UInt32Array.Slice) : s.copy.size = s.size := by simp
 #guard (UInt32Array.mk #[1, 2, 3]).iter.toUInt32ArrayWithCapacity 100 ==
   UInt32Array.mk #[1, 2, 3]
 #guard rawCapacity ((UInt32Array.mk #[1, 2, 3]).iter.toUInt32ArrayWithCapacity 100) ≥ 100
+
+/-! Membership, `ForM` and slice equality -/
+
+#guard
+  let a := UInt32Array.mk #[1, 2, big]
+  let r : StateM (List UInt32) PUnit := forM a fun x => modify (x :: ·)
+  (r.run []).2 == [big, 2, 1]
+#guard
+  let s := (UInt32Array.mk #[0, 1, 2, big])[1...3]
+  let r : StateM (List UInt32) PUnit := forM s fun x => modify (x :: ·)
+  (r.run []).2 == [2, 1]
+#guard
+  let r : StateM (List UInt32) PUnit := forM UInt32Array.empty fun x => modify (x :: ·)
+  (r.run []).2 == []
+#guard (UInt32Array.mk #[0, 1, 2, big])[1...3] == (UInt32Array.mk #[1, 2, 5])[0...2]
+#guard (UInt32Array.mk #[1, big, 1, big])[0...2] == (UInt32Array.mk #[1, big, 1, big])[2...4]
+#guard (UInt32Array.mk #[0, 1, 2, big])[1...3] != (UInt32Array.mk #[1, 2, 5])[0...3]
+#guard (UInt32Array.mk #[0, 1, 2, big])[1...3] != (UInt32Array.mk #[1, big])[0...2]
+#guard (UInt32Array.mk #[0, 1, 2, big])[1...3] != (UInt32Array.mk #[2, 1])[0...2]
+#guard (∅ : UInt32Array.Slice) == (UInt32Array.mk #[1, 2])[1...1]
+#guard (UInt32Array.mk #[1, 2, big] : UInt32Array.Slice) ==
+  (UInt32Array.mk #[0, 1, 2, big])[1...*]
+#guard
+  let xs := (Array.range 100000).map Nat.toUInt32
+  (UInt32Array.mk (#[0] ++ xs))[1...*] == (UInt32Array.mk (xs ++ #[0]))[0...100000] &&
+    (UInt32Array.mk (#[0] ++ xs))[1...*] != (UInt32Array.mk (xs.set! 99999 0))[0...100000]
+
+/-! Lemmas from another module -/
+
+example (a : UInt32Array) (i : USize) (v : UInt32) (h) (j : Nat) (hj) :
+    (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
+  simp
+example (a : UInt32Array) (v : UInt32) :
+    (a.set! 0 v)[0]? = if 0 < a.size then some v else none := by
+  simp
+example (a : UInt32Array) (v : UInt32) (h : 1 < (a.set! 0 v).size) :
+    (a.set! 0 v)[1] = a[1]'(by simpa using h) := by
+  simp
+example (a : UInt32Array) (p : UInt32 → Bool) : (a.popWhile p).size ≤ a.size :=
+  UInt32Array.size_popWhile_le p a
+example (src dest : UInt32Array) :
+    (src.copySlice 0 dest 0 src.size).size = max dest.size src.size := by
+  simp
+example (a : UInt32Array) (f : Nat → UInt32 → Option Nat) :
+    a.toList.foldlM f 0 = a.foldlM f 0 := by
+  simp
+example (a : UInt32Array) (f : UInt32 → Nat → Option Nat) :
+    a.toList.foldrM f 0 = a.foldrM f 0 := by
+  simp
+example (a : UInt32Array) (f : UInt32 → StateM Nat PUnit) : forM a.toList f = forM a f := by
+  simp
+example (a b : UInt32Array) (x : UInt32) (h : x ∈ a) : x ∈ (a ++ b).toList := by
+  simp [h]
+example (a : UInt32Array) (x : UInt32) : x ∈ a.push x := by
+  simp
+example (a : UInt32Array) (i : Nat) (h : i < a.size) : a[i] ∈ a.toList := by
+  simpa using UInt32Array.getElem_mem h
+example (a : UInt32Array) (start stop : Nat) (p : UInt32 → Bool) :
+    (a.toSlice start stop).any p = (a.extract start stop).any p := by
+  simp
+example (a : UInt32Array) (start stop : Nat) :
+    (a.toSlice start stop).toList = (a.toList.extract start stop) := by
+  simp
+example (s : UInt32Array.Slice) (p : UInt32 → Bool) : s.count p = s.copy.toList.countP p := by
+  simp
+example (s : UInt32Array.Slice) (p : UInt32 → Bool) :
+    s.find? p = s.copy.toList.find? p ∧ s.findRev? p = s.copy.toList.reverse.find? p := by
+  simp
+example (s : UInt32Array.Slice) (f : Nat → UInt32 → Nat) :
+    s.foldl f 0 = s.copy.toList.foldl f 0 := by
+  simp
+example (s : UInt32Array.Slice) (f : UInt32 → StateM Nat PUnit) :
+    forM s f = forM s.copy.toList f := by
+  simp
+example (s : UInt32Array.Slice) (x : UInt32) : x ∈ s ↔ x ∈ s.copy.toList := by
+  simp
+example (s t : UInt32Array.Slice) : (s == t) = (s.copy == t.copy) := by
+  simp
+example (a : UInt32Array) : a.iter.toUInt32Array = a := by
+  simp
+example (s : UInt32Array.Slice) : s.iter.toUInt32Array = s.copy := by
+  simp
+example : (∅ : UInt32Array.Slice).size = 0 := by
+  simp
