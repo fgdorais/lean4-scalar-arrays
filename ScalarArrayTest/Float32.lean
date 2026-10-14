@@ -68,6 +68,22 @@ private abbrev elemSize : UInt32 := 4
   let b := a.set 2 big (by simp [a])
   b.data == #[1, 2, big] && a.data == #[1, 2, 3]
 
+-- `mapAccumRange` shifts a range right by one, inserting the initial accumulator.
+#guard
+  let r := (Float32Array.mk #[1, 2, 3, 4]).mapAccumRange 1 2 9 (fun _ _ x b => (b, x)) (by simp)
+  r.1.data == #[1, 9, 2, 4] && r.2 == 3
+
+-- `mapAccumRange` on a shared array must leave the original unchanged, and `f` must see the
+-- elements of the original even when it reads them from the array itself.
+#guard
+  let a := Float32Array.mk #[1, 2, 3, 4]
+  let r := a.mapAccumRange 0 4 9 (fun _ _ x b => (b, x)) (by simp [a])
+  r.1.data == #[9, 1, 2, 3] && a.data == #[1, 2, 3, 4]
+#guard
+  let a := Float32Array.mk #[1, 2, 3, 4]
+  let r := a.mapAccumRange 1 3 0 (fun k _ _ b => (a[k.toNat]!, b)) (by simp [a])
+  r.1.data == #[1, 1, 2, 3]
+
 -- Repeated writes to an exclusive array.
 #guard Id.run do
   let mut a := Float32Array.mk (Array.replicate 1000 0)

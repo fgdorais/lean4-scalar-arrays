@@ -1788,6 +1788,74 @@ public theorem Slice.getElem_mem {s : Float32Array.Slice} {i : Nat} (h : i < s.s
     (s == t) = (s.copy == t.copy) := by
   rfl
 
+/-! ## In-place scans -/
+
+@[specialize]
+private unsafe def mapAccumRangeImpl {β : Type v} (a : Float32Array) (start len : USize) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Float32 → β → Float32 × β)
+    (_ : start.toNat + len.toNat ≤ a.size) : Float32Array × β :=
+  loop (ensureExclusiveUnsafe a) 0 init
+where
+  @[specialize] loop (a : Float32Array) (k : USize) (b : β) : Float32Array × β :=
+    if k < len then
+      let p := f k lcProof (a.uget (start + k) lcProof) b
+      loop (setUnsafe a (start + k) p.1) (k + 1) p.2
+    else
+      (a, b)
+
+/-- The loop of `mapAccumRange`, over `Nat` indices. -/
+@[expose]
+public def mapAccumRange.loop {β : Type v} (len' : USize)
+    (f : (k : USize) → k.toNat < len'.toNat → Float32 → β → Float32 × β)
+    (start len : Nat) (a : Float32Array) (h : start + len ≤ a.size) (hlen : len ≤ len'.toNat)
+    (k : Nat) (b : β) : Float32Array × β :=
+  if hk : k < len then
+    let p := f k.toUSize (by
+      have := len'.toNat_lt_size
+      rw [USize.toNat_ofNat_of_lt' (by omega)]
+      omega) (a[start + k]'(by omega)) b
+    mapAccumRange.loop len' f start len (a.set (start + k) p.1 (by omega)) (by simpa using h) hlen
+      (k + 1) p.2
+  else
+    (a, b)
+termination_by len - k
+
+/--
+Scans the elements of `a` from index `start` for `len` elements, threading an accumulator: for
+each `k < len`, the element `x` at `start + k` is replaced by the first component of
+`f k hk x b`, whose second component is the next accumulator. Returns the new array and the last
+accumulator. The proof `hk : k.toNat < len.toNat` lets `f` read other arrays with `uget`.
+
+When `a` is not shared, it is updated in place, with one check that it is exclusive before the
+loop and none inside it, so a scan is faster than a loop of `uset`s. `f` only sees the elements,
+never the array, which is what makes skipping the checks safe.
+-/
+@[implemented_by mapAccumRangeImpl, expose]
+public def mapAccumRange {β : Type v} (a : Float32Array) (start len : USize) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Float32 → β → Float32 × β)
+    (h : start.toNat + len.toNat ≤ a.size) : Float32Array × β :=
+  mapAccumRange.loop len f start.toNat len.toNat a h (Nat.le_refl _) 0 init
+
+public theorem size_mapAccumRange_loop {β : Type v} (len' : USize)
+    (f : (k : USize) → k.toNat < len'.toNat → Float32 → β → Float32 × β) (start len : Nat)
+    (a : Float32Array) (h : start + len ≤ a.size) (hlen : len ≤ len'.toNat) (k : Nat) (b : β) :
+    (mapAccumRange.loop len' f start len a h hlen k b).1.size = a.size := by
+  induction a, h, k, b using mapAccumRange.loop.induct len' f start len hlen with
+  | case1 a h k b hk p ih =>
+    rw [mapAccumRange.loop]
+    simp only [hk, ↓reduceDIte]
+    rw [ih]
+    simp
+  | case2 a h k b hk =>
+    rw [mapAccumRange.loop]
+    simp [hk]
+
+@[simp] public theorem size_mapAccumRange {β : Type v} (a : Float32Array) (start len : USize)
+    (init : β) (f : (k : USize) → k.toNat < len.toNat → Float32 → β → Float32 × β)
+    (h : start.toNat + len.toNat ≤ a.size) :
+    (a.mapAccumRange start len init f h).1.size = a.size :=
+  size_mapAccumRange_loop len f _ _ a h _ 0 init
+
 end Float32Array
 
 end ScalarArray
