@@ -434,8 +434,7 @@ private unsafe def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f
   loop a.usize init
 where
   @[specialize] loop (i : USize) (b : β) : m β :=
-    if h : 0 < i ∧ (i - 1).toNat < a.size then do loop (i - 1) (← f (a.uget (i - 1) h.2) b)
-    else pure b
+    if 0 < i then do loop (i - 1) (← f (a.uget (i - 1) lcProof) b) else pure b
 
 /-- Folds a monadic function over the elements of `a`, from last to first. -/
 @[implemented_by foldrMImpl, expose]
@@ -460,13 +459,13 @@ public def forM {m : Type v → Type w} [Monad m] (f : Float → m PUnit) (a : @
 @[specialize]
 private unsafe def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Float64Array)
     (init : β) (f : Float → β → m (ForInStep β)) : m β :=
-  loop 0 init
+  loop a.usize 0 init
 where
-  @[specialize] loop (i : USize) (b : β) : m β :=
-    if h : i.toNat < a.size then do
-      match ← f (a.uget i h) b with
+  @[specialize] loop (stop i : USize) (b : β) : m β :=
+    if i < stop then do
+      match ← f (a.uget i lcProof) b with
       | .done b => pure b
-      | .yield b => loop (i + 1) b
+      | .yield b => loop stop (i + 1) b
     else pure b
 
 @[implemented_by forInImpl, expose]
@@ -479,10 +478,10 @@ public instance [Monad m] : ForIn m Float64Array Float where
 
 @[specialize]
 private unsafe def anyImpl (a : @& Float64Array) (p : Float → Bool) : Bool :=
-  loop 0
+  loop a.usize 0
 where
-  @[specialize] loop (i : USize) : Bool :=
-    if h : i.toNat < a.size then p (a.uget i h) || loop (i + 1) else false
+  @[specialize] loop (stop i : USize) : Bool :=
+    if i < stop then p (a.uget i lcProof) || loop stop (i + 1) else false
 
 /-- Whether some element of `a` satisfies `p`. -/
 @[implemented_by anyImpl, expose]
@@ -491,10 +490,10 @@ public def any (a : @& Float64Array) (p : Float → Bool) : Bool :=
 
 @[specialize]
 private unsafe def allImpl (a : @& Float64Array) (p : Float → Bool) : Bool :=
-  loop 0
+  loop a.usize 0
 where
-  @[specialize] loop (i : USize) : Bool :=
-    if h : i.toNat < a.size then p (a.uget i h) && loop (i + 1) else true
+  @[specialize] loop (stop i : USize) : Bool :=
+    if i < stop then p (a.uget i lcProof) && loop stop (i + 1) else true
 
 /-- Whether every element of `a` satisfies `p`. -/
 @[implemented_by allImpl, expose]
@@ -773,8 +772,45 @@ private def SliceIterator.finitenessRelation :
 public instance : Std.Iterators.Finite Float64Array.SliceIterator Id :=
   .of_finitenessRelation SliceIterator.finitenessRelation
 
-public instance [Monad m] : Std.IteratorLoop Float64Array.SliceIterator Id m :=
-  .defaultImplementation
+-- Each element goes through `lift`, like each step of the iterator in the default implementation,
+-- so the two agree for every lawful `lift`, which is what core's consumers pass.
+@[specialize]
+private unsafe def SliceIterator.forInImpl {n : Type x → Type x'} [Monad n]
+    (lift : (γ : Type) → (δ : Type x) → (γ → n δ) → Id γ → n δ) (γ : Type x)
+    (Pl : Float → γ → ForInStep γ → Prop)
+    (it : Std.IterM (α := Float64Array.SliceIterator) Id Float) (init : γ)
+    (f : (b : Float) → it.IsPlausibleIndirectOutput b → (c : γ) → n (Subtype (Pl b c))) :
+    n γ :=
+  let xs := it.internalState.xs
+  loop xs.array xs.stop.toUSize xs.start.toUSize init
+where
+  @[specialize] loop (a : Float64Array) (stop i : USize) (c : γ) : n γ :=
+    if i < stop then
+      lift _ _ (fun x => do
+        match ← f x lcProof c with
+        | ⟨.yield c, _⟩ => loop a stop (i + 1) c
+        | ⟨.done c, _⟩ => pure c) (pure (a.uget i lcProof))
+    else pure c
+
+/--
+The loop behind `for` loops and the `Std.Iterators` consumers on slices. Logically it is
+`Std.IteratorLoop.defaultImplementation`, which steps the iterator one element at a time; it is
+implemented by a loop over the `USize` indices of the underlying array.
+-/
+@[implemented_by SliceIterator.forInImpl, expose]
+public def SliceIterator.forIn {n : Type x → Type x'} [Monad n]
+    (lift : (γ : Type) → (δ : Type x) → (γ → n δ) → Id γ → n δ) (γ : Type x)
+    (Pl : Float → γ → ForInStep γ → Prop)
+    (it : Std.IterM (α := Float64Array.SliceIterator) Id Float) (init : γ)
+    (f : (b : Float) → it.IsPlausibleIndirectOutput b → (c : γ) → n (Subtype (Pl b c))) :
+    n γ :=
+  Std.IteratorLoop.defaultImplementation.forIn lift γ Pl it init f
+
+public instance [Monad m] : Std.IteratorLoop Float64Array.SliceIterator Id m where
+  forIn := SliceIterator.forIn
+
+public instance [Monad m] : Std.LawfulIteratorLoop Float64Array.SliceIterator Id m where
+  lawful _ _ _ _ _ _ _ _ := rfl
 
 public instance :
     Std.ToIterator (Std.Slice Float64Array.SliceData) Id Float64Array.SliceIterator Float :=
@@ -789,8 +825,16 @@ public def iter (a : Float64Array) : Std.Iter (α := Float64Array.SliceIterator)
 
 namespace Slice
 
+@[specialize]
+private unsafe def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m]
+    (f : Float → β → m β) (init : β) (s : Float64Array.Slice) : m β :=
+  loop s.array s.start.toUSize s.stop.toUSize init
+where
+  @[specialize] loop (a : Float64Array) (start i : USize) (b : β) : m β :=
+    if start < i then do loop a start (i - 1) (← f (a.uget (i - 1) lcProof) b) else pure b
+
 /-- Folds a monadic function over the elements of `s`, from last to first. -/
-@[inline, expose]
+@[implemented_by foldrMImpl, expose]
 public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : Float → β → m β) (init : β)
     (s : Float64Array.Slice) : m β :=
   loop s.size (Nat.le_refl _) init
@@ -810,8 +854,20 @@ public def forRevM {m : Type v → Type w} [Monad m] (f : Float → m PUnit)
     (s : Float64Array.Slice) : m PUnit :=
   s.foldrM (fun x _ => f x) ⟨⟩
 
+@[specialize]
+private unsafe def findSomeRevMImpl {β : Type v} {m : Type v → Type w} [Monad m]
+    (s : Float64Array.Slice) (f : Float → m (Option β)) : m (Option β) :=
+  loop s.array s.start.toUSize s.stop.toUSize
+where
+  @[specialize] loop (a : Float64Array) (start i : USize) : m (Option β) :=
+    if start < i then do
+      match ← f (a.uget (i - 1) lcProof) with
+      | some b => pure (some b)
+      | none => loop a start (i - 1)
+    else pure none
+
 /-- The result of the last element of `s` for which `f` returns `some`, searching from the end. -/
-@[inline, expose]
+@[implemented_by findSomeRevMImpl, expose]
 public def findSomeRevM? {β : Type v} {m : Type v → Type w} [Monad m] (s : Float64Array.Slice)
     (f : Float → m (Option β)) : m (Option β) :=
   loop s.size (Nat.le_refl _)
