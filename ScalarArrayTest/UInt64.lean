@@ -284,6 +284,8 @@ example : (1 : UInt64) ∉ (UInt64Array.mk #[1, 2, 3])[1...3] := by decide
 
 -- Lemmas that need decidable equality, used from another module.
 example (a : UInt64Array) (x : UInt64) : a.contains x ↔ x ∈ a.toList := by simp
+example (a : UInt64Array) (x : UInt64) (h : x ∈ a) :
+    (if a.contains x then 1 else 0) = 1 := by simp [h]
 example (s : UInt64Array.Slice) (x : UInt64) : s.contains x ↔ x ∈ s.copy := by simp
 example (s t : UInt64Array.Slice) (h : s.copy = t.copy) : s == t := by simp [h]
 example (s t : UInt64Array.Slice) (h : s == t) : hash s = hash t :=

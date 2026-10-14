@@ -275,6 +275,8 @@ private abbrev elemSize : UInt32 := (System.Platform.numBits / 8).toUInt32
 
 -- Lemmas that need decidable equality, used from another module.
 example (a : ISizeArray) (x : ISize) : a.contains x ↔ x ∈ a.toList := by simp
+example (a : ISizeArray) (x : ISize) (h : x ∈ a) :
+    (if a.contains x then 1 else 0) = 1 := by simp [h]
 example (s : ISizeArray.Slice) (x : ISize) : s.contains x ↔ x ∈ s.copy := by simp
 example (s t : ISizeArray.Slice) (h : s.copy = t.copy) : s == t := by simp [h]
 example (s t : ISizeArray.Slice) (h : s == t) : hash s = hash t :=

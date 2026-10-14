@@ -284,6 +284,8 @@ example : (1 : Int32) ∉ (Int32Array.mk #[1, 2, 3])[1...3] := by decide
 
 -- Lemmas that need decidable equality, used from another module.
 example (a : Int32Array) (x : Int32) : a.contains x ↔ x ∈ a.toList := by simp
+example (a : Int32Array) (x : Int32) (h : x ∈ a) :
+    (if a.contains x then 1 else 0) = 1 := by simp [h]
 example (s : Int32Array.Slice) (x : Int32) : s.contains x ↔ x ∈ s.copy := by simp
 example (s t : Int32Array.Slice) (h : s.copy = t.copy) : s == t := by simp [h]
 example (s t : Int32Array.Slice) (h : s == t) : hash s = hash t :=

@@ -505,7 +505,7 @@ public def all (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
 private unsafe def containsImpl (a : @& Float32Array) (v : Float32) : Bool :=
   anyImpl a (v == ·)
 
-/-- Whether `v` is an element of `a`. -/
+/-- Whether some element of `a` is `==` to `v`. -/
 @[implemented_by containsImpl, expose]
 public def contains (a : @& Float32Array) (v : Float32) : Bool :=
   a.data.contains v
@@ -914,7 +914,7 @@ public def any (s : Float32Array.Slice) (p : Float32 → Bool) : Bool :=
 public def all (s : Float32Array.Slice) (p : Float32 → Bool) : Bool :=
   s.iter.all p
 
-/-- Whether `v` is an element of `s`. -/
+/-- Whether some element of `s` is `==` to `v`. -/
 @[inline, expose]
 public def contains (s : Float32Array.Slice) (v : Float32) : Bool :=
   s.any (v == ·)
@@ -1787,6 +1787,8 @@ public theorem Slice.getElem_mem {s : Float32Array.Slice} {i : Nat} (h : i < s.s
 @[simp] public theorem Slice.beq_eq_beq_copy (s t : Float32Array.Slice) :
     (s == t) = (s.copy == t.copy) := by
   rfl
+
+/-! ### End of the part left out of the float types -/
 
 end Float32Array
 

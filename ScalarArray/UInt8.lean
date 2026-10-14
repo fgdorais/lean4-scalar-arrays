@@ -505,7 +505,7 @@ public def all (a : @& UInt8Array) (p : UInt8 → Bool) : Bool :=
 private unsafe def containsImpl (a : @& UInt8Array) (v : UInt8) : Bool :=
   anyImpl a (v == ·)
 
-/-- Whether `v` is an element of `a`. -/
+/-- Whether some element of `a` is `==` to `v`. -/
 @[implemented_by containsImpl, expose]
 public def contains (a : @& UInt8Array) (v : UInt8) : Bool :=
   a.data.contains v
@@ -915,7 +915,7 @@ public def any (s : UInt8Array.Slice) (p : UInt8 → Bool) : Bool :=
 public def all (s : UInt8Array.Slice) (p : UInt8 → Bool) : Bool :=
   s.iter.all p
 
-/-- Whether `v` is an element of `s`. -/
+/-- Whether some element of `s` is `==` to `v`. -/
 @[inline, expose]
 public def contains (s : UInt8Array.Slice) (v : UInt8) : Bool :=
   s.any (v == ·)
@@ -1791,7 +1791,7 @@ public theorem Slice.getElem_mem {s : UInt8Array.Slice} {i : Nat} (h : i < s.siz
 
 /-! ### Decidable membership and slice hashing -/
 
-@[simp] public theorem contains_iff_mem {a : UInt8Array} {x : UInt8} :
+public theorem contains_iff_mem {a : UInt8Array} {x : UInt8} :
     a.contains x = true ↔ x ∈ a := by
   simp only [contains, Array.contains_iff_mem, mem_data]
 
@@ -1807,6 +1807,10 @@ public def decMem (x : UInt8) (a : UInt8Array) : Decidable (x ∈ a) :=
   decidable_of_iff _ mem_toList
 
 public instance (x : UInt8) (a : UInt8Array) : Decidable (x ∈ a) := decMem x a
+
+@[simp] public theorem contains_eq_mem {a : UInt8Array} {x : UInt8} :
+    a.contains x = decide (x ∈ a) := by
+  rw [Bool.eq_iff_iff, decide_eq_true_iff, contains_iff_mem]
 
 public theorem Slice.contains_iff_mem {s : UInt8Array.Slice} {x : UInt8} :
     s.contains x = true ↔ x ∈ s := by
@@ -1851,6 +1855,8 @@ public instance : EquivBEq UInt8Array.Slice where
 public instance : LawfulHashable UInt8Array.Slice where
   hash_eq s t h := by
     rw [Slice.hash_eq_hash_copy, Slice.hash_eq_hash_copy, Slice.beq_iff_copy_eq.mp h]
+
+/-! ### End of the part left out of the float types -/
 
 end UInt8Array
 
