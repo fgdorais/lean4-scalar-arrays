@@ -298,6 +298,28 @@ private abbrev elemSize : UInt32 := 8
 #guard !(Int64Array.mk #[1, big, 3]).all (· != big)
 #guard !Int64Array.empty.any (fun _ => true) && Int64Array.empty.all (fun _ => false)
 #guard (Int64Array.mk #[1, 2, big]).contains big
+#guard !(Int64Array.mk #[1, 2, 3]).contains big && !Int64Array.empty.contains big
+
+-- Early exits, and loops in a monad other than `Id`.
+#guard (Int64Array.mk #[1, 2, big]).foldrM (m := Option)
+  (fun x acc => if x == 1 then none else some (x :: acc)) [] == none
+#guard (Int64Array.mk #[big, 2, 1]).foldrM (m := Option)
+  (fun x acc => if x == big then none else some (x :: acc)) [] == none
+#guard
+  let r : StateM (List Int64) Unit := do
+    for x in Int64Array.mk #[1, 2, big, 3] do
+      if x == big then break
+      modify (x :: ·)
+  (r.run []).2 == [2, 1]
+#guard
+  let r : StateM (List Int64) Unit :=
+    (Int64Array.mk #[1, 2, big]).foldrM (fun x _ => modify (x :: ·)) ⟨⟩
+  (r.run []).2 == [1, 2, big]
+#guard Id.run do
+  let mut r : List Int64 := []
+  for x in Int64Array.empty do
+    r := x :: r
+  return r == []
 #guard !(Int64Array.mk #[1, 2, 3]).contains big
 #guard (Int64Array.mk (Array.replicate 100000 0) |>.set! 99999 big).contains big
 
@@ -562,6 +584,80 @@ example (s : Int64Array.Slice) : s.copy.size = s.size := by simp
 
 #guard Id.run ((Int64Array.mk #[1, 2, big])[*...*].findSomeRevM?
   (fun x => pure (if x == 2 then some x else none))) == some 2
+
+-- The loops over slices stay within the slice, both with `start > 0` and with `stop < size`.
+#guard
+  let s := (Int64Array.mk #[big, 1, 2, 3, big])[1...4]
+  s.foldr (fun x acc => x :: acc) [] == [1, 2, 3] &&
+    s.foldl (fun acc x => x :: acc) [] == [3, 2, 1] && s.toList == [1, 2, 3] &&
+    !s.any (· == big) && s.all (· != big) && !s.contains big && s.count (· != big) == 3 &&
+    s.find? (· == big) == none && s.findRev? (· == big) == none &&
+    s.find? (· != 1) == some 2 && s.findRev? (· != 3) == some 2
+
+#guard Id.run do
+  let mut r : List Int64 := []
+  for x in (Int64Array.mk #[big, 1, 2, 3, big])[1...4] do
+    r := x :: r
+  return r == [3, 2, 1]
+
+-- Early exits.
+#guard Id.run do
+  let mut r : List Int64 := []
+  for x in (Int64Array.mk #[big, 1, 2, 3, big])[1...5] do
+    if x == 3 then break
+    r := x :: r
+  return r == [2, 1]
+
+#guard
+  let s := (Int64Array.mk #[1, 2, big, 3, big])[1...5]
+  s.any (· == big) && !s.all (· != big) && s.find? (· == big) == some big &&
+    s.find? (· != 2) == some big && s.findRev? (· == big) == some big &&
+    s.findRev? (· != big) == some 3
+
+-- Empty slices.
+#guard
+  let s := (Int64Array.mk #[1, 2, 3])[1...1]
+  s.foldl (fun acc x => x :: acc) [] == [] && s.toList == [] && !s.any (fun _ => true) &&
+    s.all (fun _ => false) && s.count (fun _ => true) == 0 && s.find? (fun _ => true) == none &&
+    s.findRev? (fun _ => true) == none && Id.run do
+      let mut r : List Int64 := []
+      for x in s do
+        r := x :: r
+      return r == []
+#guard
+  let s := (∅ : Int64Array.Slice)
+  s.foldr (fun x acc => x :: acc) [] == [] && s.foldl (fun acc x => x :: acc) [] == [] &&
+    !s.any (fun _ => true)
+
+-- Loops in a monad other than `Id`.
+#guard
+  let r : StateM (List Int64) Unit := do
+    for x in (Int64Array.mk #[big, 1, 2, 3, big])[1...5] do
+      if x == 3 then break
+      modify (x :: ·)
+  (r.run []).2 == [2, 1]
+#guard
+  let s := (Int64Array.mk #[big, 1, 2, 3, big])[1...4]
+  let r : StateM (List Int64) Unit := s.foldrM (fun x _ => modify (x :: ·)) ⟨⟩
+  (r.run []).2 == [1, 2, 3]
+#guard
+  let s := (Int64Array.mk #[big, 1, 2, 3, big])[1...4]
+  let r : StateM (List Int64) Unit := s.foldlM (fun _ x => modify (x :: ·)) ⟨⟩
+  (r.run []).2 == [3, 2, 1]
+#guard (Int64Array.mk #[big, 1, 2, 3, big])[1...4].foldlM (m := Option)
+  (fun acc x => if x == 2 then none else some (x :: acc)) [] == none
+#guard (Int64Array.mk #[big, 1, 2, 3, big])[1...4].foldrM (m := Option)
+  (fun x acc => if x == 2 then none else some (x :: acc)) [] == none
+#guard (Int64Array.mk #[big, 1, 2, 3, big])[1...4].foldlM (m := Option)
+  (fun acc x => some (x :: acc)) [] == some [3, 2, 1]
+#guard (Int64Array.mk #[big, 1, 2, 3, big])[1...4].findSomeRevM? (m := Option)
+  (fun x => if x == 3 then some none else some (some x)) == some (some 2)
+#guard
+  let xs := (Array.range 100000).map Nat.toInt64
+  let s := (Int64Array.mk xs)[100...99900]
+  let f := fun (acc : List Int64) x => if x == 0 then x :: acc else acc
+  s.foldl f [] == (xs.extract 100 99900).foldl f [] &&
+    s.foldr (fun x acc => f acc x) [] == (xs.extract 100 99900).foldr (fun x acc => f acc x) []
 
 /-! The `Std.Iterators` API on arrays and slices -/
 
