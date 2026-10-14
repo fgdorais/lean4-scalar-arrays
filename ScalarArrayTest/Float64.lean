@@ -672,3 +672,87 @@ example (s : Float64Array.Slice) : s.copy.size = s.size := by simp
 #guard (Float64Array.mk #[1, 2, 3]).iter.toFloat64ArrayWithCapacity 100 ==
   Float64Array.mk #[1, 2, 3]
 #guard rawCapacity ((Float64Array.mk #[1, 2, 3]).iter.toFloat64ArrayWithCapacity 100) ≥ 100
+
+/-! Membership, `ForM` and slice equality -/
+
+#guard
+  let a := Float64Array.mk #[1, 2, big]
+  let r : StateM (List Float) PUnit := forM a fun x => modify (x :: ·)
+  (r.run []).2 == [big, 2, 1]
+#guard
+  let s := (Float64Array.mk #[0, 1, 2, big])[1...3]
+  let r : StateM (List Float) PUnit := forM s fun x => modify (x :: ·)
+  (r.run []).2 == [2, 1]
+#guard
+  let r : StateM (List Float) PUnit := forM Float64Array.empty fun x => modify (x :: ·)
+  (r.run []).2 == []
+#guard (Float64Array.mk #[0, 1, 2, big])[1...3] == (Float64Array.mk #[1, 2, 5])[0...2]
+#guard (Float64Array.mk #[1, big, 1, big])[0...2] == (Float64Array.mk #[1, big, 1, big])[2...4]
+#guard (Float64Array.mk #[0, 1, 2, big])[1...3] != (Float64Array.mk #[1, 2, 5])[0...3]
+#guard (Float64Array.mk #[0, 1, 2, big])[1...3] != (Float64Array.mk #[1, big])[0...2]
+#guard (Float64Array.mk #[0, 1, 2, big])[1...3] != (Float64Array.mk #[2, 1])[0...2]
+#guard (∅ : Float64Array.Slice) == (Float64Array.mk #[1, 2])[1...1]
+#guard (Float64Array.mk #[1, 2, big] : Float64Array.Slice) ==
+  (Float64Array.mk #[0, 1, 2, big])[1...*]
+#guard
+  let xs := (Array.range 100000).map Nat.toFloat
+  (Float64Array.mk (#[0] ++ xs))[1...*] == (Float64Array.mk (xs ++ #[0]))[0...100000] &&
+    (Float64Array.mk (#[0] ++ xs))[1...*] != (Float64Array.mk (xs.set! 99999 0))[0...100000]
+
+/-! Lemmas from another module -/
+
+example (a : Float64Array) (i : USize) (v : Float) (h) (j : Nat) (hj) :
+    (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
+  simp
+example (a : Float64Array) (v : Float) :
+    (a.set! 0 v)[0]? = if 0 < a.size then some v else none := by
+  simp
+example (a : Float64Array) (v : Float) (h : 1 < (a.set! 0 v).size) :
+    (a.set! 0 v)[1] = a[1]'(by simpa using h) := by
+  simp
+example (a : Float64Array) (p : Float → Bool) : (a.popWhile p).size ≤ a.size :=
+  Float64Array.size_popWhile_le p a
+example (src dest : Float64Array) :
+    (src.copySlice 0 dest 0 src.size).size = max dest.size src.size := by
+  simp
+example (a : Float64Array) (f : Nat → Float → Option Nat) :
+    a.toList.foldlM f 0 = a.foldlM f 0 := by
+  simp
+example (a : Float64Array) (f : Float → Nat → Option Nat) :
+    a.toList.foldrM f 0 = a.foldrM f 0 := by
+  simp
+example (a : Float64Array) (f : Float → StateM Nat PUnit) : forM a.toList f = forM a f := by
+  simp
+example (a b : Float64Array) (x : Float) (h : x ∈ a) : x ∈ (a ++ b).toList := by
+  simp [h]
+example (a : Float64Array) (x : Float) : x ∈ a.push x := by
+  simp
+example (a : Float64Array) (i : Nat) (h : i < a.size) : a[i] ∈ a.toList := by
+  simpa using Float64Array.getElem_mem h
+example (a : Float64Array) (start stop : Nat) (p : Float → Bool) :
+    (a.toSlice start stop).any p = (a.extract start stop).any p := by
+  simp
+example (a : Float64Array) (start stop : Nat) :
+    (a.toSlice start stop).toList = (a.toList.extract start stop) := by
+  simp
+example (s : Float64Array.Slice) (p : Float → Bool) : s.count p = s.copy.toList.countP p := by
+  simp
+example (s : Float64Array.Slice) (p : Float → Bool) :
+    s.find? p = s.copy.toList.find? p ∧ s.findRev? p = s.copy.toList.reverse.find? p := by
+  simp
+example (s : Float64Array.Slice) (f : Nat → Float → Nat) :
+    s.foldl f 0 = s.copy.toList.foldl f 0 := by
+  simp
+example (s : Float64Array.Slice) (f : Float → StateM Nat PUnit) :
+    forM s f = forM s.copy.toList f := by
+  simp
+example (s : Float64Array.Slice) (x : Float) : x ∈ s ↔ x ∈ s.copy.toList := by
+  simp
+example (s t : Float64Array.Slice) : (s == t) = (s.copy == t.copy) := by
+  simp
+example (a : Float64Array) : a.iter.toFloat64Array = a := by
+  simp
+example (s : Float64Array.Slice) : s.iter.toFloat64Array = s.copy := by
+  simp
+example : (∅ : Float64Array.Slice).size = 0 := by
+  simp

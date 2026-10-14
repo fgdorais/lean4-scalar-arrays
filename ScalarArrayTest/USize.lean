@@ -259,6 +259,27 @@ private abbrev elemSize : UInt32 := (System.Platform.numBits / 8).toUInt32
 #guard hash (USizeArray.empty) == hash (#[] : Array USize)
 #guard hash ((USizeArray.emptyWithCapacity 100).push 1) == hash (USizeArray.mk #[1])
 
+/-! Decidable membership and slice hashing -/
+
+#guard (2 : USize) ∈ USizeArray.mk #[1, 2, big]
+#guard big ∈ USizeArray.mk #[1, 2, big]
+#guard (3 : USize) ∉ USizeArray.mk #[1, 2, big]
+#guard (0 : USize) ∉ USizeArray.empty
+#guard big ∈ (USizeArray.mk #[0, 1, 2, big])[1...4]
+#guard (0 : USize) ∉ (USizeArray.mk #[0, 1, 2, big])[1...4]
+#guard (2 : USize) ∉ (USizeArray.mk #[0, 1, 2, big])[0...2]
+#guard hash (USizeArray.mk #[0, 1, 2, big])[1...3] == hash (USizeArray.mk #[1, 2])
+#guard hash (USizeArray.mk #[0, 1, 2, big])[1...3] == hash (USizeArray.mk #[big, 1, 2])[1...3]
+#guard hash (∅ : USizeArray.Slice) == hash USizeArray.empty
+#guard hash (USizeArray.mk #[1, 2])[1...1] == hash (∅ : USizeArray.Slice)
+
+-- Lemmas that need decidable equality, used from another module.
+example (a : USizeArray) (x : USize) : a.contains x ↔ x ∈ a.toList := by simp
+example (s : USizeArray.Slice) (x : USize) : s.contains x ↔ x ∈ s.copy := by simp
+example (s t : USizeArray.Slice) (h : s.copy = t.copy) : s == t := by simp [h]
+example (s t : USizeArray.Slice) (h : s == t) : hash s = hash t :=
+  LawfulHashable.hash_eq s t h
+
 /-! Iteration -/
 
 #guard (USizeArray.mk #[1, 2, big]).foldl (fun acc x => x :: acc) [] == [big, 2, 1]
@@ -680,3 +701,87 @@ example (s : USizeArray.Slice) : s.copy.size = s.size := by simp
 #guard (USizeArray.mk #[1, 2, 3]).iter.toUSizeArrayWithCapacity 100 ==
   USizeArray.mk #[1, 2, 3]
 #guard rawCapacity ((USizeArray.mk #[1, 2, 3]).iter.toUSizeArrayWithCapacity 100) ≥ 100
+
+/-! Membership, `ForM` and slice equality -/
+
+#guard
+  let a := USizeArray.mk #[1, 2, big]
+  let r : StateM (List USize) PUnit := forM a fun x => modify (x :: ·)
+  (r.run []).2 == [big, 2, 1]
+#guard
+  let s := (USizeArray.mk #[0, 1, 2, big])[1...3]
+  let r : StateM (List USize) PUnit := forM s fun x => modify (x :: ·)
+  (r.run []).2 == [2, 1]
+#guard
+  let r : StateM (List USize) PUnit := forM USizeArray.empty fun x => modify (x :: ·)
+  (r.run []).2 == []
+#guard (USizeArray.mk #[0, 1, 2, big])[1...3] == (USizeArray.mk #[1, 2, 5])[0...2]
+#guard (USizeArray.mk #[1, big, 1, big])[0...2] == (USizeArray.mk #[1, big, 1, big])[2...4]
+#guard (USizeArray.mk #[0, 1, 2, big])[1...3] != (USizeArray.mk #[1, 2, 5])[0...3]
+#guard (USizeArray.mk #[0, 1, 2, big])[1...3] != (USizeArray.mk #[1, big])[0...2]
+#guard (USizeArray.mk #[0, 1, 2, big])[1...3] != (USizeArray.mk #[2, 1])[0...2]
+#guard (∅ : USizeArray.Slice) == (USizeArray.mk #[1, 2])[1...1]
+#guard (USizeArray.mk #[1, 2, big] : USizeArray.Slice) ==
+  (USizeArray.mk #[0, 1, 2, big])[1...*]
+#guard
+  let xs := (Array.range 100000).map Nat.toUSize
+  (USizeArray.mk (#[0] ++ xs))[1...*] == (USizeArray.mk (xs ++ #[0]))[0...100000] &&
+    (USizeArray.mk (#[0] ++ xs))[1...*] != (USizeArray.mk (xs.set! 99999 0))[0...100000]
+
+/-! Lemmas from another module -/
+
+example (a : USizeArray) (i : USize) (v : USize) (h) (j : Nat) (hj) :
+    (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
+  simp
+example (a : USizeArray) (v : USize) :
+    (a.set! 0 v)[0]? = if 0 < a.size then some v else none := by
+  simp
+example (a : USizeArray) (v : USize) (h : 1 < (a.set! 0 v).size) :
+    (a.set! 0 v)[1] = a[1]'(by simpa using h) := by
+  simp
+example (a : USizeArray) (p : USize → Bool) : (a.popWhile p).size ≤ a.size :=
+  USizeArray.size_popWhile_le p a
+example (src dest : USizeArray) :
+    (src.copySlice 0 dest 0 src.size).size = max dest.size src.size := by
+  simp
+example (a : USizeArray) (f : Nat → USize → Option Nat) :
+    a.toList.foldlM f 0 = a.foldlM f 0 := by
+  simp
+example (a : USizeArray) (f : USize → Nat → Option Nat) :
+    a.toList.foldrM f 0 = a.foldrM f 0 := by
+  simp
+example (a : USizeArray) (f : USize → StateM Nat PUnit) : forM a.toList f = forM a f := by
+  simp
+example (a b : USizeArray) (x : USize) (h : x ∈ a) : x ∈ (a ++ b).toList := by
+  simp [h]
+example (a : USizeArray) (x : USize) : x ∈ a.push x := by
+  simp
+example (a : USizeArray) (i : Nat) (h : i < a.size) : a[i] ∈ a.toList := by
+  simpa using USizeArray.getElem_mem h
+example (a : USizeArray) (start stop : Nat) (p : USize → Bool) :
+    (a.toSlice start stop).any p = (a.extract start stop).any p := by
+  simp
+example (a : USizeArray) (start stop : Nat) :
+    (a.toSlice start stop).toList = (a.toList.extract start stop) := by
+  simp
+example (s : USizeArray.Slice) (p : USize → Bool) : s.count p = s.copy.toList.countP p := by
+  simp
+example (s : USizeArray.Slice) (p : USize → Bool) :
+    s.find? p = s.copy.toList.find? p ∧ s.findRev? p = s.copy.toList.reverse.find? p := by
+  simp
+example (s : USizeArray.Slice) (f : Nat → USize → Nat) :
+    s.foldl f 0 = s.copy.toList.foldl f 0 := by
+  simp
+example (s : USizeArray.Slice) (f : USize → StateM Nat PUnit) :
+    forM s f = forM s.copy.toList f := by
+  simp
+example (s : USizeArray.Slice) (x : USize) : x ∈ s ↔ x ∈ s.copy.toList := by
+  simp
+example (s t : USizeArray.Slice) : (s == t) = (s.copy == t.copy) := by
+  simp
+example (a : USizeArray) : a.iter.toUSizeArray = a := by
+  simp
+example (s : USizeArray.Slice) : s.iter.toUSizeArray = s.copy := by
+  simp
+example : (∅ : USizeArray.Slice).size = 0 := by
+  simp

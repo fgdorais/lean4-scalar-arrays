@@ -259,6 +259,36 @@ private abbrev elemSize : UInt32 := 4
 #guard hash (Int32Array.empty) == hash (#[] : Array Int32)
 #guard hash ((Int32Array.emptyWithCapacity 100).push 1) == hash (Int32Array.mk #[1])
 
+/-! Decidable membership and slice hashing -/
+
+#guard (2 : Int32) ∈ Int32Array.mk #[1, 2, big]
+#guard big ∈ Int32Array.mk #[1, 2, big]
+#guard (3 : Int32) ∉ Int32Array.mk #[1, 2, big]
+#guard (0 : Int32) ∉ Int32Array.empty
+#guard big ∈ (Int32Array.mk #[0, 1, 2, big])[1...4]
+#guard (0 : Int32) ∉ (Int32Array.mk #[0, 1, 2, big])[1...4]
+#guard (2 : Int32) ∉ (Int32Array.mk #[0, 1, 2, big])[0...2]
+#guard hash (Int32Array.mk #[0, 1, 2, big])[1...3] == hash (Int32Array.mk #[1, 2])
+#guard hash (Int32Array.mk #[0, 1, 2, big])[1...3] == hash (Int32Array.mk #[big, 1, 2])[1...3]
+#guard hash (∅ : Int32Array.Slice) == hash Int32Array.empty
+#guard hash (Int32Array.mk #[1, 2])[1...1] == hash (∅ : Int32Array.Slice)
+
+-- `decide` evaluates equality and membership for arrays and slices of literals.
+example : Int32Array.mk #[1, 2] = Int32Array.mk #[1, 2] := by decide
+example : Int32Array.mk #[1, 2] ≠ Int32Array.mk #[1, 3] := by decide
+example : Int32Array.mk #[1, 2] ≠ Int32Array.mk #[1, 2, 3] := by decide
+example : (2 : Int32) ∈ Int32Array.mk #[1, 2] := by decide
+example : (3 : Int32) ∉ Int32Array.mk #[1, 2] := by decide
+example : (2 : Int32) ∈ (Int32Array.mk #[1, 2, 3])[1...3] := by decide
+example : (1 : Int32) ∉ (Int32Array.mk #[1, 2, 3])[1...3] := by decide
+
+-- Lemmas that need decidable equality, used from another module.
+example (a : Int32Array) (x : Int32) : a.contains x ↔ x ∈ a.toList := by simp
+example (s : Int32Array.Slice) (x : Int32) : s.contains x ↔ x ∈ s.copy := by simp
+example (s t : Int32Array.Slice) (h : s.copy = t.copy) : s == t := by simp [h]
+example (s t : Int32Array.Slice) (h : s == t) : hash s = hash t :=
+  LawfulHashable.hash_eq s t h
+
 /-! Iteration -/
 
 #guard (Int32Array.mk #[1, 2, big]).foldl (fun acc x => x :: acc) [] == [big, 2, 1]
@@ -680,3 +710,87 @@ example (s : Int32Array.Slice) : s.copy.size = s.size := by simp
 #guard (Int32Array.mk #[1, 2, 3]).iter.toInt32ArrayWithCapacity 100 ==
   Int32Array.mk #[1, 2, 3]
 #guard rawCapacity ((Int32Array.mk #[1, 2, 3]).iter.toInt32ArrayWithCapacity 100) ≥ 100
+
+/-! Membership, `ForM` and slice equality -/
+
+#guard
+  let a := Int32Array.mk #[1, 2, big]
+  let r : StateM (List Int32) PUnit := forM a fun x => modify (x :: ·)
+  (r.run []).2 == [big, 2, 1]
+#guard
+  let s := (Int32Array.mk #[0, 1, 2, big])[1...3]
+  let r : StateM (List Int32) PUnit := forM s fun x => modify (x :: ·)
+  (r.run []).2 == [2, 1]
+#guard
+  let r : StateM (List Int32) PUnit := forM Int32Array.empty fun x => modify (x :: ·)
+  (r.run []).2 == []
+#guard (Int32Array.mk #[0, 1, 2, big])[1...3] == (Int32Array.mk #[1, 2, 5])[0...2]
+#guard (Int32Array.mk #[1, big, 1, big])[0...2] == (Int32Array.mk #[1, big, 1, big])[2...4]
+#guard (Int32Array.mk #[0, 1, 2, big])[1...3] != (Int32Array.mk #[1, 2, 5])[0...3]
+#guard (Int32Array.mk #[0, 1, 2, big])[1...3] != (Int32Array.mk #[1, big])[0...2]
+#guard (Int32Array.mk #[0, 1, 2, big])[1...3] != (Int32Array.mk #[2, 1])[0...2]
+#guard (∅ : Int32Array.Slice) == (Int32Array.mk #[1, 2])[1...1]
+#guard (Int32Array.mk #[1, 2, big] : Int32Array.Slice) ==
+  (Int32Array.mk #[0, 1, 2, big])[1...*]
+#guard
+  let xs := (Array.range 100000).map Nat.toInt32
+  (Int32Array.mk (#[0] ++ xs))[1...*] == (Int32Array.mk (xs ++ #[0]))[0...100000] &&
+    (Int32Array.mk (#[0] ++ xs))[1...*] != (Int32Array.mk (xs.set! 99999 0))[0...100000]
+
+/-! Lemmas from another module -/
+
+example (a : Int32Array) (i : USize) (v : Int32) (h) (j : Nat) (hj) :
+    (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
+  simp
+example (a : Int32Array) (v : Int32) :
+    (a.set! 0 v)[0]? = if 0 < a.size then some v else none := by
+  simp
+example (a : Int32Array) (v : Int32) (h : 1 < (a.set! 0 v).size) :
+    (a.set! 0 v)[1] = a[1]'(by simpa using h) := by
+  simp
+example (a : Int32Array) (p : Int32 → Bool) : (a.popWhile p).size ≤ a.size :=
+  Int32Array.size_popWhile_le p a
+example (src dest : Int32Array) :
+    (src.copySlice 0 dest 0 src.size).size = max dest.size src.size := by
+  simp
+example (a : Int32Array) (f : Nat → Int32 → Option Nat) :
+    a.toList.foldlM f 0 = a.foldlM f 0 := by
+  simp
+example (a : Int32Array) (f : Int32 → Nat → Option Nat) :
+    a.toList.foldrM f 0 = a.foldrM f 0 := by
+  simp
+example (a : Int32Array) (f : Int32 → StateM Nat PUnit) : forM a.toList f = forM a f := by
+  simp
+example (a b : Int32Array) (x : Int32) (h : x ∈ a) : x ∈ (a ++ b).toList := by
+  simp [h]
+example (a : Int32Array) (x : Int32) : x ∈ a.push x := by
+  simp
+example (a : Int32Array) (i : Nat) (h : i < a.size) : a[i] ∈ a.toList := by
+  simpa using Int32Array.getElem_mem h
+example (a : Int32Array) (start stop : Nat) (p : Int32 → Bool) :
+    (a.toSlice start stop).any p = (a.extract start stop).any p := by
+  simp
+example (a : Int32Array) (start stop : Nat) :
+    (a.toSlice start stop).toList = (a.toList.extract start stop) := by
+  simp
+example (s : Int32Array.Slice) (p : Int32 → Bool) : s.count p = s.copy.toList.countP p := by
+  simp
+example (s : Int32Array.Slice) (p : Int32 → Bool) :
+    s.find? p = s.copy.toList.find? p ∧ s.findRev? p = s.copy.toList.reverse.find? p := by
+  simp
+example (s : Int32Array.Slice) (f : Nat → Int32 → Nat) :
+    s.foldl f 0 = s.copy.toList.foldl f 0 := by
+  simp
+example (s : Int32Array.Slice) (f : Int32 → StateM Nat PUnit) :
+    forM s f = forM s.copy.toList f := by
+  simp
+example (s : Int32Array.Slice) (x : Int32) : x ∈ s ↔ x ∈ s.copy.toList := by
+  simp
+example (s t : Int32Array.Slice) : (s == t) = (s.copy == t.copy) := by
+  simp
+example (a : Int32Array) : a.iter.toInt32Array = a := by
+  simp
+example (s : Int32Array.Slice) : s.iter.toInt32Array = s.copy := by
+  simp
+example : (∅ : Int32Array.Slice).size = 0 := by
+  simp
