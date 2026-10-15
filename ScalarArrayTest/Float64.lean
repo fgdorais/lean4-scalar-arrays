@@ -773,6 +773,19 @@ example (s : Float64Array.Slice) : s.copy.size = s.size := by simp
   let r := (Float64Array.mk #[1, 2, 3, 4])[2...2].foldrInPlace 9 (fun _ _ x b => (b, x))
   r.1.array.data == #[1, 2, 3, 4] && r.2 == 9
 
+-- The `Then` versions hand the slice and the last accumulator to `g`, here to store it.
+#guard
+  let s := (Float64Array.mk #[1, 2, 3, 4])[0...4]
+  (s.foldlInPlaceThen 9 (fun _ _ x b => (b, x)) (fun s b => s.set! 0 b)).toList == [4, 1, 2, 3] &&
+    (s.foldrInPlaceThen 9 (fun _ _ x b => (b, x)) (fun s b => s.set! 3 b)).toList ==
+      [2, 3, 4, 1]
+#guard
+  let a := Float64Array.mk #[1, 2, 3, 4]
+  let r := a[1...3].foldlInPlaceThen 9 (fun _ _ x b => (b, x)) Prod.mk
+  let r' := a[1...3].foldrInPlaceThen 9 (fun _ _ x b => (b, x)) Prod.mk
+  r.1.array.data == #[1, 9, 2, 4] && r.2 == 3 && r'.1.array.data == #[1, 3, 9, 4] && r'.2 == 2 &&
+    a.data == #[1, 2, 3, 4]
+
 -- The indices passed to `f`, counted from the start of the slice, in the order of the visits.
 #guard
   let s := (Float64Array.mk #[1, 2, 3, 4, 5])[1...4]
@@ -812,7 +825,9 @@ example (s : Float64Array.Slice) : s.copy.size = s.size := by simp
   let s := s.reverse
   let (s, _) := s.foldlInPlace () (fun _ _ x b => (x + 1, b))
   let (s, _) := s.foldrInPlace () (fun _ _ x b => (x + 1, b))
-  rawAddr s.array == p && s.array.data == #[x, big + 2, 6, 6, x]
+  let s := s.foldlInPlaceThen () (fun _ _ x b => (x + 1, b)) (fun s _ => s)
+  let s := s.foldrInPlaceThen () (fun _ _ x b => (x + 1, b)) (fun s _ => s)
+  rawAddr s.array == p && s.array.data == #[x, big + 4, 8, 8, x]
 
 #guard Float64Array.writesThroughSliceInPlace 1
 
@@ -894,4 +909,7 @@ example (s : Float64Array.Slice) (f : (k : USize) → k.toNat < s.size → Float
   simp
 example (s : Float64Array.Slice) (f : (k : USize) → k.toNat < s.size → Float → Nat → Float × Nat) :
     (s.foldrInPlace 0 f).1.size = s.size := by
+  simp
+example (s : Float64Array.Slice) (f : (k : USize) → k.toNat < s.size → Float → Nat → Float × Nat) :
+    (s.foldrInPlaceThen 0 f fun t _ => t).size = s.size := by
   simp
