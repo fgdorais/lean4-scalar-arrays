@@ -84,6 +84,16 @@ private abbrev elemSize : UInt32 := 2
   let r := a.foldInPlace 1 3 0 (fun k _ _ b => (a[k.toNat]!, b)) (by simp [a])
   r.1.data == #[1, 1, 2, 3]
 
+-- `foldInPlaceThen` hands the array and the last accumulator to `g`, here to store it.
+#guard
+  let r := (UInt16Array.mk #[1, 2, 3, 4]).foldInPlaceThen 0 3 9 (fun _ _ x b => (b, x))
+    (fun a b => a.set! 3 b) (by simp)
+  r.data == #[9, 1, 2, 3]
+#guard
+  let a := UInt16Array.mk #[1, 2, 3, 4]
+  let r := a.foldInPlaceThen 1 2 9 (fun _ _ x b => (b, x)) Prod.mk (by simp [a])
+  r.1.data == #[1, 9, 2, 4] && r.2 == 3 && a.data == #[1, 2, 3, 4]
+
 -- Repeated writes to an exclusive array.
 #guard Id.run do
   let mut a := UInt16Array.mk (Array.replicate 1000 0)

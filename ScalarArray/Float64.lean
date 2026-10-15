@@ -1861,6 +1861,41 @@ public theorem size_foldInPlace_loop {β : Type v} (len' : USize)
     (a.foldInPlace start len init f h).1.size = a.size :=
   size_foldInPlace_loop len f _ _ a h _ 0 init
 
+@[specialize]
+private unsafe def foldInPlaceThenImpl {β : Type v} {γ : Type w} (a : Float64Array)
+    (start len : USize) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Float → β → Float × β)
+    (g : Float64Array → β → γ) (_ : start.toNat + len.toNat ≤ a.size) : γ :=
+  loop (ensureExclusiveUnsafe a) 0 init
+where
+  @[specialize] loop (a : Float64Array) (k : USize) (b : β) : γ :=
+    if k < len then
+      let p := f k lcProof (a.uget (start + k) lcProof) b
+      loop (setUnsafe a (start + k) p.1) (k + 1) p.2
+    else
+      g a b
+
+/--
+`foldInPlace` followed by `g` on the new array and the last accumulator, which the loop calls
+itself where `foldInPlace` returns them as a pair. The pair is a heap object, allocated once per
+call, which shows when the fold runs over short ranges many times; when `g` consumes the
+accumulator, for example by writing it into the array, no pair is allocated at all.
+`foldInPlace` is the case `g := Prod.mk`.
+-/
+@[implemented_by foldInPlaceThenImpl, expose]
+public def foldInPlaceThen {β : Type v} {γ : Type w} (a : Float64Array) (start len : USize)
+    (init : β) (f : (k : USize) → k.toNat < len.toNat → Float → β → Float × β)
+    (g : Float64Array → β → γ) (h : start.toNat + len.toNat ≤ a.size) : γ :=
+  g (a.foldInPlace start len init f h).1 (a.foldInPlace start len init f h).2
+
+@[simp] public theorem foldInPlaceThen_eq {β : Type v} {γ : Type w} (a : Float64Array)
+    (start len : USize) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Float → β → Float × β)
+    (g : Float64Array → β → γ) (h : start.toNat + len.toNat ≤ a.size) :
+    a.foldInPlaceThen start len init f g h =
+      g (a.foldInPlace start len init f h).1 (a.foldInPlace start len init f h).2 :=
+  rfl
+
 end Float64Array
 
 end ScalarArray
