@@ -17,6 +17,7 @@ public import ScalarArray.ISize
 public import ScalarArray.Float32
 public import ScalarArray.Float64
 public import ScalarArray.Conversions
+public import ScalarArray.Bytes
 
 /-!
 # Scalar arrays
