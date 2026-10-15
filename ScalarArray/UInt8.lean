@@ -191,13 +191,13 @@ can be inlined into code in other modules.
 public unsafe def capacityUnsafe (a : @& UInt8Array) : USize := a.usize
 
 /--
-Sets the size of `a` to `n`. Only valid when `a` is exclusive and `n` is at most its capacity; the
-elements past the old size are uninitialized until stored. Public only so that `push` can be
+Sets the size of `a` to `_n`. Only valid when `a` is exclusive and `_n` is at most its capacity;
+the elements past the old size are uninitialized until stored. Public only so that `push` can be
 inlined into code in other modules.
 -/
 -- The same C as the private `ScalarArray.resizeUnsafe`, which code in other modules can't reach.
 @[extern c inline "#1;\nlean_sarray_set_size(#1, #2)"]
-public unsafe def setSizeUnsafe (a : UInt8Array) (n : USize) : UInt8Array := a
+public unsafe def setSizeUnsafe (a : UInt8Array) (_n : USize) : UInt8Array := a
 
 /--
 `push` when `a` is full: copies `a` with capacity `2 * capacity + 1`, then appends `v`. Out of
