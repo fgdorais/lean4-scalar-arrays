@@ -2220,22 +2220,23 @@ public def foldrInPlace.loop {β : Type v} (n : Nat)
     foldrInPlace.loop n f (s.set k p.1 (by omega)) (by simpa using hs) k (by omega) p.2
 
 @[specialize]
-private unsafe def foldrInPlaceImpl.loop {β : Type v} (start stop : Nat) (h : start ≤ stop)
-    (base : USize) (f : (k : USize) → Int8 → β → Int8 × β) (a : Int8Array) (k : USize)
-    (b : β) : Int8Array.Slice × β :=
+private unsafe def foldrInPlaceImpl.loop {β : Type v} {γ : Type w} (base : USize)
+    (f : (k : USize) → Int8 → β → Int8 × β) (g : Int8Array → β → γ) (a : Int8Array)
+    (k : USize) (b : β) : γ :=
   if 0 < k then
     let k := k - 1
     let p := f k (a.uget (base + k) lcProof) b
-    foldrInPlaceImpl.loop start stop h base f (setUnsafe a (base + k) p.1) k p.2
+    foldrInPlaceImpl.loop base f g (setUnsafe a (base + k) p.1) k p.2
   else
-    (⟨⟨a, start, stop, h, lcProof⟩⟩, b)
+    g a b
 
 @[specialize]
 private unsafe def foldrInPlaceImpl {β : Type v} (s : Int8Array.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → Int8 → β → Int8 × β) : Int8Array.Slice × β :=
   match s with
   | ⟨⟨a, start, stop, h, _⟩⟩ =>
-    foldrInPlaceImpl.loop start stop h start.toUSize (fun k => f k lcProof)
+    foldrInPlaceImpl.loop start.toUSize (fun k => f k lcProof)
+      (fun a b => (⟨⟨a, start, stop, h, lcProof⟩⟩, b))
       (ensureExclusiveUnsafe a) (stop - start).toUSize init
 
 /--
@@ -2277,6 +2278,61 @@ private theorem foldrInPlace_loop_props {β : Type v} (n : Nat)
     (f : (k : USize) → k.toNat < s.size → Int8 → β → Int8 × β) :
     (s.foldrInPlace init f).1.size = s.size := by
   rw [size_eq, size_eq, start_foldrInPlace, stop_foldrInPlace]
+
+@[specialize]
+private unsafe def foldlInPlaceThenImpl {β : Type v} {γ : Type w} (s : Int8Array.Slice)
+    (init : β) (f : (k : USize) → k.toNat < s.size → Int8 → β → Int8 × β)
+    (g : Int8Array.Slice → β → γ) : γ :=
+  match s with
+  | ⟨⟨a, start, stop, h, _⟩⟩ =>
+    Int8Array.foldInPlaceThenImpl a start.toUSize (stop - start).toUSize init
+      (fun k _ => f k lcProof)
+      (fun a b => g ⟨⟨a, start, stop, h, lcProof⟩⟩ b) lcProof
+
+/--
+`foldlInPlace` followed by `g` on the new slice and the last accumulator, which the loop calls
+itself where `foldlInPlace` returns them as a pair, like `Int8Array.foldInPlaceThen`. When `g`
+consumes the accumulator, for example by writing it into the slice, no pair is allocated.
+`foldlInPlace` is the case `g := Prod.mk`.
+-/
+@[implemented_by foldlInPlaceThenImpl, expose]
+public def foldlInPlaceThen {β : Type v} {γ : Type w} (s : Int8Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → Int8 → β → Int8 × β)
+    (g : Int8Array.Slice → β → γ) : γ :=
+  g (s.foldlInPlace init f).1 (s.foldlInPlace init f).2
+
+@[simp] public theorem foldlInPlaceThen_eq {β : Type v} {γ : Type w} (s : Int8Array.Slice)
+    (init : β) (f : (k : USize) → k.toNat < s.size → Int8 → β → Int8 × β)
+    (g : Int8Array.Slice → β → γ) :
+    s.foldlInPlaceThen init f g = g (s.foldlInPlace init f).1 (s.foldlInPlace init f).2 :=
+  rfl
+
+@[specialize]
+private unsafe def foldrInPlaceThenImpl {β : Type v} {γ : Type w} (s : Int8Array.Slice)
+    (init : β) (f : (k : USize) → k.toNat < s.size → Int8 → β → Int8 × β)
+    (g : Int8Array.Slice → β → γ) : γ :=
+  match s with
+  | ⟨⟨a, start, stop, h, _⟩⟩ =>
+    foldrInPlaceImpl.loop start.toUSize (fun k => f k lcProof)
+      (fun a b => g ⟨⟨a, start, stop, h, lcProof⟩⟩ b)
+      (ensureExclusiveUnsafe a) (stop - start).toUSize init
+
+/--
+`foldrInPlace` followed by `g` on the new slice and the last accumulator, which the loop calls
+itself where `foldrInPlace` returns them as a pair. When `g` consumes the accumulator, no pair is
+allocated. `foldrInPlace` is the case `g := Prod.mk`.
+-/
+@[implemented_by foldrInPlaceThenImpl, expose]
+public def foldrInPlaceThen {β : Type v} {γ : Type w} (s : Int8Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → Int8 → β → Int8 × β)
+    (g : Int8Array.Slice → β → γ) : γ :=
+  g (s.foldrInPlace init f).1 (s.foldrInPlace init f).2
+
+@[simp] public theorem foldrInPlaceThen_eq {β : Type v} {γ : Type w} (s : Int8Array.Slice)
+    (init : β) (f : (k : USize) → k.toNat < s.size → Int8 → β → Int8 × β)
+    (g : Int8Array.Slice → β → γ) :
+    s.foldrInPlaceThen init f g = g (s.foldrInPlace init f).1 (s.foldrInPlace init f).2 :=
+  rfl
 
 end Slice
 
