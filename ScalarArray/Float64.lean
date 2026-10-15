@@ -60,9 +60,9 @@ public def get :
     (a : @& Float64Array) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → Float
   | mk a, i, h => a[i]
 
--- Public, like `mkImpl`, `usetImpl` and `setImpl` below: a private `implemented_by` target
--- attached with a separate `attribute` command is not visible to other modules, so code there
--- that uses `get`, `mk`, `uset` or `set` would fail to compile.
+-- Public, like `mkImpl`, `usetImpl`, `setImpl` and `pushImpl` below: a private `implemented_by`
+-- target attached with a separate `attribute` command is not visible to other modules, so code
+-- there that uses `get`, `mk`, `uset` or `set` would fail to compile.
 @[inline]
 public unsafe def getImpl : type_of% @get :=
   fun a i _ => a.uget i.toUSize lcProof
@@ -184,19 +184,47 @@ public instance : GetElem Float64Array Nat Float fun a i => i < a.size where
 public instance : GetElem Float64Array USize Float fun a i => i.toNat < a.size where
   getElem a i h := a.uget i h
 
-private unsafe def pushImpl (a : Float64Array) (v : Float) : Float64Array :=
+/--
+The number of elements `a` has room for before it must be reallocated. Public only so that `push`
+can be inlined into code in other modules.
+-/
+@[extern "lean_sarray_capacity"]
+public unsafe def capacityUnsafe (a : @& Float64Array) : USize := a.usize
+
+/--
+Sets the size of `a` to `n`. Only valid when `a` is exclusive and `n` is at most its capacity; the
+elements past the old size are uninitialized until stored. Public only so that `push` can be
+inlined into code in other modules.
+-/
+-- The same C as the private `ScalarArray.resizeUnsafe`, which code in other modules can't reach.
+@[extern c inline "#1;\nlean_sarray_set_size(#1, #2)"]
+public unsafe def setSizeUnsafe (a : Float64Array) (n : USize) : Float64Array := a
+
+/--
+`push` when `a` is full: copies `a` with capacity `2 * capacity + 1`, then appends `v`. Out of
+line so that inlined `push` call sites stay small. Public only so that `push` can be inlined into
+code in other modules.
+-/
+public unsafe def pushGrowUnsafe (a : Float64Array) (v : Float) : Float64Array :=
   let s : ScalarArray := unsafeCast a
   let cap := s.capacity
-  if s.size < cap then
-    loop s.ensureExclusive
-  else if cap < cap + cap + 1 then
-    loop (s.copyWithCapacity (cap + cap + 1) lcProof)
+  if cap < cap + cap + 1 then
+    let a : Float64Array := unsafeCast (s.copyWithCapacity (cap + cap + 1) lcProof)
+    let i := a.usize
+    setUnsafe (setSizeUnsafe a (i + 1)) i v
   else
     panic! "out of memory"
-where
-  loop (s : ScalarArray) : Float64Array :=
-    let i := s.size
-    setUnsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
+
+-- Inline, and made of public inline externs, so that the common path compiles to inline C in other
+-- modules: one capacity check, one exclusivity check, a size bump and one store.
+@[inline]
+public unsafe def pushImpl (a : Float64Array) (v : Float) : Float64Array :=
+  if a.usize < capacityUnsafe a then
+    let a := ensureExclusiveUnsafe a
+    let i := a.usize
+    setUnsafe (setSizeUnsafe a (i + 1)) i v
+  else
+    pushGrowUnsafe a v
 
 @[implemented_by pushImpl, expose]
 public def push : Float64Array → Float → Float64Array
