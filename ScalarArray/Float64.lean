@@ -1896,6 +1896,8 @@ public def foldInPlaceThen {β : Type v} {γ : Type w} (a : Float64Array) (start
       g (a.foldInPlace start len init f h).1 (a.foldInPlace start len init f h).2 :=
   rfl
 
+/-! ### End of the part left out of the float types -/
+
 end Float64Array
 
 end ScalarArray
