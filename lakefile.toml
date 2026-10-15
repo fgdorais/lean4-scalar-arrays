@@ -5,6 +5,8 @@ testDriver = "ScalarArrayTest"
 
 [[lean_lib]]
 name = "ScalarArray"
+# Lets the interpreter run the `extern` C code in downstream files, for `#eval` and `#guard`.
+precompileModules = true
 
 [[lean_lib]]
 name = "ScalarArrayTest"
@@ -13,4 +15,4 @@ precompileModules = true
 [[require]]
 name = "batteries"
 git = "https://github.com/leanprover-community/batteries"
-rev = "nightly-testing"
+rev = "main"
