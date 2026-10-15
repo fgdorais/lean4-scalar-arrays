@@ -79,8 +79,10 @@ public unsafe def setUnsafe : Int64Array → USize → Int64 → Int64Array
 into code in other modules.
 -/
 -- The same runtime function as the private `ScalarArray.ensureExclusive`, which code in other
--- modules can't reach.
-@[extern "lean_sarray_ensure_exclusive"]
+-- modules can't reach. `never_extract`: once `uset` or `push` is inlined, `ensureExclusiveUnsafe c`
+-- on a closed array `c` would otherwise be hoisted into a shared constant, which the following
+-- in-place write would then modify.
+@[never_extract, extern "lean_sarray_ensure_exclusive"]
 public unsafe def ensureExclusiveUnsafe (a : Int64Array) : Int64Array := a
 
 private unsafe def toUSizeChecked (n : Nat) : USize :=
