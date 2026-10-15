@@ -1789,6 +1789,76 @@ public theorem Slice.getElem_mem {s : UInt8Array.Slice} {i : Nat} (h : i < s.siz
     (s == t) = (s.copy == t.copy) := by
   rfl
 
+/-! ## In-place folds -/
+
+@[specialize]
+private unsafe def foldInPlaceImpl {β : Type v} (a : UInt8Array) (start len : USize) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → UInt8 → β → UInt8 × β)
+    (_ : start.toNat + len.toNat ≤ a.size) : UInt8Array × β :=
+  loop (ensureExclusiveUnsafe a) 0 init
+where
+  @[specialize] loop (a : UInt8Array) (k : USize) (b : β) : UInt8Array × β :=
+    if k < len then
+      let p := f k lcProof (a.uget (start + k) lcProof) b
+      loop (setUnsafe a (start + k) p.1) (k + 1) p.2
+    else
+      (a, b)
+
+/-- The loop of `foldInPlace`, over `Nat` indices. -/
+@[expose]
+public def foldInPlace.loop {β : Type v} (len' : USize)
+    (f : (k : USize) → k.toNat < len'.toNat → UInt8 → β → UInt8 × β)
+    (start len : Nat) (a : UInt8Array) (h : start + len ≤ a.size) (hlen : len ≤ len'.toNat)
+    (k : Nat) (b : β) : UInt8Array × β :=
+  if hk : k < len then
+    let p := f k.toUSize (by
+      have := len'.toNat_lt_size
+      rw [USize.toNat_ofNat_of_lt' (by omega)]
+      omega) (a[start + k]'(by omega)) b
+    foldInPlace.loop len' f start len (a.set (start + k) p.1 (by omega)) (by simpa using h) hlen
+      (k + 1) p.2
+  else
+    (a, b)
+termination_by len - k
+
+/--
+Replaces each element of `a` from index `start` for `len` elements while threading an
+accumulator, in place when `a` is not shared: for each `k < len`, the element `x` at `start + k`
+becomes the first component of `f k hk x b`, whose second component is the next accumulator.
+Returns the new array and the last accumulator. The proof `hk : k.toNat < len.toNat` lets `f`
+read other arrays with `uget`.
+
+The point is the implementation: the result is that of a loop of `set`s, but `a` is made
+exclusive once, before the loop, which then stores without checks, where each `uset` checks at
+every write. `f` only sees the elements, never the array, which is what makes skipping the
+checks safe.
+-/
+@[implemented_by foldInPlaceImpl, expose]
+public def foldInPlace {β : Type v} (a : UInt8Array) (start len : USize) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → UInt8 → β → UInt8 × β)
+    (h : start.toNat + len.toNat ≤ a.size) : UInt8Array × β :=
+  foldInPlace.loop len f start.toNat len.toNat a h (Nat.le_refl _) 0 init
+
+public theorem size_foldInPlace_loop {β : Type v} (len' : USize)
+    (f : (k : USize) → k.toNat < len'.toNat → UInt8 → β → UInt8 × β) (start len : Nat)
+    (a : UInt8Array) (h : start + len ≤ a.size) (hlen : len ≤ len'.toNat) (k : Nat) (b : β) :
+    (foldInPlace.loop len' f start len a h hlen k b).1.size = a.size := by
+  induction a, h, k, b using foldInPlace.loop.induct len' f start len hlen with
+  | case1 a h k b hk p ih =>
+    rw [foldInPlace.loop]
+    simp only [hk, ↓reduceDIte]
+    rw [ih]
+    simp
+  | case2 a h k b hk =>
+    rw [foldInPlace.loop]
+    simp [hk]
+
+@[simp] public theorem size_foldInPlace {β : Type v} (a : UInt8Array) (start len : USize)
+    (init : β) (f : (k : USize) → k.toNat < len.toNat → UInt8 → β → UInt8 × β)
+    (h : start.toNat + len.toNat ≤ a.size) :
+    (a.foldInPlace start len init f h).1.size = a.size :=
+  size_foldInPlace_loop len f _ _ a h _ 0 init
+
 /-! ### Decidable membership and slice hashing -/
 
 @[simp] public theorem contains_iff_mem {a : UInt8Array} {x : UInt8} :
