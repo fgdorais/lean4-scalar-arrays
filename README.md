@@ -82,6 +82,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Iteration    | `foldl`, `foldr`, `foldlM`, `foldrM`, `forM`, `for x in a`, `any`, `all`, `contains` |
 | Search       | `findIdx?`, `findFinIdx?`                                                   |
 | Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `get`, `getD`, `get!`, `popFront`, `copy`, `for x in s`, `foldl`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findSomeRevM?`, `toArray`, `toList` |
+| Slice writes | `Slice.set`, `set!`, `modify`, `swap`, `reverse`, `foldInPlace`, which write into the slice's array; `s.array` gives the whole array back |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, and `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array |
 | Equality     | `a == b`; for integer types also `DecidableEq` and `Hashable`               |
 | Linearity    | `markLinear`, `propagateMark`                                               |
@@ -111,6 +112,16 @@ never copy, so core's functions can be used directly on these arrays and vice ve
 Slices are `Std.Slice`s, like core's `Subarray`, so they work with the generic slice API and core's
 range notation `a[i...j]` (the older `a[i:j]` notation only applies to `Array`). Taking a slice
 never copies the array; `Slice.copy` makes a new array with a single `memcpy`.
+
+Slices can also be written to. `s.set i v` replaces the element at index `i` of the slice in the
+underlying array, and `s.array` gives back the whole array. The writes work in place when neither
+the slice nor its array is shared, so a slice taken from an array that is no longer used writes
+into that array:
+
+```lean
+def reverseMiddle (a : UInt32Array) : UInt32Array :=
+  a[1...a.size - 1].reverse.array   -- in place: `a` is not used after taking the slice
+```
 
 Arrays and slices also have iterators, so the `Std.Iterators` combinators cover operations that
 don't have their own function here, and `Std.Iter.toXArray` turns the result back into an array:
