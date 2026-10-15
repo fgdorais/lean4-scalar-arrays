@@ -505,7 +505,7 @@ public def all (a : @& ISizeArray) (p : ISize → Bool) : Bool :=
 private unsafe def containsImpl (a : @& ISizeArray) (v : ISize) : Bool :=
   anyImpl a (v == ·)
 
-/-- Whether `v` is an element of `a`. -/
+/-- Whether some element of `a` is `==` to `v`. -/
 @[implemented_by containsImpl, expose]
 public def contains (a : @& ISizeArray) (v : ISize) : Bool :=
   a.data.contains v
@@ -915,7 +915,7 @@ public def any (s : ISizeArray.Slice) (p : ISize → Bool) : Bool :=
 public def all (s : ISizeArray.Slice) (p : ISize → Bool) : Bool :=
   s.iter.all p
 
-/-- Whether `v` is an element of `s`. -/
+/-- Whether some element of `s` is `==` to `v`. -/
 @[inline, expose]
 public def contains (s : ISizeArray.Slice) (v : ISize) : Bool :=
   s.any (v == ·)
@@ -1896,7 +1896,7 @@ public def foldInPlaceThen {β : Type v} {γ : Type w} (a : ISizeArray) (start l
 
 /-! ### Decidable membership and slice hashing -/
 
-@[simp] public theorem contains_iff_mem {a : ISizeArray} {x : ISize} :
+public theorem contains_iff_mem {a : ISizeArray} {x : ISize} :
     a.contains x = true ↔ x ∈ a := by
   simp only [contains, Array.contains_iff_mem, mem_data]
 
@@ -1912,6 +1912,10 @@ public def decMem (x : ISize) (a : ISizeArray) : Decidable (x ∈ a) :=
   decidable_of_iff _ mem_toList
 
 public instance (x : ISize) (a : ISizeArray) : Decidable (x ∈ a) := decMem x a
+
+@[simp] public theorem contains_eq_mem {a : ISizeArray} {x : ISize} :
+    a.contains x = decide (x ∈ a) := by
+  rw [Bool.eq_iff_iff, decide_eq_true_iff, contains_iff_mem]
 
 public theorem Slice.contains_iff_mem {s : ISizeArray.Slice} {x : ISize} :
     s.contains x = true ↔ x ∈ s := by
@@ -1956,6 +1960,8 @@ public instance : EquivBEq ISizeArray.Slice where
 public instance : LawfulHashable ISizeArray.Slice where
   hash_eq s t h := by
     rw [Slice.hash_eq_hash_copy, Slice.hash_eq_hash_copy, Slice.beq_iff_copy_eq.mp h]
+
+/-! ### End of the part left out of the float types -/
 
 end ISizeArray
 

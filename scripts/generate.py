@@ -77,7 +77,8 @@ public instance : BEq UInt16Array := ⟨beq⟩
 """
 # Also left out for the float types, from the first line up to, but not including, the second: the
 # lemmas and instances that need decidable equality or hashing, and their tests.
-FLOAT_DEC = ('/-! ### Decidable membership and slice hashing -/\n', 'end UInt16Array\n')
+FLOAT_DEC = ('/-! ### Decidable membership and slice hashing -/\n',
+             '/-! ### End of the part left out of the float types -/\n')
 FLOAT_TEST_DEC = ('/-! Decidable equality and hashing -/\n', '/-! Iteration -/\n')
 # Left out of the `USize` and `ISize` tests: `decide` can't evaluate their literals, since
 # `System.Platform.numBits` is opaque.

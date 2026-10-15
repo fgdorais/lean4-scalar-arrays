@@ -508,7 +508,7 @@ public def all (a : @& Float64Array) (p : Float → Bool) : Bool :=
 private unsafe def containsImpl (a : @& Float64Array) (v : Float) : Bool :=
   anyImpl a (v == ·)
 
-/-- Whether `v` is an element of `a`. -/
+/-- Whether some element of `a` is `==` to `v`. -/
 @[implemented_by containsImpl, expose]
 public def contains (a : @& Float64Array) (v : Float) : Bool :=
   a.data.contains v
@@ -917,7 +917,7 @@ public def any (s : Float64Array.Slice) (p : Float → Bool) : Bool :=
 public def all (s : Float64Array.Slice) (p : Float → Bool) : Bool :=
   s.iter.all p
 
-/-- Whether `v` is an element of `s`. -/
+/-- Whether some element of `s` is `==` to `v`. -/
 @[inline, expose]
 public def contains (s : Float64Array.Slice) (v : Float) : Bool :=
   s.any (v == ·)

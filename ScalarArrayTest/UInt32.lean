@@ -310,6 +310,8 @@ example : (1 : UInt32) ∉ (UInt32Array.mk #[1, 2, 3])[1...3] := by decide
 
 -- Lemmas that need decidable equality, used from another module.
 example (a : UInt32Array) (x : UInt32) : a.contains x ↔ x ∈ a.toList := by simp
+example (a : UInt32Array) (x : UInt32) (h : x ∈ a) :
+    (if a.contains x then 1 else 0) = 1 := by simp [h]
 example (s : UInt32Array.Slice) (x : UInt32) : s.contains x ↔ x ∈ s.copy := by simp
 example (s t : UInt32Array.Slice) (h : s.copy = t.copy) : s == t := by simp [h]
 example (s t : UInt32Array.Slice) (h : s == t) : hash s = hash t :=
