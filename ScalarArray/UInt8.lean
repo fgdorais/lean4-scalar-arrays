@@ -70,7 +70,7 @@ attribute [implemented_by getImpl] get
 Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in bounds. Public only
 so that `uset` can be inlined into code in other modules.
 -/
-@[extern c inline "#1;\n((uint8_t*)lean_sarray_cptr(#1))[#2] = #3"]
+@[never_extract, extern c inline "#1;\n((uint8_t*)lean_sarray_cptr(#1))[#2] = #3"]
 public unsafe def setUnsafe : UInt8Array → USize → UInt8 → UInt8Array
   | .mk a, i, v => .mk <| a.uset i v lcProof
 
@@ -196,7 +196,7 @@ the elements past the old size are uninitialized until stored. Public only so th
 inlined into code in other modules.
 -/
 -- The same C as the private `ScalarArray.resizeUnsafe`, which code in other modules can't reach.
-@[extern c inline "#1;\nlean_sarray_set_size(#1, #2)"]
+@[never_extract, extern c inline "#1;\nlean_sarray_set_size(#1, #2)"]
 public unsafe def setSizeUnsafe (a : UInt8Array) (_n : USize) : UInt8Array := a
 
 /--
