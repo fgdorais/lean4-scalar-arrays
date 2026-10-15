@@ -122,6 +122,24 @@ private abbrev elemSize : UInt32 := (System.Platform.numBits / 8).toUInt32
   let c := a.push 3
   c.data == #[1, 3] && b.data == #[1, 2] && a.data == #[1]
 
+-- Inlined `push` and `uset` on a closed array must copy it on every call, not write into a shared
+-- constant: a later call must not change an earlier result.
+@[noinline] def ISizeArray.pushOntoConstant (x : ISize) : ISizeArray :=
+  (ISizeArray.emptyWithCapacity 10).push x
+
+@[noinline] def ISizeArray.usetConstant (x : ISize) : ISizeArray :=
+  (ISizeArray.mk #[0, 0]).uset 0 x
+
+#guard
+  let a := ISizeArray.pushOntoConstant 1
+  let b := ISizeArray.pushOntoConstant 2
+  b.data == #[2] && a.data == #[1]
+
+#guard
+  let a := ISizeArray.usetConstant 1
+  let b := ISizeArray.usetConstant 2
+  b.data == #[2, 0] && a.data == #[1, 0]
+
 /-! Printing -/
 
 #guard toString (ISizeArray.mk #[1, 2]) == "ISizeArray.mk " ++ toString #[(1 : ISize), 2]
