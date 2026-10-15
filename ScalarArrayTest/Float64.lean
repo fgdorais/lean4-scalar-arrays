@@ -122,6 +122,24 @@ private abbrev elemSize : UInt32 := 8
   let c := a.push 3
   c.data == #[1, 3] && b.data == #[1, 2] && a.data == #[1]
 
+-- Inlined `push` and `uset` on a closed array must copy it on every call, not write into a shared
+-- constant: a later call must not change an earlier result.
+@[noinline] def Float64Array.pushOntoConstant (x : Float) : Float64Array :=
+  (Float64Array.emptyWithCapacity 10).push x
+
+@[noinline] def Float64Array.usetConstant (x : Float) : Float64Array :=
+  (Float64Array.mk #[0, 0]).uset 0 x
+
+#guard
+  let a := Float64Array.pushOntoConstant 1
+  let b := Float64Array.pushOntoConstant 2
+  b.data == #[2] && a.data == #[1]
+
+#guard
+  let a := Float64Array.usetConstant 1
+  let b := Float64Array.usetConstant 2
+  b.data == #[2, 0] && a.data == #[1, 0]
+
 /-! Printing -/
 
 #guard toString (Float64Array.mk #[1, 2]) == "Float64Array.mk " ++ toString #[(1 : Float), 2]

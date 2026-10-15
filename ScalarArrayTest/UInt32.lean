@@ -122,6 +122,24 @@ private abbrev elemSize : UInt32 := 4
   let c := a.push 3
   c.data == #[1, 3] && b.data == #[1, 2] && a.data == #[1]
 
+-- Inlined `push` and `uset` on a closed array must copy it on every call, not write into a shared
+-- constant: a later call must not change an earlier result.
+@[noinline] def UInt32Array.pushOntoConstant (x : UInt32) : UInt32Array :=
+  (UInt32Array.emptyWithCapacity 10).push x
+
+@[noinline] def UInt32Array.usetConstant (x : UInt32) : UInt32Array :=
+  (UInt32Array.mk #[0, 0]).uset 0 x
+
+#guard
+  let a := UInt32Array.pushOntoConstant 1
+  let b := UInt32Array.pushOntoConstant 2
+  b.data == #[2] && a.data == #[1]
+
+#guard
+  let a := UInt32Array.usetConstant 1
+  let b := UInt32Array.usetConstant 2
+  b.data == #[2, 0] && a.data == #[1, 0]
+
 /-! Printing -/
 
 #guard toString (UInt32Array.mk #[1, 2]) == "UInt32Array.mk " ++ toString #[(1 : UInt32), 2]
