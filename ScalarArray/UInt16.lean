@@ -1924,6 +1924,290 @@ public def foldInPlaceThen {β : Type v} {γ : Type w} (a : UInt16Array) (start 
       g (a.foldInPlace start len init f h).1 (a.foldInPlace start len init f h).2 :=
   rfl
 
+/-! ## Writing through slices -/
+
+namespace Slice
+
+/--
+Replaces the element at index `i` of the slice, counted from the start of the slice, in the
+underlying array. The array is updated in place when neither it nor the slice is shared, so a slice
+taken from an array that is no longer used writes into that array. `s.array` gives back the whole
+array afterwards.
+-/
+@[inline, expose]
+public def set (s : UInt16Array.Slice) (i : Nat) (v : UInt16)
+    (h : i < s.size := by get_elem_tactic) : UInt16Array.Slice :=
+  ⟨{ s.internalRepresentation with
+      array := s.array.set (s.start + i) v
+        (by have := s.stop_le_array_size; rw [size_eq] at h; omega)
+      stop_le_array_size := by rw [size_set]; exact s.stop_le_array_size }⟩
+
+@[simp] public theorem array_set (s : UInt16Array.Slice) (i : Nat) (v : UInt16) (h) :
+    (s.set i v h).array =
+      s.array.set (s.start + i) v (by have := s.stop_le_array_size; rw [size_eq] at h; omega) :=
+  rfl
+
+@[simp] public theorem start_set (s : UInt16Array.Slice) (i : Nat) (v : UInt16) (h) :
+    (s.set i v h).start = s.start := rfl
+
+@[simp] public theorem stop_set (s : UInt16Array.Slice) (i : Nat) (v : UInt16) (h) :
+    (s.set i v h).stop = s.stop := rfl
+
+@[simp] public theorem size_set (s : UInt16Array.Slice) (i : Nat) (v : UInt16) (h) :
+    (s.set i v h).size = s.size := rfl
+
+@[simp] public theorem getElem_set (s : UInt16Array.Slice) (i : Nat) (v : UInt16) (h) (j : Nat)
+    (hj) :
+    (s.set i v h)[j]'hj = if i = j then v else s[j]'(by rw [size_set] at hj; exact hj) := by
+  simp only [getElem_eq, array_set, UInt16Array.getElem_set, start_set]
+  congr 1
+  simp
+
+@[simp] public theorem copy_set (s : UInt16Array.Slice) (i : Nat) (v : UInt16) (h) :
+    (s.set i v h).copy = s.copy.set i v (by simpa using h) := by
+  apply ext_getElem
+  · simp
+  · intro j _ _
+    simp only [getElem_copy, getElem_set, UInt16Array.getElem_set]
+
+/--
+Replaces the element at index `i` of the slice in the underlying array, like `set`. If `i` is out of
+bounds, the slice is returned unmodified.
+-/
+@[inline, expose]
+public def set! (s : UInt16Array.Slice) (i : Nat) (v : UInt16) : UInt16Array.Slice :=
+  if h : i < s.size then s.set i v h else s
+
+public theorem set!_eq (s : UInt16Array.Slice) (i : Nat) (v : UInt16) :
+    s.set! i v = if h : i < s.size then s.set i v h else s := rfl
+
+@[simp] public theorem set!_eq_set (s : UInt16Array.Slice) (i : Nat) (v : UInt16)
+    (h : i < s.size) : s.set! i v = s.set i v h := by
+  simp [set!, h]
+
+/--
+Applies `f` to the element at index `i` of the slice, in place like `set`. If `i` is out of bounds,
+the slice is returned unmodified.
+-/
+@[inline, expose]
+public def modify (s : UInt16Array.Slice) (i : Nat) (f : UInt16 → UInt16) : UInt16Array.Slice :=
+  if h : i < s.size then s.set i (f s[i]) h else s
+
+public theorem modify_eq (s : UInt16Array.Slice) (i : Nat) (f : UInt16 → UInt16) :
+    s.modify i f = if h : i < s.size then s.set i (f s[i]) h else s := rfl
+
+@[simp] public theorem start_modify (s : UInt16Array.Slice) (i : Nat) (f : UInt16 → UInt16) :
+    (s.modify i f).start = s.start := by
+  unfold modify; split <;> rfl
+
+@[simp] public theorem stop_modify (s : UInt16Array.Slice) (i : Nat) (f : UInt16 → UInt16) :
+    (s.modify i f).stop = s.stop := by
+  unfold modify; split <;> rfl
+
+@[simp] public theorem size_modify (s : UInt16Array.Slice) (i : Nat) (f : UInt16 → UInt16) :
+    (s.modify i f).size = s.size := by
+  unfold modify; split <;> rfl
+
+@[simp] public theorem getElem_modify (s : UInt16Array.Slice) (i : Nat) (f : UInt16 → UInt16)
+    (j : Nat) (hj) :
+    (s.modify i f)[j]'hj =
+      have hj' : j < s.size := by rw [size_modify] at hj; exact hj
+      if i = j then f s[j] else s[j] := by
+  have := size_modify s i f
+  by_cases h : i < s.size
+  · have e : s.modify i f = s.set i (f s[i]) h := by simp [modify_eq, h]
+    rw [getElem_congr_coll e, getElem_set]
+    split
+    · subst_vars; rfl
+    · rfl
+  · have e : s.modify i f = s := by simp [modify_eq, h]
+    rw [getElem_congr_coll e]
+    split
+    · omega
+    · rfl
+
+/-- Swaps the elements at indices `i` and `j` of the slice, in place like `set`. -/
+@[inline, expose]
+public def swap (s : UInt16Array.Slice) (i j : Nat) (hi : i < s.size := by get_elem_tactic)
+    (hj : j < s.size := by get_elem_tactic) : UInt16Array.Slice :=
+  -- Both reads come before the first write, so that `s` is no longer used when it is written.
+  let x := s[i]
+  let y := s[j]
+  (s.set i y hi).set j x (by simpa using hj)
+
+public theorem swap_eq (s : UInt16Array.Slice) (i j : Nat) (hi hj) :
+    s.swap i j hi hj = (s.set i s[j] hi).set j s[i] (by simpa using hj) := rfl
+
+@[simp] public theorem start_swap (s : UInt16Array.Slice) (i j : Nat) (hi hj) :
+    (s.swap i j hi hj).start = s.start := rfl
+
+@[simp] public theorem stop_swap (s : UInt16Array.Slice) (i j : Nat) (hi hj) :
+    (s.swap i j hi hj).stop = s.stop := rfl
+
+@[simp] public theorem size_swap (s : UInt16Array.Slice) (i j : Nat) (hi hj) :
+    (s.swap i j hi hj).size = s.size := rfl
+
+@[simp] public theorem getElem_swap (s : UInt16Array.Slice) (i j : Nat) (hi hj) (k : Nat) (hk) :
+    (s.swap i j hi hj)[k]'hk =
+      if j = k then s[i] else if i = k then s[j] else s[k]'(by rw [size_swap] at hk; exact hk) := by
+  rw [getElem_congr_coll (swap_eq ..), getElem_set, getElem_set]
+
+/-- The loop of `reverse`: swaps the elements at `i` and `j`, then moves both towards the middle. -/
+@[expose]
+public def reverse.loop (s : UInt16Array.Slice) (i j : Nat) (hj : j < s.size) :
+    UInt16Array.Slice :=
+  if h : i < j then reverse.loop (s.swap i j (by omega)) (i + 1) (j - 1) (by simp; omega) else s
+termination_by j - i
+
+private unsafe def reverseImpl (s : UInt16Array.Slice) : UInt16Array.Slice :=
+  match s with
+  | ⟨⟨a, start, stop, h, _⟩⟩ =>
+    if start < stop then
+      ⟨⟨loop (ensureExclusiveUnsafe a) start.toUSize (stop.toUSize - 1), start, stop, h, lcProof⟩⟩
+    else
+      s
+where
+  loop (a : UInt16Array) (i j : USize) : UInt16Array :=
+    if i < j then
+      let x := a.uget i lcProof
+      let y := a.uget j lcProof
+      loop (setUnsafe (setUnsafe a i y) j x) (i + 1) (j - 1)
+    else
+      a
+
+/--
+Reverses the order of the elements of the slice, in place like `set`. The array is made exclusive
+once, before the loop, which then stores without checks.
+-/
+@[implemented_by reverseImpl, expose]
+public def reverse (s : UInt16Array.Slice) : UInt16Array.Slice :=
+  if h : 0 < s.size then reverse.loop s 0 (s.size - 1) (by omega) else s
+
+private theorem reverse_loop_props (s : UInt16Array.Slice) (i j : Nat) (hj : j < s.size) :
+    (reverse.loop s i j hj).start = s.start ∧ (reverse.loop s i j hj).stop = s.stop := by
+  fun_induction reverse.loop s i j hj with
+  | case1 s i j hj h ih => simpa using ih
+  | case2 => exact ⟨rfl, rfl⟩
+
+@[simp] public theorem start_reverse (s : UInt16Array.Slice) : s.reverse.start = s.start := by
+  rw [reverse]; split
+  · exact (reverse_loop_props ..).1
+  · rfl
+
+@[simp] public theorem stop_reverse (s : UInt16Array.Slice) : s.reverse.stop = s.stop := by
+  rw [reverse]; split
+  · exact (reverse_loop_props ..).2
+  · rfl
+
+@[simp] public theorem size_reverse (s : UInt16Array.Slice) : s.reverse.size = s.size := by
+  rw [size_eq, size_eq, start_reverse, stop_reverse]
+
+private theorem size_reverse_loop (s : UInt16Array.Slice) (i j : Nat) (hj : j < s.size) :
+    (reverse.loop s i j hj).size = s.size := by
+  rw [size_eq, size_eq, (reverse_loop_props ..).1, (reverse_loop_props ..).2]
+
+private theorem getElem_reverse_loop (s : UInt16Array.Slice) (i j : Nat) (hj : j < s.size)
+    (hij : i ≤ j + 1) (k : Nat) (hk : k < s.size) :
+    (reverse.loop s i j hj)[k]'(by rw [size_reverse_loop]; exact hk) =
+      if h : i ≤ k ∧ k ≤ j then s[i + j - k]'(by omega) else s[k] := by
+  fun_induction reverse.loop s i j hj with
+  | case1 s i j hj h ih =>
+    have e : reverse.loop s i j hj =
+        reverse.loop (s.swap i j (by omega)) (i + 1) (j - 1) (by simp; omega) := by
+      rw [reverse.loop]; simp [h]
+    rw [getElem_congr_coll e, ih (by omega) (by simpa using hk)]
+    simp only [getElem_swap]
+    repeat' split
+    all_goals first | omega | rfl | (congr 1; omega)
+  | case2 s i j hj h =>
+    have e : reverse.loop s i j hj = s := by rw [reverse.loop]; simp [h]
+    rw [getElem_congr_coll e]
+    split
+    · congr 1; omega
+    · rfl
+
+@[simp] public theorem getElem_reverse (s : UInt16Array.Slice) (i : Nat) (h) :
+    s.reverse[i]'h = s[s.size - 1 - i]'(by simp at h; omega) := by
+  have h' : i < s.size := by simpa using h
+  have hs : 0 < s.size := by omega
+  simp only [reverse, hs, ↓reduceDIte]
+  rw [getElem_reverse_loop _ _ _ _ (by omega) _ h']
+  simp only [Nat.zero_le, true_and, Nat.zero_add]
+  split <;> (try congr 1) <;> omega
+
+@[simp] public theorem toList_copy_reverse (s : UInt16Array.Slice) :
+    s.reverse.copy.toList = s.copy.toList.reverse := by
+  apply List.ext_getElem
+  · simp
+  · intro i h₁ h₂
+    simp only [getElem_toList, getElem_copy, getElem_reverse, List.getElem_reverse]
+    congr 1
+    simp
+
+/-- The loop of `foldInPlace`, over `Nat` indices. -/
+@[expose]
+public def foldInPlace.loop {β : Type v} (n : Nat)
+    (f : (k : USize) → k.toNat < n → UInt16 → β → UInt16 × β)
+    (s : UInt16Array.Slice) (hs : s.size = n) (k : Nat) (b : β) : UInt16Array.Slice × β :=
+  if hk : k < n then
+    have hk' : k.toUSize.toNat < n := by
+      rw [Nat.toUSize_eq, USize.toNat_ofNat']
+      exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) hk
+    let p := f k.toUSize hk' (s[k]'(by omega)) b
+    foldInPlace.loop n f (s.set k p.1 (by omega)) (by simpa using hs) (k + 1) p.2
+  else
+    (s, b)
+termination_by n - k
+
+@[specialize]
+private unsafe def foldInPlaceImpl {β : Type v} (s : UInt16Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt16 → β → UInt16 × β) : UInt16Array.Slice × β :=
+  match s with
+  | ⟨⟨a, start, stop, h, _⟩⟩ =>
+    UInt16Array.foldInPlaceThenImpl a start.toUSize (stop - start).toUSize init
+      (fun k _ => f k lcProof)
+      (fun a b => (⟨⟨a, start, stop, h, lcProof⟩⟩, b)) lcProof
+
+/--
+Replaces each element of the slice while threading an accumulator, in place like `set`: for each
+`k < s.size`, the element `x` at index `k` of the slice becomes the first component of
+`f k hk x b`, whose second component is the next accumulator. Returns the new slice and the last
+accumulator.
+
+This is `UInt16Array.foldInPlace` on the slice's range: the array is made exclusive once, before
+the loop, which then stores without checks.
+-/
+@[implemented_by foldInPlaceImpl, expose]
+public def foldInPlace {β : Type v} (s : UInt16Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt16 → β → UInt16 × β) : UInt16Array.Slice × β :=
+  foldInPlace.loop s.size f s rfl 0 init
+
+private theorem foldInPlace_loop_props {β : Type v} (n : Nat)
+    (f : (k : USize) → k.toNat < n → UInt16 → β → UInt16 × β)
+    (s : UInt16Array.Slice) (hs : s.size = n) (k : Nat) (b : β) :
+    (foldInPlace.loop n f s hs k b).1.start = s.start ∧
+      (foldInPlace.loop n f s hs k b).1.stop = s.stop := by
+  fun_induction foldInPlace.loop n f s hs k b with
+  | case1 s hs k b hk hk' p ih => simpa using ih
+  | case2 => exact ⟨rfl, rfl⟩
+
+@[simp] public theorem start_foldInPlace {β : Type v} (s : UInt16Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt16 → β → UInt16 × β) :
+    (s.foldInPlace init f).1.start = s.start :=
+  (foldInPlace_loop_props ..).1
+
+@[simp] public theorem stop_foldInPlace {β : Type v} (s : UInt16Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt16 → β → UInt16 × β) :
+    (s.foldInPlace init f).1.stop = s.stop :=
+  (foldInPlace_loop_props ..).2
+
+@[simp] public theorem size_foldInPlace {β : Type v} (s : UInt16Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt16 → β → UInt16 × β) :
+    (s.foldInPlace init f).1.size = s.size := by
+  rw [size_eq, size_eq, start_foldInPlace, stop_foldInPlace]
+
+end Slice
+
 /-! ### Decidable membership and slice hashing -/
 
 public theorem contains_iff_mem {a : UInt16Array} {x : UInt16} :
