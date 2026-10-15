@@ -797,13 +797,27 @@ example (s : Int8Array.Slice) : s.copy.size = s.size := by simp
 #guard ((Int8Array.mk #[1, 2])[1...1].reverse).array.data == #[1, 2]
 #guard (∅ : Int8Array.Slice).reverse.toList == []
 
--- `foldInPlace` on a slice shifts its range right by one, inserting the initial accumulator.
+-- `foldlInPlace` on a slice shifts its range right by one, inserting the initial accumulator.
 #guard
-  let r := (Int8Array.mk #[1, 2, 3, 4])[1...3].foldInPlace 9 (fun _ _ x b => (b, x))
+  let r := (Int8Array.mk #[1, 2, 3, 4])[1...3].foldlInPlace 9 (fun _ _ x b => (b, x))
   r.1.array.data == #[1, 9, 2, 4] && r.2 == 3 && r.1.start == 1 && r.1.stop == 3
 #guard
-  let r := (Int8Array.mk #[1, 2, 3, 4])[2...2].foldInPlace 9 (fun _ _ x b => (b, x))
+  let r := (Int8Array.mk #[1, 2, 3, 4])[2...2].foldlInPlace 9 (fun _ _ x b => (b, x))
   r.1.array.data == #[1, 2, 3, 4] && r.2 == 9
+
+-- `foldrInPlace` shifts the range left by one, from the last element to the first.
+#guard
+  let r := (Int8Array.mk #[1, 2, 3, 4])[1...3].foldrInPlace 9 (fun _ _ x b => (b, x))
+  r.1.array.data == #[1, 3, 9, 4] && r.2 == 2 && r.1.start == 1 && r.1.stop == 3
+#guard
+  let r := (Int8Array.mk #[1, 2, 3, 4])[2...2].foldrInPlace 9 (fun _ _ x b => (b, x))
+  r.1.array.data == #[1, 2, 3, 4] && r.2 == 9
+
+-- The indices passed to `f`, counted from the start of the slice, in the order of the visits.
+#guard
+  let s := (Int8Array.mk #[1, 2, 3, 4, 5])[1...4]
+  (s.foldlInPlace [] (fun k _ x b => (x, k.toNat :: b))).2 == [2, 1, 0] &&
+    (s.foldrInPlace [] (fun k _ x b => (x, k.toNat :: b))).2 == [0, 1, 2]
 
 -- Writing through a slice of a shared array must leave the original unchanged.
 #guard
@@ -816,8 +830,12 @@ example (s : Int8Array.Slice) : s.copy.size = s.size := by simp
   s.array.data == #[4, 3, 2, 1] && a.data == #[1, 2, 3, 4]
 #guard
   let a := Int8Array.mk #[1, 2, 3, 4]
-  let r := a[0...4].foldInPlace 9 (fun _ _ x b => (b, x))
+  let r := a[0...4].foldlInPlace 9 (fun _ _ x b => (b, x))
   r.1.array.data == #[9, 1, 2, 3] && a.data == #[1, 2, 3, 4]
+#guard
+  let a := Int8Array.mk #[1, 2, 3, 4]
+  let r := a[0...4].foldrInPlace 9 (fun _ _ x b => (b, x))
+  r.1.array.data == #[2, 3, 4, 9] && a.data == #[1, 2, 3, 4]
 #guard
   let s := (Int8Array.mk #[1, 2, 3, 4])[0...4]
   let t := s.swap 0 3
@@ -832,8 +850,9 @@ example (s : Int8Array.Slice) : s.copy.size = s.size := by simp
   let s := if h : 2 < s.size then s.swap 0 2 else s
   let s := s.modify 1 (· + 1)
   let s := s.reverse
-  let (s, _) := s.foldInPlace () (fun _ _ x b => (x + 1, b))
-  rawAddr s.array == p && s.array.data == #[x, big + 1, 5, 5, x]
+  let (s, _) := s.foldlInPlace () (fun _ _ x b => (x + 1, b))
+  let (s, _) := s.foldrInPlace () (fun _ _ x b => (x + 1, b))
+  rawAddr s.array == p && s.array.data == #[x, big + 2, 6, 6, x]
 
 #guard Int8Array.writesThroughSliceInPlace 1
 
@@ -911,5 +930,8 @@ example (s : Int8Array.Slice) : s.reverse.copy.toList = s.copy.toList.reverse :=
 example (s : Int8Array.Slice) (f : Int8 → Int8) : (s.modify 0 f).size = s.size := by
   simp
 example (s : Int8Array.Slice) (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) :
-    (s.foldInPlace 0 f).1.size = s.size := by
+    (s.foldlInPlace 0 f).1.size = s.size := by
+  simp
+example (s : Int8Array.Slice) (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) :
+    (s.foldrInPlace 0 f).1.size = s.size := by
   simp

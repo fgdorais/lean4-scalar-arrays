@@ -2144,9 +2144,9 @@ private theorem getElem_reverse_loop (s : UInt64Array.Slice) (i j : Nat) (hj : j
     congr 1
     simp
 
-/-- The loop of `foldInPlace`, over `Nat` indices. -/
+/-- The loop of `foldlInPlace`, over `Nat` indices. -/
 @[expose]
-public def foldInPlace.loop {β : Type v} (n : Nat)
+public def foldlInPlace.loop {β : Type v} (n : Nat)
     (f : (k : USize) → k.toNat < n → UInt64 → β → UInt64 × β)
     (s : UInt64Array.Slice) (hs : s.size = n) (k : Nat) (b : β) : UInt64Array.Slice × β :=
   if hk : k < n then
@@ -2154,13 +2154,13 @@ public def foldInPlace.loop {β : Type v} (n : Nat)
       rw [Nat.toUSize_eq, USize.toNat_ofNat']
       exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) hk
     let p := f k.toUSize hk' (s[k]'(by omega)) b
-    foldInPlace.loop n f (s.set k p.1 (by omega)) (by simpa using hs) (k + 1) p.2
+    foldlInPlace.loop n f (s.set k p.1 (by omega)) (by simpa using hs) (k + 1) p.2
   else
     (s, b)
 termination_by n - k
 
 @[specialize]
-private unsafe def foldInPlaceImpl {β : Type v} (s : UInt64Array.Slice) (init : β)
+private unsafe def foldlInPlaceImpl {β : Type v} (s : UInt64Array.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → UInt64 → β → UInt64 × β) : UInt64Array.Slice × β :=
   match s with
   | ⟨⟨a, start, stop, h, _⟩⟩ =>
@@ -2170,41 +2170,113 @@ private unsafe def foldInPlaceImpl {β : Type v} (s : UInt64Array.Slice) (init :
 
 /--
 Replaces each element of the slice while threading an accumulator, in place like `set`: for each
-`k < s.size`, the element `x` at index `k` of the slice becomes the first component of
+`k < s.size`, from `0` up, the element `x` at index `k` of the slice becomes the first component of
 `f k hk x b`, whose second component is the next accumulator. Returns the new slice and the last
 accumulator.
 
 This is `UInt64Array.foldInPlace` on the slice's range: the array is made exclusive once, before
 the loop, which then stores without checks.
 -/
-@[implemented_by foldInPlaceImpl, expose]
-public def foldInPlace {β : Type v} (s : UInt64Array.Slice) (init : β)
+@[implemented_by foldlInPlaceImpl, expose]
+public def foldlInPlace {β : Type v} (s : UInt64Array.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → UInt64 → β → UInt64 × β) : UInt64Array.Slice × β :=
-  foldInPlace.loop s.size f s rfl 0 init
+  foldlInPlace.loop s.size f s rfl 0 init
 
-private theorem foldInPlace_loop_props {β : Type v} (n : Nat)
+private theorem foldlInPlace_loop_props {β : Type v} (n : Nat)
     (f : (k : USize) → k.toNat < n → UInt64 → β → UInt64 × β)
     (s : UInt64Array.Slice) (hs : s.size = n) (k : Nat) (b : β) :
-    (foldInPlace.loop n f s hs k b).1.start = s.start ∧
-      (foldInPlace.loop n f s hs k b).1.stop = s.stop := by
-  fun_induction foldInPlace.loop n f s hs k b with
+    (foldlInPlace.loop n f s hs k b).1.start = s.start ∧
+      (foldlInPlace.loop n f s hs k b).1.stop = s.stop := by
+  fun_induction foldlInPlace.loop n f s hs k b with
   | case1 s hs k b hk hk' p ih => simpa using ih
   | case2 => exact ⟨rfl, rfl⟩
 
-@[simp] public theorem start_foldInPlace {β : Type v} (s : UInt64Array.Slice) (init : β)
+@[simp] public theorem start_foldlInPlace {β : Type v} (s : UInt64Array.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → UInt64 → β → UInt64 × β) :
-    (s.foldInPlace init f).1.start = s.start :=
-  (foldInPlace_loop_props ..).1
+    (s.foldlInPlace init f).1.start = s.start :=
+  (foldlInPlace_loop_props ..).1
 
-@[simp] public theorem stop_foldInPlace {β : Type v} (s : UInt64Array.Slice) (init : β)
+@[simp] public theorem stop_foldlInPlace {β : Type v} (s : UInt64Array.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → UInt64 → β → UInt64 × β) :
-    (s.foldInPlace init f).1.stop = s.stop :=
-  (foldInPlace_loop_props ..).2
+    (s.foldlInPlace init f).1.stop = s.stop :=
+  (foldlInPlace_loop_props ..).2
 
-@[simp] public theorem size_foldInPlace {β : Type v} (s : UInt64Array.Slice) (init : β)
+@[simp] public theorem size_foldlInPlace {β : Type v} (s : UInt64Array.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → UInt64 → β → UInt64 × β) :
-    (s.foldInPlace init f).1.size = s.size := by
-  rw [size_eq, size_eq, start_foldInPlace, stop_foldInPlace]
+    (s.foldlInPlace init f).1.size = s.size := by
+  rw [size_eq, size_eq, start_foldlInPlace, stop_foldlInPlace]
+
+/-- The loop of `foldrInPlace`, over `Nat` indices, from `k - 1` down to `0`. -/
+@[expose]
+public def foldrInPlace.loop {β : Type v} (n : Nat)
+    (f : (k : USize) → k.toNat < n → UInt64 → β → UInt64 × β)
+    (s : UInt64Array.Slice) (hs : s.size = n) : (k : Nat) → k ≤ n → β → UInt64Array.Slice × β
+  | 0, _, b => (s, b)
+  | k + 1, hk, b =>
+    have hk' : k.toUSize.toNat < n := by
+      rw [Nat.toUSize_eq, USize.toNat_ofNat']
+      exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) hk
+    let p := f k.toUSize hk' (s[k]'(by omega)) b
+    foldrInPlace.loop n f (s.set k p.1 (by omega)) (by simpa using hs) k (by omega) p.2
+
+@[specialize]
+private unsafe def foldrInPlaceImpl.loop {β : Type v} (start stop : Nat) (h : start ≤ stop)
+    (base : USize) (f : (k : USize) → UInt64 → β → UInt64 × β) (a : UInt64Array) (k : USize)
+    (b : β) : UInt64Array.Slice × β :=
+  if 0 < k then
+    let k := k - 1
+    let p := f k (a.uget (base + k) lcProof) b
+    foldrInPlaceImpl.loop start stop h base f (setUnsafe a (base + k) p.1) k p.2
+  else
+    (⟨⟨a, start, stop, h, lcProof⟩⟩, b)
+
+@[specialize]
+private unsafe def foldrInPlaceImpl {β : Type v} (s : UInt64Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt64 → β → UInt64 × β) : UInt64Array.Slice × β :=
+  match s with
+  | ⟨⟨a, start, stop, h, _⟩⟩ =>
+    foldrInPlaceImpl.loop start stop h start.toUSize (fun k => f k lcProof)
+      (ensureExclusiveUnsafe a) (stop - start).toUSize init
+
+/--
+Replaces each element of the slice while threading an accumulator, like `foldlInPlace` but from
+the last element to the first: for each `k < s.size`, from `s.size - 1` down to `0`, the element
+`x` at index `k` of the slice becomes the first component of `f k hk x b`, whose second component
+is the next accumulator. Returns the new slice and the last accumulator.
+
+The array is made exclusive once, before the loop, which then stores without checks.
+-/
+@[implemented_by foldrInPlaceImpl, expose]
+public def foldrInPlace {β : Type v} (s : UInt64Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt64 → β → UInt64 × β) : UInt64Array.Slice × β :=
+  foldrInPlace.loop s.size f s rfl s.size (Nat.le_refl _) init
+
+private theorem foldrInPlace_loop_props {β : Type v} (n : Nat)
+    (f : (k : USize) → k.toNat < n → UInt64 → β → UInt64 × β)
+    (s : UInt64Array.Slice) (hs : s.size = n) (k : Nat) (hk : k ≤ n) (b : β) :
+    (foldrInPlace.loop n f s hs k hk b).1.start = s.start ∧
+      (foldrInPlace.loop n f s hs k hk b).1.stop = s.stop := by
+  induction k generalizing s b with
+  | zero => exact ⟨rfl, rfl⟩
+  | succ k ih =>
+    rw [foldrInPlace.loop]
+    obtain ⟨h₁, h₂⟩ := ih ..
+    exact ⟨h₁, h₂⟩
+
+@[simp] public theorem start_foldrInPlace {β : Type v} (s : UInt64Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt64 → β → UInt64 × β) :
+    (s.foldrInPlace init f).1.start = s.start :=
+  (foldrInPlace_loop_props ..).1
+
+@[simp] public theorem stop_foldrInPlace {β : Type v} (s : UInt64Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt64 → β → UInt64 × β) :
+    (s.foldrInPlace init f).1.stop = s.stop :=
+  (foldrInPlace_loop_props ..).2
+
+@[simp] public theorem size_foldrInPlace {β : Type v} (s : UInt64Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt64 → β → UInt64 × β) :
+    (s.foldrInPlace init f).1.size = s.size := by
+  rw [size_eq, size_eq, start_foldrInPlace, stop_foldrInPlace]
 
 end Slice
 
