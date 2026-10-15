@@ -765,6 +765,66 @@ example (s : Int64Array.Slice) : s.copy.size = s.size := by simp
   (Int64Array.mk (#[0] ++ xs))[1...*] == (Int64Array.mk (xs ++ #[0]))[0...100000] &&
     (Int64Array.mk (#[0] ++ xs))[1...*] != (Int64Array.mk (xs.set! 99999 0))[0...100000]
 
+/-! Writing through slices -/
+
+#guard ((Int64Array.mk #[1, 2, 3, 4])[1...3].set 1 big).array.data == #[1, 2, big, 4]
+#guard ((Int64Array.mk #[1, 2, 3, 4])[1...3].set! 1 big).toList == [2, big]
+#guard ((Int64Array.mk #[1, 2, 3, 4])[1...3].set! 2 big).array.data == #[1, 2, 3, 4]
+#guard ((Int64Array.mk #[1, 2, 3, 4])[1...3].modify 0 (· * 10)).array.data == #[1, 20, 3, 4]
+#guard ((Int64Array.mk #[1, 2, 3, 4])[1...3].modify 2 (· * 10)).array.data == #[1, 2, 3, 4]
+#guard ((Int64Array.mk #[1, 2, 3, big])[1...4].swap 0 2).array.data == #[1, big, 3, 2]
+#guard ((Int64Array.mk #[1, 2, 3, big])[1...4].swap 1 1).array.data == #[1, 2, 3, big]
+#guard ((Int64Array.mk #[0, 1, 2, 3, 4, 0])[1...5].reverse).array.data == #[0, 4, 3, 2, 1, 0]
+#guard ((Int64Array.mk #[0, 1, 2, 3, 0])[1...4].reverse).array.data == #[0, 3, 2, 1, 0]
+#guard ((Int64Array.mk #[1, 2])[1...1].reverse).array.data == #[1, 2]
+#guard (∅ : Int64Array.Slice).reverse.toList == []
+
+-- `foldInPlace` on a slice shifts its range right by one, inserting the initial accumulator.
+#guard
+  let r := (Int64Array.mk #[1, 2, 3, 4])[1...3].foldInPlace 9 (fun _ _ x b => (b, x))
+  r.1.array.data == #[1, 9, 2, 4] && r.2 == 3 && r.1.start == 1 && r.1.stop == 3
+#guard
+  let r := (Int64Array.mk #[1, 2, 3, 4])[2...2].foldInPlace 9 (fun _ _ x b => (b, x))
+  r.1.array.data == #[1, 2, 3, 4] && r.2 == 9
+
+-- Writing through a slice of a shared array must leave the original unchanged.
+#guard
+  let a := Int64Array.mk #[1, 2, 3, 4]
+  let s := a[1...4].set 0 big
+  s.array.data == #[1, big, 3, 4] && a.data == #[1, 2, 3, 4]
+#guard
+  let a := Int64Array.mk #[1, 2, 3, 4]
+  let s := a[0...4].reverse
+  s.array.data == #[4, 3, 2, 1] && a.data == #[1, 2, 3, 4]
+#guard
+  let a := Int64Array.mk #[1, 2, 3, 4]
+  let r := a[0...4].foldInPlace 9 (fun _ _ x b => (b, x))
+  r.1.array.data == #[9, 1, 2, 3] && a.data == #[1, 2, 3, 4]
+#guard
+  let s := (Int64Array.mk #[1, 2, 3, 4])[0...4]
+  let t := s.swap 0 3
+  t.toList == [4, 2, 3, 1] && s.toList == [1, 2, 3, 4]
+
+-- A slice of an array that is no longer used writes into that array, without copying it.
+@[noinline] def Int64Array.writesThroughSliceInPlace (x : Int64) : Bool :=
+  let a := (Int64Array.emptyWithCapacity 8).push x |>.push 2 |>.push 3 |>.push 4 |>.push x
+  let p := rawAddr a
+  let s := a[1...4]
+  let s := s.set! 0 big
+  let s := if h : 2 < s.size then s.swap 0 2 else s
+  let s := s.modify 1 (· + 1)
+  let s := s.reverse
+  let (s, _) := s.foldInPlace () (fun _ _ x b => (x + 1, b))
+  rawAddr s.array == p && s.array.data == #[x, big + 1, 5, 5, x]
+
+#guard Int64Array.writesThroughSliceInPlace 1
+
+-- Reversing a large slice takes linear time only when every swap writes in place.
+#guard
+  let n := 1000000
+  let xs := (Array.range n).map Nat.toInt64
+  (Int64Array.mk xs)[0...n].reverse.array.data == xs.reverse
+
 /-! Lemmas from another module -/
 
 example (a : Int64Array) (i : USize) (v : Int64) (h) (j : Nat) (hj) :
@@ -821,4 +881,17 @@ example (a : Int64Array) : a.iter.toInt64Array = a := by
 example (s : Int64Array.Slice) : s.iter.toInt64Array = s.copy := by
   simp
 example : (∅ : Int64Array.Slice).size = 0 := by
+  simp
+example (s : Int64Array.Slice) (i : Nat) (v : Int64) (h : i < s.size) :
+    (s.set i v h).copy = s.copy.set i v (by simpa using h) := by
+  simp
+example (s : Int64Array.Slice) (i j : Nat) (hi : i < s.size) (hj : j < s.size) :
+    (s.swap i j hi hj)[i]'(by simpa using hi) = s[j] := by
+  simp; intro h; subst h; rfl
+example (s : Int64Array.Slice) : s.reverse.copy.toList = s.copy.toList.reverse := by
+  simp
+example (s : Int64Array.Slice) (f : Int64 → Int64) : (s.modify 0 f).size = s.size := by
+  simp
+example (s : Int64Array.Slice) (f : (k : USize) → k.toNat < s.size → Int64 → Nat → Int64 × Nat) :
+    (s.foldInPlace 0 f).1.size = s.size := by
   simp
