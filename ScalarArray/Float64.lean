@@ -1791,10 +1791,10 @@ public theorem Slice.getElem_mem {s : Float64Array.Slice} {i : Nat} (h : i < s.s
     (s == t) = (s.copy == t.copy) := by
   rfl
 
-/-! ## In-place scans -/
+/-! ## In-place folds -/
 
 @[specialize]
-private unsafe def mapAccumRangeImpl {β : Type v} (a : Float64Array) (start len : USize) (init : β)
+private unsafe def foldInPlaceImpl {β : Type v} (a : Float64Array) (start len : USize) (init : β)
     (f : (k : USize) → k.toNat < len.toNat → Float → β → Float × β)
     (_ : start.toNat + len.toNat ≤ a.size) : Float64Array × β :=
   loop (ensureExclusiveUnsafe a) 0 init
@@ -1806,9 +1806,9 @@ where
     else
       (a, b)
 
-/-- The loop of `mapAccumRange`, over `Nat` indices. -/
+/-- The loop of `foldInPlace`, over `Nat` indices. -/
 @[expose]
-public def mapAccumRange.loop {β : Type v} (len' : USize)
+public def foldInPlace.loop {β : Type v} (len' : USize)
     (f : (k : USize) → k.toNat < len'.toNat → Float → β → Float × β)
     (start len : Nat) (a : Float64Array) (h : start + len ≤ a.size) (hlen : len ≤ len'.toNat)
     (k : Nat) (b : β) : Float64Array × β :=
@@ -1817,47 +1817,49 @@ public def mapAccumRange.loop {β : Type v} (len' : USize)
       have := len'.toNat_lt_size
       rw [USize.toNat_ofNat_of_lt' (by omega)]
       omega) (a[start + k]'(by omega)) b
-    mapAccumRange.loop len' f start len (a.set (start + k) p.1 (by omega)) (by simpa using h) hlen
+    foldInPlace.loop len' f start len (a.set (start + k) p.1 (by omega)) (by simpa using h) hlen
       (k + 1) p.2
   else
     (a, b)
 termination_by len - k
 
 /--
-Scans the elements of `a` from index `start` for `len` elements, threading an accumulator: for
-each `k < len`, the element `x` at `start + k` is replaced by the first component of
-`f k hk x b`, whose second component is the next accumulator. Returns the new array and the last
-accumulator. The proof `hk : k.toNat < len.toNat` lets `f` read other arrays with `uget`.
+Replaces each element of `a` from index `start` for `len` elements while threading an
+accumulator, in place when `a` is not shared: for each `k < len`, the element `x` at `start + k`
+becomes the first component of `f k hk x b`, whose second component is the next accumulator.
+Returns the new array and the last accumulator. The proof `hk : k.toNat < len.toNat` lets `f`
+read other arrays with `uget`.
 
-When `a` is not shared, it is updated in place, with one check that it is exclusive before the
-loop and none inside it, so a scan is faster than a loop of `uset`s. `f` only sees the elements,
-never the array, which is what makes skipping the checks safe.
+The point is the implementation: the result is that of a loop of `set`s, but `a` is made
+exclusive once, before the loop, which then stores without checks, where each `uset` checks at
+every write. `f` only sees the elements, never the array, which is what makes skipping the
+checks safe.
 -/
-@[implemented_by mapAccumRangeImpl, expose]
-public def mapAccumRange {β : Type v} (a : Float64Array) (start len : USize) (init : β)
+@[implemented_by foldInPlaceImpl, expose]
+public def foldInPlace {β : Type v} (a : Float64Array) (start len : USize) (init : β)
     (f : (k : USize) → k.toNat < len.toNat → Float → β → Float × β)
     (h : start.toNat + len.toNat ≤ a.size) : Float64Array × β :=
-  mapAccumRange.loop len f start.toNat len.toNat a h (Nat.le_refl _) 0 init
+  foldInPlace.loop len f start.toNat len.toNat a h (Nat.le_refl _) 0 init
 
-public theorem size_mapAccumRange_loop {β : Type v} (len' : USize)
+public theorem size_foldInPlace_loop {β : Type v} (len' : USize)
     (f : (k : USize) → k.toNat < len'.toNat → Float → β → Float × β) (start len : Nat)
     (a : Float64Array) (h : start + len ≤ a.size) (hlen : len ≤ len'.toNat) (k : Nat) (b : β) :
-    (mapAccumRange.loop len' f start len a h hlen k b).1.size = a.size := by
-  induction a, h, k, b using mapAccumRange.loop.induct len' f start len hlen with
+    (foldInPlace.loop len' f start len a h hlen k b).1.size = a.size := by
+  induction a, h, k, b using foldInPlace.loop.induct len' f start len hlen with
   | case1 a h k b hk p ih =>
-    rw [mapAccumRange.loop]
+    rw [foldInPlace.loop]
     simp only [hk, ↓reduceDIte]
     rw [ih]
     simp
   | case2 a h k b hk =>
-    rw [mapAccumRange.loop]
+    rw [foldInPlace.loop]
     simp [hk]
 
-@[simp] public theorem size_mapAccumRange {β : Type v} (a : Float64Array) (start len : USize)
+@[simp] public theorem size_foldInPlace {β : Type v} (a : Float64Array) (start len : USize)
     (init : β) (f : (k : USize) → k.toNat < len.toNat → Float → β → Float × β)
     (h : start.toNat + len.toNat ≤ a.size) :
-    (a.mapAccumRange start len init f h).1.size = a.size :=
-  size_mapAccumRange_loop len f _ _ a h _ 0 init
+    (a.foldInPlace start len init f h).1.size = a.size :=
+  size_foldInPlace_loop len f _ _ a h _ 0 init
 
 end Float64Array
 
