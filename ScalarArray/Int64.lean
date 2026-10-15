@@ -57,9 +57,9 @@ public def get :
     (a : @& Int64Array) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → Int64
   | mk a, i, h => a[i]
 
--- Public, like `mkImpl`, `usetImpl` and `setImpl` below: a private `implemented_by` target
--- attached with a separate `attribute` command is not visible to other modules, so code there
--- that uses `get`, `mk`, `uset` or `set` would fail to compile.
+-- Public, like `mkImpl`, `usetImpl`, `setImpl` and `pushImpl` below: a private `implemented_by`
+-- target attached with a separate `attribute` command is not visible to other modules, so code
+-- there that uses `get`, `mk`, `uset` or `set` would fail to compile.
 @[inline]
 public unsafe def getImpl : type_of% @get :=
   fun a i _ => a.uget i.toUSize lcProof
@@ -70,7 +70,7 @@ attribute [implemented_by getImpl] get
 Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in bounds. Public only
 so that `uset` can be inlined into code in other modules.
 -/
-@[extern c inline "#1;\n((uint64_t*)lean_sarray_cptr(#1))[#2] = #3"]
+@[never_extract, extern c inline "#1;\n((uint64_t*)lean_sarray_cptr(#1))[#2] = #3"]
 public unsafe def setUnsafe : Int64Array → USize → Int64 → Int64Array
   | .mk a, i, v => .mk <| a.uset i v lcProof
 
@@ -79,8 +79,10 @@ public unsafe def setUnsafe : Int64Array → USize → Int64 → Int64Array
 into code in other modules.
 -/
 -- The same runtime function as the private `ScalarArray.ensureExclusive`, which code in other
--- modules can't reach.
-@[extern "lean_sarray_ensure_exclusive"]
+-- modules can't reach. `never_extract`: once `uset` or `push` is inlined, `ensureExclusiveUnsafe c`
+-- on a closed array `c` would otherwise be hoisted into a shared constant, which the following
+-- in-place write would then modify.
+@[never_extract, extern "lean_sarray_ensure_exclusive"]
 public unsafe def ensureExclusiveUnsafe (a : Int64Array) : Int64Array := a
 
 private unsafe def toUSizeChecked (n : Nat) : USize :=
@@ -181,19 +183,47 @@ public instance : GetElem Int64Array Nat Int64 fun a i => i < a.size where
 public instance : GetElem Int64Array USize Int64 fun a i => i.toNat < a.size where
   getElem a i h := a.uget i h
 
-private unsafe def pushImpl (a : Int64Array) (v : Int64) : Int64Array :=
+/--
+The number of elements `a` has room for before it must be reallocated. Public only so that `push`
+can be inlined into code in other modules.
+-/
+@[extern "lean_sarray_capacity"]
+public unsafe def capacityUnsafe (a : @& Int64Array) : USize := a.usize
+
+/--
+Sets the size of `a` to `_n`. Only valid when `a` is exclusive and `_n` is at most its capacity;
+the elements past the old size are uninitialized until stored. Public only so that `push` can be
+inlined into code in other modules.
+-/
+-- The same C as the private `ScalarArray.resizeUnsafe`, which code in other modules can't reach.
+@[never_extract, extern c inline "#1;\nlean_sarray_set_size(#1, #2)"]
+public unsafe def setSizeUnsafe (a : Int64Array) (_n : USize) : Int64Array := a
+
+/--
+`push` when `a` is full: copies `a` with capacity `2 * capacity + 1`, then appends `v`. Out of
+line so that inlined `push` call sites stay small. Public only so that `push` can be inlined into
+code in other modules.
+-/
+public unsafe def pushGrowUnsafe (a : Int64Array) (v : Int64) : Int64Array :=
   let s : ScalarArray := unsafeCast a
   let cap := s.capacity
-  if s.size < cap then
-    loop s.ensureExclusive
-  else if cap < cap + cap + 1 then
-    loop (s.copyWithCapacity (cap + cap + 1) lcProof)
+  if cap < cap + cap + 1 then
+    let a : Int64Array := unsafeCast (s.copyWithCapacity (cap + cap + 1) lcProof)
+    let i := a.usize
+    setUnsafe (setSizeUnsafe a (i + 1)) i v
   else
     panic! "out of memory"
-where
-  loop (s : ScalarArray) : Int64Array :=
-    let i := s.size
-    setUnsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
+
+-- Inline, and made of public inline externs, so that the common path compiles to inline C in other
+-- modules: one capacity check, one exclusivity check, a size bump and one store.
+@[inline]
+public unsafe def pushImpl (a : Int64Array) (v : Int64) : Int64Array :=
+  if a.usize < capacityUnsafe a then
+    let a := ensureExclusiveUnsafe a
+    let i := a.usize
+    setUnsafe (setSizeUnsafe a (i + 1)) i v
+  else
+    pushGrowUnsafe a v
 
 @[implemented_by pushImpl, expose]
 public def push : Int64Array → Int64 → Int64Array
