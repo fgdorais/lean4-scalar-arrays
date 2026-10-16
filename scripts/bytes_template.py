@@ -118,7 +118,7 @@ def uidx(k):
 
 def section(name, elem, u, n, to_u, of_u, swap):
     roundtrip = swap
-    shows = ''.join(f'\n      show ({idx(n, k)}) / {n} = i by omega, show ({idx(n, k)}) % {n} = {k} by omega,'
+    shows = ''.join(f'\n      show ({idx(n, k)}) / {n} = i by lia, show ({idx(n, k)}) % {n} = {k} by lia,'
                     for k in range(n)).rstrip(',')
     if of_u == '{}':
         finish = '    generalize s[i] = x\n    bv_decide'
@@ -142,8 +142,8 @@ def section(name, elem, u, n, to_u, of_u, swap):
             for k in range(n))
         stores = stores.replace('(u >>> 0).toUInt8', 'u.toUInt8')
         combine = ' |||\n        '.join(
-            (f'(b[{idx(n, k)}]\'(by omega)).to{u}' if shift(order, n, k) == 0 else
-             f'((b[{idx(n, k)}]\'(by omega)).to{u} <<< {shift(order, n, k)})')
+            (f'(b[{idx(n, k)}]\'(by lia)).to{u}' if shift(order, n, k) == 0 else
+             f'((b[{idx(n, k)}]\'(by lia)).to{u} <<< {shift(order, n, k)})')
             for k in range(n))
         combine_impl = ' |||\n          '.join(
             (f'(b.uget {uidx(k)} lcProof).to{u}' if shift(order, n, k) == 0 else
@@ -166,7 +166,7 @@ where
 @[implemented_by Slice.toBytes{order}Impl, expose]
 public def Slice.toBytes{order} (s : {A}.Slice) : ByteArray :=
   ⟨Array.ofFn (n := {n} * s.size) fun ⟨j, hj⟩ =>
-    ({to_u.format(f"(s[j / {n}]'(by omega))")} >>> ({spec_shift}).to{u}).toUInt8⟩
+    ({to_u.format(f"(s[j / {n}]'(by lia))")} >>> ({spec_shift}).to{u}).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in {doc}. -/
 @[inline, expose]
@@ -214,7 +214,7 @@ public def ofBytes{order}! (b : ByteArray) : {A} :=
 @[simp] public theorem Slice.getElem_toBytes{order} (s : {A}.Slice) (j : Nat)
     (h : j < s.toBytes{order}.size) :
     s.toBytes{order}[j] =
-      ({to_u.format(f"(s[j / {n}]'(by rw [Slice.size_toBytes{order}] at h; omega))")} >>> ({spec_shift}).to{u}).toUInt8 := by
+      ({to_u.format(f"(s[j / {n}]'(by rw [Slice.size_toBytes{order}] at h; lia))")} >>> ({spec_shift}).to{u}).toUInt8 := by
   simp only [Slice.toBytes{order}, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 ''')
         if roundtrip:

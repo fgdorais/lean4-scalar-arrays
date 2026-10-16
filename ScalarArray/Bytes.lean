@@ -96,7 +96,7 @@ where
 @[implemented_by Slice.toBytesLEImpl, expose]
 public def Slice.toBytesLE (s : UInt16Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 2 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 2]'(by omega)) >>> (8 * (j % 2)).toUInt16).toUInt8⟩
+    ((s[j / 2]'(by lia)) >>> (8 * (j % 2)).toUInt16).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in little-endian order, least significant byte first. -/
 @[inline, expose]
@@ -122,8 +122,8 @@ Returns `none` if the size of `b` is not a multiple of 2.
 public def ofBytesLE? (b : ByteArray) : Option UInt16Array :=
   if b.size % 2 = 0 then
     some <| ofFn (n := b.size / 2) fun ⟨i, hi⟩ =>
-      (b[2 * i]'(by omega)).toUInt16 |||
-        ((b[2 * i + 1]'(by omega)).toUInt16 <<< 8)
+      (b[2 * i]'(by lia)).toUInt16 |||
+        ((b[2 * i + 1]'(by lia)).toUInt16 <<< 8)
   else
     none
 
@@ -146,7 +146,7 @@ public def ofBytesLE! (b : ByteArray) : UInt16Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : UInt16Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 2]'(by rw [Slice.size_toBytesLE] at h; omega)) >>> (8 * (j % 2)).toUInt16).toUInt8 := by
+      ((s[j / 2]'(by rw [Slice.size_toBytesLE] at h; lia)) >>> (8 * (j % 2)).toUInt16).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesLE?_toBytesLE_slice (s : UInt16Array.Slice) :
@@ -158,8 +158,8 @@ public def ofBytesLE! (b : ByteArray) : UInt16Array :=
   · intro i _ h
     have hi : i < s.size := by simpa using h
     simp only [getElem_ofFn, Slice.getElem_toBytesLE, Slice.getElem_copy,
-      show (2 * i) / 2 = i by omega, show (2 * i) % 2 = 0 by omega,
-      show (2 * i + 1) / 2 = i by omega, show (2 * i + 1) % 2 = 1 by omega]
+      show (2 * i) / 2 = i by lia, show (2 * i) % 2 = 0 by lia,
+      show (2 * i + 1) / 2 = i by lia, show (2 * i + 1) % 2 = 1 by lia]
     simp only [Nat.reduceMul, Nat.toUInt16,
       UInt16.reduceOfNat]
     generalize s[i] = x
@@ -187,7 +187,7 @@ where
 @[implemented_by Slice.toBytesBEImpl, expose]
 public def Slice.toBytesBE (s : UInt16Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 2 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 2]'(by omega)) >>> (8 * (1 - j % 2)).toUInt16).toUInt8⟩
+    ((s[j / 2]'(by lia)) >>> (8 * (1 - j % 2)).toUInt16).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in big-endian order, most significant byte first. -/
 @[inline, expose]
@@ -213,8 +213,8 @@ Returns `none` if the size of `b` is not a multiple of 2.
 public def ofBytesBE? (b : ByteArray) : Option UInt16Array :=
   if b.size % 2 = 0 then
     some <| ofFn (n := b.size / 2) fun ⟨i, hi⟩ =>
-      ((b[2 * i]'(by omega)).toUInt16 <<< 8) |||
-        (b[2 * i + 1]'(by omega)).toUInt16
+      ((b[2 * i]'(by lia)).toUInt16 <<< 8) |||
+        (b[2 * i + 1]'(by lia)).toUInt16
   else
     none
 
@@ -237,7 +237,7 @@ public def ofBytesBE! (b : ByteArray) : UInt16Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : UInt16Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 2]'(by rw [Slice.size_toBytesBE] at h; omega)) >>> (8 * (1 - j % 2)).toUInt16).toUInt8 := by
+      ((s[j / 2]'(by rw [Slice.size_toBytesBE] at h; lia)) >>> (8 * (1 - j % 2)).toUInt16).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesBE?_toBytesBE_slice (s : UInt16Array.Slice) :
@@ -249,8 +249,8 @@ public def ofBytesBE! (b : ByteArray) : UInt16Array :=
   · intro i _ h
     have hi : i < s.size := by simpa using h
     simp only [getElem_ofFn, Slice.getElem_toBytesBE, Slice.getElem_copy,
-      show (2 * i) / 2 = i by omega, show (2 * i) % 2 = 0 by omega,
-      show (2 * i + 1) / 2 = i by omega, show (2 * i + 1) % 2 = 1 by omega]
+      show (2 * i) / 2 = i by lia, show (2 * i) % 2 = 0 by lia,
+      show (2 * i + 1) / 2 = i by lia, show (2 * i + 1) % 2 = 1 by lia]
     simp only [Nat.reduceMul, Nat.reduceSub, Nat.toUInt16,
       UInt16.reduceOfNat]
     generalize s[i] = x
@@ -306,7 +306,7 @@ where
 @[implemented_by Slice.toBytesLEImpl, expose]
 public def Slice.toBytesLE (s : UInt32Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 4 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 4]'(by omega)) >>> (8 * (j % 4)).toUInt32).toUInt8⟩
+    ((s[j / 4]'(by lia)) >>> (8 * (j % 4)).toUInt32).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in little-endian order, least significant byte first. -/
 @[inline, expose]
@@ -334,10 +334,10 @@ Returns `none` if the size of `b` is not a multiple of 4.
 public def ofBytesLE? (b : ByteArray) : Option UInt32Array :=
   if b.size % 4 = 0 then
     some <| ofFn (n := b.size / 4) fun ⟨i, hi⟩ =>
-      (b[4 * i]'(by omega)).toUInt32 |||
-        ((b[4 * i + 1]'(by omega)).toUInt32 <<< 8) |||
-        ((b[4 * i + 2]'(by omega)).toUInt32 <<< 16) |||
-        ((b[4 * i + 3]'(by omega)).toUInt32 <<< 24)
+      (b[4 * i]'(by lia)).toUInt32 |||
+        ((b[4 * i + 1]'(by lia)).toUInt32 <<< 8) |||
+        ((b[4 * i + 2]'(by lia)).toUInt32 <<< 16) |||
+        ((b[4 * i + 3]'(by lia)).toUInt32 <<< 24)
   else
     none
 
@@ -360,7 +360,7 @@ public def ofBytesLE! (b : ByteArray) : UInt32Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : UInt32Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 4]'(by rw [Slice.size_toBytesLE] at h; omega)) >>> (8 * (j % 4)).toUInt32).toUInt8 := by
+      ((s[j / 4]'(by rw [Slice.size_toBytesLE] at h; lia)) >>> (8 * (j % 4)).toUInt32).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesLE?_toBytesLE_slice (s : UInt32Array.Slice) :
@@ -372,10 +372,10 @@ public def ofBytesLE! (b : ByteArray) : UInt32Array :=
   · intro i _ h
     have hi : i < s.size := by simpa using h
     simp only [getElem_ofFn, Slice.getElem_toBytesLE, Slice.getElem_copy,
-      show (4 * i) / 4 = i by omega, show (4 * i) % 4 = 0 by omega,
-      show (4 * i + 1) / 4 = i by omega, show (4 * i + 1) % 4 = 1 by omega,
-      show (4 * i + 2) / 4 = i by omega, show (4 * i + 2) % 4 = 2 by omega,
-      show (4 * i + 3) / 4 = i by omega, show (4 * i + 3) % 4 = 3 by omega]
+      show (4 * i) / 4 = i by lia, show (4 * i) % 4 = 0 by lia,
+      show (4 * i + 1) / 4 = i by lia, show (4 * i + 1) % 4 = 1 by lia,
+      show (4 * i + 2) / 4 = i by lia, show (4 * i + 2) % 4 = 2 by lia,
+      show (4 * i + 3) / 4 = i by lia, show (4 * i + 3) % 4 = 3 by lia]
     simp only [Nat.reduceMul, Nat.toUInt32,
       UInt32.reduceOfNat]
     generalize s[i] = x
@@ -405,7 +405,7 @@ where
 @[implemented_by Slice.toBytesBEImpl, expose]
 public def Slice.toBytesBE (s : UInt32Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 4 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 4]'(by omega)) >>> (8 * (3 - j % 4)).toUInt32).toUInt8⟩
+    ((s[j / 4]'(by lia)) >>> (8 * (3 - j % 4)).toUInt32).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in big-endian order, most significant byte first. -/
 @[inline, expose]
@@ -433,10 +433,10 @@ Returns `none` if the size of `b` is not a multiple of 4.
 public def ofBytesBE? (b : ByteArray) : Option UInt32Array :=
   if b.size % 4 = 0 then
     some <| ofFn (n := b.size / 4) fun ⟨i, hi⟩ =>
-      ((b[4 * i]'(by omega)).toUInt32 <<< 24) |||
-        ((b[4 * i + 1]'(by omega)).toUInt32 <<< 16) |||
-        ((b[4 * i + 2]'(by omega)).toUInt32 <<< 8) |||
-        (b[4 * i + 3]'(by omega)).toUInt32
+      ((b[4 * i]'(by lia)).toUInt32 <<< 24) |||
+        ((b[4 * i + 1]'(by lia)).toUInt32 <<< 16) |||
+        ((b[4 * i + 2]'(by lia)).toUInt32 <<< 8) |||
+        (b[4 * i + 3]'(by lia)).toUInt32
   else
     none
 
@@ -459,7 +459,7 @@ public def ofBytesBE! (b : ByteArray) : UInt32Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : UInt32Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 4]'(by rw [Slice.size_toBytesBE] at h; omega)) >>> (8 * (3 - j % 4)).toUInt32).toUInt8 := by
+      ((s[j / 4]'(by rw [Slice.size_toBytesBE] at h; lia)) >>> (8 * (3 - j % 4)).toUInt32).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesBE?_toBytesBE_slice (s : UInt32Array.Slice) :
@@ -471,10 +471,10 @@ public def ofBytesBE! (b : ByteArray) : UInt32Array :=
   · intro i _ h
     have hi : i < s.size := by simpa using h
     simp only [getElem_ofFn, Slice.getElem_toBytesBE, Slice.getElem_copy,
-      show (4 * i) / 4 = i by omega, show (4 * i) % 4 = 0 by omega,
-      show (4 * i + 1) / 4 = i by omega, show (4 * i + 1) % 4 = 1 by omega,
-      show (4 * i + 2) / 4 = i by omega, show (4 * i + 2) % 4 = 2 by omega,
-      show (4 * i + 3) / 4 = i by omega, show (4 * i + 3) % 4 = 3 by omega]
+      show (4 * i) / 4 = i by lia, show (4 * i) % 4 = 0 by lia,
+      show (4 * i + 1) / 4 = i by lia, show (4 * i + 1) % 4 = 1 by lia,
+      show (4 * i + 2) / 4 = i by lia, show (4 * i + 2) % 4 = 2 by lia,
+      show (4 * i + 3) / 4 = i by lia, show (4 * i + 3) % 4 = 3 by lia]
     simp only [Nat.reduceMul, Nat.reduceSub, Nat.toUInt32,
       UInt32.reduceOfNat]
     generalize s[i] = x
@@ -534,7 +534,7 @@ where
 @[implemented_by Slice.toBytesLEImpl, expose]
 public def Slice.toBytesLE (s : UInt64Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 8 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 8]'(by omega)) >>> (8 * (j % 8)).toUInt64).toUInt8⟩
+    ((s[j / 8]'(by lia)) >>> (8 * (j % 8)).toUInt64).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in little-endian order, least significant byte first. -/
 @[inline, expose]
@@ -566,14 +566,14 @@ Returns `none` if the size of `b` is not a multiple of 8.
 public def ofBytesLE? (b : ByteArray) : Option UInt64Array :=
   if b.size % 8 = 0 then
     some <| ofFn (n := b.size / 8) fun ⟨i, hi⟩ =>
-      (b[8 * i]'(by omega)).toUInt64 |||
-        ((b[8 * i + 1]'(by omega)).toUInt64 <<< 8) |||
-        ((b[8 * i + 2]'(by omega)).toUInt64 <<< 16) |||
-        ((b[8 * i + 3]'(by omega)).toUInt64 <<< 24) |||
-        ((b[8 * i + 4]'(by omega)).toUInt64 <<< 32) |||
-        ((b[8 * i + 5]'(by omega)).toUInt64 <<< 40) |||
-        ((b[8 * i + 6]'(by omega)).toUInt64 <<< 48) |||
-        ((b[8 * i + 7]'(by omega)).toUInt64 <<< 56)
+      (b[8 * i]'(by lia)).toUInt64 |||
+        ((b[8 * i + 1]'(by lia)).toUInt64 <<< 8) |||
+        ((b[8 * i + 2]'(by lia)).toUInt64 <<< 16) |||
+        ((b[8 * i + 3]'(by lia)).toUInt64 <<< 24) |||
+        ((b[8 * i + 4]'(by lia)).toUInt64 <<< 32) |||
+        ((b[8 * i + 5]'(by lia)).toUInt64 <<< 40) |||
+        ((b[8 * i + 6]'(by lia)).toUInt64 <<< 48) |||
+        ((b[8 * i + 7]'(by lia)).toUInt64 <<< 56)
   else
     none
 
@@ -596,7 +596,7 @@ public def ofBytesLE! (b : ByteArray) : UInt64Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : UInt64Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 8]'(by rw [Slice.size_toBytesLE] at h; omega)) >>> (8 * (j % 8)).toUInt64).toUInt8 := by
+      ((s[j / 8]'(by rw [Slice.size_toBytesLE] at h; lia)) >>> (8 * (j % 8)).toUInt64).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesLE?_toBytesLE_slice (s : UInt64Array.Slice) :
@@ -608,14 +608,14 @@ public def ofBytesLE! (b : ByteArray) : UInt64Array :=
   · intro i _ h
     have hi : i < s.size := by simpa using h
     simp only [getElem_ofFn, Slice.getElem_toBytesLE, Slice.getElem_copy,
-      show (8 * i) / 8 = i by omega, show (8 * i) % 8 = 0 by omega,
-      show (8 * i + 1) / 8 = i by omega, show (8 * i + 1) % 8 = 1 by omega,
-      show (8 * i + 2) / 8 = i by omega, show (8 * i + 2) % 8 = 2 by omega,
-      show (8 * i + 3) / 8 = i by omega, show (8 * i + 3) % 8 = 3 by omega,
-      show (8 * i + 4) / 8 = i by omega, show (8 * i + 4) % 8 = 4 by omega,
-      show (8 * i + 5) / 8 = i by omega, show (8 * i + 5) % 8 = 5 by omega,
-      show (8 * i + 6) / 8 = i by omega, show (8 * i + 6) % 8 = 6 by omega,
-      show (8 * i + 7) / 8 = i by omega, show (8 * i + 7) % 8 = 7 by omega]
+      show (8 * i) / 8 = i by lia, show (8 * i) % 8 = 0 by lia,
+      show (8 * i + 1) / 8 = i by lia, show (8 * i + 1) % 8 = 1 by lia,
+      show (8 * i + 2) / 8 = i by lia, show (8 * i + 2) % 8 = 2 by lia,
+      show (8 * i + 3) / 8 = i by lia, show (8 * i + 3) % 8 = 3 by lia,
+      show (8 * i + 4) / 8 = i by lia, show (8 * i + 4) % 8 = 4 by lia,
+      show (8 * i + 5) / 8 = i by lia, show (8 * i + 5) % 8 = 5 by lia,
+      show (8 * i + 6) / 8 = i by lia, show (8 * i + 6) % 8 = 6 by lia,
+      show (8 * i + 7) / 8 = i by lia, show (8 * i + 7) % 8 = 7 by lia]
     simp only [Nat.reduceMul, Nat.toUInt64,
       UInt64.reduceOfNat]
     generalize s[i] = x
@@ -649,7 +649,7 @@ where
 @[implemented_by Slice.toBytesBEImpl, expose]
 public def Slice.toBytesBE (s : UInt64Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 8 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 8]'(by omega)) >>> (8 * (7 - j % 8)).toUInt64).toUInt8⟩
+    ((s[j / 8]'(by lia)) >>> (8 * (7 - j % 8)).toUInt64).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in big-endian order, most significant byte first. -/
 @[inline, expose]
@@ -681,14 +681,14 @@ Returns `none` if the size of `b` is not a multiple of 8.
 public def ofBytesBE? (b : ByteArray) : Option UInt64Array :=
   if b.size % 8 = 0 then
     some <| ofFn (n := b.size / 8) fun ⟨i, hi⟩ =>
-      ((b[8 * i]'(by omega)).toUInt64 <<< 56) |||
-        ((b[8 * i + 1]'(by omega)).toUInt64 <<< 48) |||
-        ((b[8 * i + 2]'(by omega)).toUInt64 <<< 40) |||
-        ((b[8 * i + 3]'(by omega)).toUInt64 <<< 32) |||
-        ((b[8 * i + 4]'(by omega)).toUInt64 <<< 24) |||
-        ((b[8 * i + 5]'(by omega)).toUInt64 <<< 16) |||
-        ((b[8 * i + 6]'(by omega)).toUInt64 <<< 8) |||
-        (b[8 * i + 7]'(by omega)).toUInt64
+      ((b[8 * i]'(by lia)).toUInt64 <<< 56) |||
+        ((b[8 * i + 1]'(by lia)).toUInt64 <<< 48) |||
+        ((b[8 * i + 2]'(by lia)).toUInt64 <<< 40) |||
+        ((b[8 * i + 3]'(by lia)).toUInt64 <<< 32) |||
+        ((b[8 * i + 4]'(by lia)).toUInt64 <<< 24) |||
+        ((b[8 * i + 5]'(by lia)).toUInt64 <<< 16) |||
+        ((b[8 * i + 6]'(by lia)).toUInt64 <<< 8) |||
+        (b[8 * i + 7]'(by lia)).toUInt64
   else
     none
 
@@ -711,7 +711,7 @@ public def ofBytesBE! (b : ByteArray) : UInt64Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : UInt64Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 8]'(by rw [Slice.size_toBytesBE] at h; omega)) >>> (8 * (7 - j % 8)).toUInt64).toUInt8 := by
+      ((s[j / 8]'(by rw [Slice.size_toBytesBE] at h; lia)) >>> (8 * (7 - j % 8)).toUInt64).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesBE?_toBytesBE_slice (s : UInt64Array.Slice) :
@@ -723,14 +723,14 @@ public def ofBytesBE! (b : ByteArray) : UInt64Array :=
   · intro i _ h
     have hi : i < s.size := by simpa using h
     simp only [getElem_ofFn, Slice.getElem_toBytesBE, Slice.getElem_copy,
-      show (8 * i) / 8 = i by omega, show (8 * i) % 8 = 0 by omega,
-      show (8 * i + 1) / 8 = i by omega, show (8 * i + 1) % 8 = 1 by omega,
-      show (8 * i + 2) / 8 = i by omega, show (8 * i + 2) % 8 = 2 by omega,
-      show (8 * i + 3) / 8 = i by omega, show (8 * i + 3) % 8 = 3 by omega,
-      show (8 * i + 4) / 8 = i by omega, show (8 * i + 4) % 8 = 4 by omega,
-      show (8 * i + 5) / 8 = i by omega, show (8 * i + 5) % 8 = 5 by omega,
-      show (8 * i + 6) / 8 = i by omega, show (8 * i + 6) % 8 = 6 by omega,
-      show (8 * i + 7) / 8 = i by omega, show (8 * i + 7) % 8 = 7 by omega]
+      show (8 * i) / 8 = i by lia, show (8 * i) % 8 = 0 by lia,
+      show (8 * i + 1) / 8 = i by lia, show (8 * i + 1) % 8 = 1 by lia,
+      show (8 * i + 2) / 8 = i by lia, show (8 * i + 2) % 8 = 2 by lia,
+      show (8 * i + 3) / 8 = i by lia, show (8 * i + 3) % 8 = 3 by lia,
+      show (8 * i + 4) / 8 = i by lia, show (8 * i + 4) % 8 = 4 by lia,
+      show (8 * i + 5) / 8 = i by lia, show (8 * i + 5) % 8 = 5 by lia,
+      show (8 * i + 6) / 8 = i by lia, show (8 * i + 6) % 8 = 6 by lia,
+      show (8 * i + 7) / 8 = i by lia, show (8 * i + 7) % 8 = 7 by lia]
     simp only [Nat.reduceMul, Nat.reduceSub, Nat.toUInt64,
       UInt64.reduceOfNat]
     generalize s[i] = x
@@ -784,7 +784,7 @@ where
 @[implemented_by Slice.toBytesLEImpl, expose]
 public def Slice.toBytesLE (s : Int16Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 2 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 2]'(by omega)).toUInt16 >>> (8 * (j % 2)).toUInt16).toUInt8⟩
+    ((s[j / 2]'(by lia)).toUInt16 >>> (8 * (j % 2)).toUInt16).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in little-endian order, least significant byte first. -/
 @[inline, expose]
@@ -810,8 +810,8 @@ Returns `none` if the size of `b` is not a multiple of 2.
 public def ofBytesLE? (b : ByteArray) : Option Int16Array :=
   if b.size % 2 = 0 then
     some <| ofFn (n := b.size / 2) fun ⟨i, hi⟩ =>
-      ((b[2 * i]'(by omega)).toUInt16 |||
-        ((b[2 * i + 1]'(by omega)).toUInt16 <<< 8)).toInt16
+      ((b[2 * i]'(by lia)).toUInt16 |||
+        ((b[2 * i + 1]'(by lia)).toUInt16 <<< 8)).toInt16
   else
     none
 
@@ -834,7 +834,7 @@ public def ofBytesLE! (b : ByteArray) : Int16Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : Int16Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 2]'(by rw [Slice.size_toBytesLE] at h; omega)).toUInt16 >>> (8 * (j % 2)).toUInt16).toUInt8 := by
+      ((s[j / 2]'(by rw [Slice.size_toBytesLE] at h; lia)).toUInt16 >>> (8 * (j % 2)).toUInt16).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesLE?_toBytesLE_slice (s : Int16Array.Slice) :
@@ -846,8 +846,8 @@ public def ofBytesLE! (b : ByteArray) : Int16Array :=
   · intro i _ h
     have hi : i < s.size := by simpa using h
     simp only [getElem_ofFn, Slice.getElem_toBytesLE, Slice.getElem_copy,
-      show (2 * i) / 2 = i by omega, show (2 * i) % 2 = 0 by omega,
-      show (2 * i + 1) / 2 = i by omega, show (2 * i + 1) % 2 = 1 by omega]
+      show (2 * i) / 2 = i by lia, show (2 * i) % 2 = 0 by lia,
+      show (2 * i + 1) / 2 = i by lia, show (2 * i + 1) % 2 = 1 by lia]
     simp only [Nat.reduceMul, Nat.toUInt16,
       UInt16.reduceOfNat]
     conv => rhs; rw [← Int16.toInt16_toUInt16 s[i]]
@@ -877,7 +877,7 @@ where
 @[implemented_by Slice.toBytesBEImpl, expose]
 public def Slice.toBytesBE (s : Int16Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 2 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 2]'(by omega)).toUInt16 >>> (8 * (1 - j % 2)).toUInt16).toUInt8⟩
+    ((s[j / 2]'(by lia)).toUInt16 >>> (8 * (1 - j % 2)).toUInt16).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in big-endian order, most significant byte first. -/
 @[inline, expose]
@@ -903,8 +903,8 @@ Returns `none` if the size of `b` is not a multiple of 2.
 public def ofBytesBE? (b : ByteArray) : Option Int16Array :=
   if b.size % 2 = 0 then
     some <| ofFn (n := b.size / 2) fun ⟨i, hi⟩ =>
-      (((b[2 * i]'(by omega)).toUInt16 <<< 8) |||
-        (b[2 * i + 1]'(by omega)).toUInt16).toInt16
+      (((b[2 * i]'(by lia)).toUInt16 <<< 8) |||
+        (b[2 * i + 1]'(by lia)).toUInt16).toInt16
   else
     none
 
@@ -927,7 +927,7 @@ public def ofBytesBE! (b : ByteArray) : Int16Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : Int16Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 2]'(by rw [Slice.size_toBytesBE] at h; omega)).toUInt16 >>> (8 * (1 - j % 2)).toUInt16).toUInt8 := by
+      ((s[j / 2]'(by rw [Slice.size_toBytesBE] at h; lia)).toUInt16 >>> (8 * (1 - j % 2)).toUInt16).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesBE?_toBytesBE_slice (s : Int16Array.Slice) :
@@ -939,8 +939,8 @@ public def ofBytesBE! (b : ByteArray) : Int16Array :=
   · intro i _ h
     have hi : i < s.size := by simpa using h
     simp only [getElem_ofFn, Slice.getElem_toBytesBE, Slice.getElem_copy,
-      show (2 * i) / 2 = i by omega, show (2 * i) % 2 = 0 by omega,
-      show (2 * i + 1) / 2 = i by omega, show (2 * i + 1) % 2 = 1 by omega]
+      show (2 * i) / 2 = i by lia, show (2 * i) % 2 = 0 by lia,
+      show (2 * i + 1) / 2 = i by lia, show (2 * i + 1) % 2 = 1 by lia]
     simp only [Nat.reduceMul, Nat.reduceSub, Nat.toUInt16,
       UInt16.reduceOfNat]
     conv => rhs; rw [← Int16.toInt16_toUInt16 s[i]]
@@ -998,7 +998,7 @@ where
 @[implemented_by Slice.toBytesLEImpl, expose]
 public def Slice.toBytesLE (s : Int32Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 4 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 4]'(by omega)).toUInt32 >>> (8 * (j % 4)).toUInt32).toUInt8⟩
+    ((s[j / 4]'(by lia)).toUInt32 >>> (8 * (j % 4)).toUInt32).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in little-endian order, least significant byte first. -/
 @[inline, expose]
@@ -1026,10 +1026,10 @@ Returns `none` if the size of `b` is not a multiple of 4.
 public def ofBytesLE? (b : ByteArray) : Option Int32Array :=
   if b.size % 4 = 0 then
     some <| ofFn (n := b.size / 4) fun ⟨i, hi⟩ =>
-      ((b[4 * i]'(by omega)).toUInt32 |||
-        ((b[4 * i + 1]'(by omega)).toUInt32 <<< 8) |||
-        ((b[4 * i + 2]'(by omega)).toUInt32 <<< 16) |||
-        ((b[4 * i + 3]'(by omega)).toUInt32 <<< 24)).toInt32
+      ((b[4 * i]'(by lia)).toUInt32 |||
+        ((b[4 * i + 1]'(by lia)).toUInt32 <<< 8) |||
+        ((b[4 * i + 2]'(by lia)).toUInt32 <<< 16) |||
+        ((b[4 * i + 3]'(by lia)).toUInt32 <<< 24)).toInt32
   else
     none
 
@@ -1052,7 +1052,7 @@ public def ofBytesLE! (b : ByteArray) : Int32Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : Int32Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 4]'(by rw [Slice.size_toBytesLE] at h; omega)).toUInt32 >>> (8 * (j % 4)).toUInt32).toUInt8 := by
+      ((s[j / 4]'(by rw [Slice.size_toBytesLE] at h; lia)).toUInt32 >>> (8 * (j % 4)).toUInt32).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesLE?_toBytesLE_slice (s : Int32Array.Slice) :
@@ -1064,10 +1064,10 @@ public def ofBytesLE! (b : ByteArray) : Int32Array :=
   · intro i _ h
     have hi : i < s.size := by simpa using h
     simp only [getElem_ofFn, Slice.getElem_toBytesLE, Slice.getElem_copy,
-      show (4 * i) / 4 = i by omega, show (4 * i) % 4 = 0 by omega,
-      show (4 * i + 1) / 4 = i by omega, show (4 * i + 1) % 4 = 1 by omega,
-      show (4 * i + 2) / 4 = i by omega, show (4 * i + 2) % 4 = 2 by omega,
-      show (4 * i + 3) / 4 = i by omega, show (4 * i + 3) % 4 = 3 by omega]
+      show (4 * i) / 4 = i by lia, show (4 * i) % 4 = 0 by lia,
+      show (4 * i + 1) / 4 = i by lia, show (4 * i + 1) % 4 = 1 by lia,
+      show (4 * i + 2) / 4 = i by lia, show (4 * i + 2) % 4 = 2 by lia,
+      show (4 * i + 3) / 4 = i by lia, show (4 * i + 3) % 4 = 3 by lia]
     simp only [Nat.reduceMul, Nat.toUInt32,
       UInt32.reduceOfNat]
     conv => rhs; rw [← Int32.toInt32_toUInt32 s[i]]
@@ -1099,7 +1099,7 @@ where
 @[implemented_by Slice.toBytesBEImpl, expose]
 public def Slice.toBytesBE (s : Int32Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 4 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 4]'(by omega)).toUInt32 >>> (8 * (3 - j % 4)).toUInt32).toUInt8⟩
+    ((s[j / 4]'(by lia)).toUInt32 >>> (8 * (3 - j % 4)).toUInt32).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in big-endian order, most significant byte first. -/
 @[inline, expose]
@@ -1127,10 +1127,10 @@ Returns `none` if the size of `b` is not a multiple of 4.
 public def ofBytesBE? (b : ByteArray) : Option Int32Array :=
   if b.size % 4 = 0 then
     some <| ofFn (n := b.size / 4) fun ⟨i, hi⟩ =>
-      (((b[4 * i]'(by omega)).toUInt32 <<< 24) |||
-        ((b[4 * i + 1]'(by omega)).toUInt32 <<< 16) |||
-        ((b[4 * i + 2]'(by omega)).toUInt32 <<< 8) |||
-        (b[4 * i + 3]'(by omega)).toUInt32).toInt32
+      (((b[4 * i]'(by lia)).toUInt32 <<< 24) |||
+        ((b[4 * i + 1]'(by lia)).toUInt32 <<< 16) |||
+        ((b[4 * i + 2]'(by lia)).toUInt32 <<< 8) |||
+        (b[4 * i + 3]'(by lia)).toUInt32).toInt32
   else
     none
 
@@ -1153,7 +1153,7 @@ public def ofBytesBE! (b : ByteArray) : Int32Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : Int32Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 4]'(by rw [Slice.size_toBytesBE] at h; omega)).toUInt32 >>> (8 * (3 - j % 4)).toUInt32).toUInt8 := by
+      ((s[j / 4]'(by rw [Slice.size_toBytesBE] at h; lia)).toUInt32 >>> (8 * (3 - j % 4)).toUInt32).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesBE?_toBytesBE_slice (s : Int32Array.Slice) :
@@ -1165,10 +1165,10 @@ public def ofBytesBE! (b : ByteArray) : Int32Array :=
   · intro i _ h
     have hi : i < s.size := by simpa using h
     simp only [getElem_ofFn, Slice.getElem_toBytesBE, Slice.getElem_copy,
-      show (4 * i) / 4 = i by omega, show (4 * i) % 4 = 0 by omega,
-      show (4 * i + 1) / 4 = i by omega, show (4 * i + 1) % 4 = 1 by omega,
-      show (4 * i + 2) / 4 = i by omega, show (4 * i + 2) % 4 = 2 by omega,
-      show (4 * i + 3) / 4 = i by omega, show (4 * i + 3) % 4 = 3 by omega]
+      show (4 * i) / 4 = i by lia, show (4 * i) % 4 = 0 by lia,
+      show (4 * i + 1) / 4 = i by lia, show (4 * i + 1) % 4 = 1 by lia,
+      show (4 * i + 2) / 4 = i by lia, show (4 * i + 2) % 4 = 2 by lia,
+      show (4 * i + 3) / 4 = i by lia, show (4 * i + 3) % 4 = 3 by lia]
     simp only [Nat.reduceMul, Nat.reduceSub, Nat.toUInt32,
       UInt32.reduceOfNat]
     conv => rhs; rw [← Int32.toInt32_toUInt32 s[i]]
@@ -1230,7 +1230,7 @@ where
 @[implemented_by Slice.toBytesLEImpl, expose]
 public def Slice.toBytesLE (s : Int64Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 8 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 8]'(by omega)).toUInt64 >>> (8 * (j % 8)).toUInt64).toUInt8⟩
+    ((s[j / 8]'(by lia)).toUInt64 >>> (8 * (j % 8)).toUInt64).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in little-endian order, least significant byte first. -/
 @[inline, expose]
@@ -1262,14 +1262,14 @@ Returns `none` if the size of `b` is not a multiple of 8.
 public def ofBytesLE? (b : ByteArray) : Option Int64Array :=
   if b.size % 8 = 0 then
     some <| ofFn (n := b.size / 8) fun ⟨i, hi⟩ =>
-      ((b[8 * i]'(by omega)).toUInt64 |||
-        ((b[8 * i + 1]'(by omega)).toUInt64 <<< 8) |||
-        ((b[8 * i + 2]'(by omega)).toUInt64 <<< 16) |||
-        ((b[8 * i + 3]'(by omega)).toUInt64 <<< 24) |||
-        ((b[8 * i + 4]'(by omega)).toUInt64 <<< 32) |||
-        ((b[8 * i + 5]'(by omega)).toUInt64 <<< 40) |||
-        ((b[8 * i + 6]'(by omega)).toUInt64 <<< 48) |||
-        ((b[8 * i + 7]'(by omega)).toUInt64 <<< 56)).toInt64
+      ((b[8 * i]'(by lia)).toUInt64 |||
+        ((b[8 * i + 1]'(by lia)).toUInt64 <<< 8) |||
+        ((b[8 * i + 2]'(by lia)).toUInt64 <<< 16) |||
+        ((b[8 * i + 3]'(by lia)).toUInt64 <<< 24) |||
+        ((b[8 * i + 4]'(by lia)).toUInt64 <<< 32) |||
+        ((b[8 * i + 5]'(by lia)).toUInt64 <<< 40) |||
+        ((b[8 * i + 6]'(by lia)).toUInt64 <<< 48) |||
+        ((b[8 * i + 7]'(by lia)).toUInt64 <<< 56)).toInt64
   else
     none
 
@@ -1292,7 +1292,7 @@ public def ofBytesLE! (b : ByteArray) : Int64Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : Int64Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 8]'(by rw [Slice.size_toBytesLE] at h; omega)).toUInt64 >>> (8 * (j % 8)).toUInt64).toUInt8 := by
+      ((s[j / 8]'(by rw [Slice.size_toBytesLE] at h; lia)).toUInt64 >>> (8 * (j % 8)).toUInt64).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesLE?_toBytesLE_slice (s : Int64Array.Slice) :
@@ -1304,14 +1304,14 @@ public def ofBytesLE! (b : ByteArray) : Int64Array :=
   · intro i _ h
     have hi : i < s.size := by simpa using h
     simp only [getElem_ofFn, Slice.getElem_toBytesLE, Slice.getElem_copy,
-      show (8 * i) / 8 = i by omega, show (8 * i) % 8 = 0 by omega,
-      show (8 * i + 1) / 8 = i by omega, show (8 * i + 1) % 8 = 1 by omega,
-      show (8 * i + 2) / 8 = i by omega, show (8 * i + 2) % 8 = 2 by omega,
-      show (8 * i + 3) / 8 = i by omega, show (8 * i + 3) % 8 = 3 by omega,
-      show (8 * i + 4) / 8 = i by omega, show (8 * i + 4) % 8 = 4 by omega,
-      show (8 * i + 5) / 8 = i by omega, show (8 * i + 5) % 8 = 5 by omega,
-      show (8 * i + 6) / 8 = i by omega, show (8 * i + 6) % 8 = 6 by omega,
-      show (8 * i + 7) / 8 = i by omega, show (8 * i + 7) % 8 = 7 by omega]
+      show (8 * i) / 8 = i by lia, show (8 * i) % 8 = 0 by lia,
+      show (8 * i + 1) / 8 = i by lia, show (8 * i + 1) % 8 = 1 by lia,
+      show (8 * i + 2) / 8 = i by lia, show (8 * i + 2) % 8 = 2 by lia,
+      show (8 * i + 3) / 8 = i by lia, show (8 * i + 3) % 8 = 3 by lia,
+      show (8 * i + 4) / 8 = i by lia, show (8 * i + 4) % 8 = 4 by lia,
+      show (8 * i + 5) / 8 = i by lia, show (8 * i + 5) % 8 = 5 by lia,
+      show (8 * i + 6) / 8 = i by lia, show (8 * i + 6) % 8 = 6 by lia,
+      show (8 * i + 7) / 8 = i by lia, show (8 * i + 7) % 8 = 7 by lia]
     simp only [Nat.reduceMul, Nat.toUInt64,
       UInt64.reduceOfNat]
     conv => rhs; rw [← Int64.toInt64_toUInt64 s[i]]
@@ -1347,7 +1347,7 @@ where
 @[implemented_by Slice.toBytesBEImpl, expose]
 public def Slice.toBytesBE (s : Int64Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 8 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 8]'(by omega)).toUInt64 >>> (8 * (7 - j % 8)).toUInt64).toUInt8⟩
+    ((s[j / 8]'(by lia)).toUInt64 >>> (8 * (7 - j % 8)).toUInt64).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in big-endian order, most significant byte first. -/
 @[inline, expose]
@@ -1379,14 +1379,14 @@ Returns `none` if the size of `b` is not a multiple of 8.
 public def ofBytesBE? (b : ByteArray) : Option Int64Array :=
   if b.size % 8 = 0 then
     some <| ofFn (n := b.size / 8) fun ⟨i, hi⟩ =>
-      (((b[8 * i]'(by omega)).toUInt64 <<< 56) |||
-        ((b[8 * i + 1]'(by omega)).toUInt64 <<< 48) |||
-        ((b[8 * i + 2]'(by omega)).toUInt64 <<< 40) |||
-        ((b[8 * i + 3]'(by omega)).toUInt64 <<< 32) |||
-        ((b[8 * i + 4]'(by omega)).toUInt64 <<< 24) |||
-        ((b[8 * i + 5]'(by omega)).toUInt64 <<< 16) |||
-        ((b[8 * i + 6]'(by omega)).toUInt64 <<< 8) |||
-        (b[8 * i + 7]'(by omega)).toUInt64).toInt64
+      (((b[8 * i]'(by lia)).toUInt64 <<< 56) |||
+        ((b[8 * i + 1]'(by lia)).toUInt64 <<< 48) |||
+        ((b[8 * i + 2]'(by lia)).toUInt64 <<< 40) |||
+        ((b[8 * i + 3]'(by lia)).toUInt64 <<< 32) |||
+        ((b[8 * i + 4]'(by lia)).toUInt64 <<< 24) |||
+        ((b[8 * i + 5]'(by lia)).toUInt64 <<< 16) |||
+        ((b[8 * i + 6]'(by lia)).toUInt64 <<< 8) |||
+        (b[8 * i + 7]'(by lia)).toUInt64).toInt64
   else
     none
 
@@ -1409,7 +1409,7 @@ public def ofBytesBE! (b : ByteArray) : Int64Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : Int64Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 8]'(by rw [Slice.size_toBytesBE] at h; omega)).toUInt64 >>> (8 * (7 - j % 8)).toUInt64).toUInt8 := by
+      ((s[j / 8]'(by rw [Slice.size_toBytesBE] at h; lia)).toUInt64 >>> (8 * (7 - j % 8)).toUInt64).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesBE?_toBytesBE_slice (s : Int64Array.Slice) :
@@ -1421,14 +1421,14 @@ public def ofBytesBE! (b : ByteArray) : Int64Array :=
   · intro i _ h
     have hi : i < s.size := by simpa using h
     simp only [getElem_ofFn, Slice.getElem_toBytesBE, Slice.getElem_copy,
-      show (8 * i) / 8 = i by omega, show (8 * i) % 8 = 0 by omega,
-      show (8 * i + 1) / 8 = i by omega, show (8 * i + 1) % 8 = 1 by omega,
-      show (8 * i + 2) / 8 = i by omega, show (8 * i + 2) % 8 = 2 by omega,
-      show (8 * i + 3) / 8 = i by omega, show (8 * i + 3) % 8 = 3 by omega,
-      show (8 * i + 4) / 8 = i by omega, show (8 * i + 4) % 8 = 4 by omega,
-      show (8 * i + 5) / 8 = i by omega, show (8 * i + 5) % 8 = 5 by omega,
-      show (8 * i + 6) / 8 = i by omega, show (8 * i + 6) % 8 = 6 by omega,
-      show (8 * i + 7) / 8 = i by omega, show (8 * i + 7) % 8 = 7 by omega]
+      show (8 * i) / 8 = i by lia, show (8 * i) % 8 = 0 by lia,
+      show (8 * i + 1) / 8 = i by lia, show (8 * i + 1) % 8 = 1 by lia,
+      show (8 * i + 2) / 8 = i by lia, show (8 * i + 2) % 8 = 2 by lia,
+      show (8 * i + 3) / 8 = i by lia, show (8 * i + 3) % 8 = 3 by lia,
+      show (8 * i + 4) / 8 = i by lia, show (8 * i + 4) % 8 = 4 by lia,
+      show (8 * i + 5) / 8 = i by lia, show (8 * i + 5) % 8 = 5 by lia,
+      show (8 * i + 6) / 8 = i by lia, show (8 * i + 6) % 8 = 6 by lia,
+      show (8 * i + 7) / 8 = i by lia, show (8 * i + 7) % 8 = 7 by lia]
     simp only [Nat.reduceMul, Nat.reduceSub, Nat.toUInt64,
       UInt64.reduceOfNat]
     conv => rhs; rw [← Int64.toInt64_toUInt64 s[i]]
@@ -1486,7 +1486,7 @@ where
 @[implemented_by Slice.toBytesLEImpl, expose]
 public def Slice.toBytesLE (s : Float32Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 4 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 4]'(by omega)).toBits >>> (8 * (j % 4)).toUInt32).toUInt8⟩
+    ((s[j / 4]'(by lia)).toBits >>> (8 * (j % 4)).toUInt32).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in little-endian order, least significant byte first. -/
 @[inline, expose]
@@ -1514,10 +1514,10 @@ Returns `none` if the size of `b` is not a multiple of 4.
 public def ofBytesLE? (b : ByteArray) : Option Float32Array :=
   if b.size % 4 = 0 then
     some <| ofFn (n := b.size / 4) fun ⟨i, hi⟩ =>
-      Float32.ofBits ((b[4 * i]'(by omega)).toUInt32 |||
-        ((b[4 * i + 1]'(by omega)).toUInt32 <<< 8) |||
-        ((b[4 * i + 2]'(by omega)).toUInt32 <<< 16) |||
-        ((b[4 * i + 3]'(by omega)).toUInt32 <<< 24))
+      Float32.ofBits ((b[4 * i]'(by lia)).toUInt32 |||
+        ((b[4 * i + 1]'(by lia)).toUInt32 <<< 8) |||
+        ((b[4 * i + 2]'(by lia)).toUInt32 <<< 16) |||
+        ((b[4 * i + 3]'(by lia)).toUInt32 <<< 24))
   else
     none
 
@@ -1540,7 +1540,7 @@ public def ofBytesLE! (b : ByteArray) : Float32Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : Float32Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 4]'(by rw [Slice.size_toBytesLE] at h; omega)).toBits >>> (8 * (j % 4)).toUInt32).toUInt8 := by
+      ((s[j / 4]'(by rw [Slice.size_toBytesLE] at h; lia)).toBits >>> (8 * (j % 4)).toUInt32).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 private unsafe def Slice.toBytesBEImpl (s : Float32Array.Slice) : ByteArray :=
@@ -1563,7 +1563,7 @@ where
 @[implemented_by Slice.toBytesBEImpl, expose]
 public def Slice.toBytesBE (s : Float32Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 4 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 4]'(by omega)).toBits >>> (8 * (3 - j % 4)).toUInt32).toUInt8⟩
+    ((s[j / 4]'(by lia)).toBits >>> (8 * (3 - j % 4)).toUInt32).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in big-endian order, most significant byte first. -/
 @[inline, expose]
@@ -1591,10 +1591,10 @@ Returns `none` if the size of `b` is not a multiple of 4.
 public def ofBytesBE? (b : ByteArray) : Option Float32Array :=
   if b.size % 4 = 0 then
     some <| ofFn (n := b.size / 4) fun ⟨i, hi⟩ =>
-      Float32.ofBits (((b[4 * i]'(by omega)).toUInt32 <<< 24) |||
-        ((b[4 * i + 1]'(by omega)).toUInt32 <<< 16) |||
-        ((b[4 * i + 2]'(by omega)).toUInt32 <<< 8) |||
-        (b[4 * i + 3]'(by omega)).toUInt32)
+      Float32.ofBits (((b[4 * i]'(by lia)).toUInt32 <<< 24) |||
+        ((b[4 * i + 1]'(by lia)).toUInt32 <<< 16) |||
+        ((b[4 * i + 2]'(by lia)).toUInt32 <<< 8) |||
+        (b[4 * i + 3]'(by lia)).toUInt32)
   else
     none
 
@@ -1617,7 +1617,7 @@ public def ofBytesBE! (b : ByteArray) : Float32Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : Float32Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 4]'(by rw [Slice.size_toBytesBE] at h; omega)).toBits >>> (8 * (3 - j % 4)).toUInt32).toUInt8 := by
+      ((s[j / 4]'(by rw [Slice.size_toBytesBE] at h; lia)).toBits >>> (8 * (3 - j % 4)).toUInt32).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 end Float32Array
@@ -1648,7 +1648,7 @@ where
 @[implemented_by Slice.toBytesLEImpl, expose]
 public def Slice.toBytesLE (s : Float64Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 8 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 8]'(by omega)).toBits >>> (8 * (j % 8)).toUInt64).toUInt8⟩
+    ((s[j / 8]'(by lia)).toBits >>> (8 * (j % 8)).toUInt64).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in little-endian order, least significant byte first. -/
 @[inline, expose]
@@ -1680,14 +1680,14 @@ Returns `none` if the size of `b` is not a multiple of 8.
 public def ofBytesLE? (b : ByteArray) : Option Float64Array :=
   if b.size % 8 = 0 then
     some <| ofFn (n := b.size / 8) fun ⟨i, hi⟩ =>
-      Float.ofBits ((b[8 * i]'(by omega)).toUInt64 |||
-        ((b[8 * i + 1]'(by omega)).toUInt64 <<< 8) |||
-        ((b[8 * i + 2]'(by omega)).toUInt64 <<< 16) |||
-        ((b[8 * i + 3]'(by omega)).toUInt64 <<< 24) |||
-        ((b[8 * i + 4]'(by omega)).toUInt64 <<< 32) |||
-        ((b[8 * i + 5]'(by omega)).toUInt64 <<< 40) |||
-        ((b[8 * i + 6]'(by omega)).toUInt64 <<< 48) |||
-        ((b[8 * i + 7]'(by omega)).toUInt64 <<< 56))
+      Float.ofBits ((b[8 * i]'(by lia)).toUInt64 |||
+        ((b[8 * i + 1]'(by lia)).toUInt64 <<< 8) |||
+        ((b[8 * i + 2]'(by lia)).toUInt64 <<< 16) |||
+        ((b[8 * i + 3]'(by lia)).toUInt64 <<< 24) |||
+        ((b[8 * i + 4]'(by lia)).toUInt64 <<< 32) |||
+        ((b[8 * i + 5]'(by lia)).toUInt64 <<< 40) |||
+        ((b[8 * i + 6]'(by lia)).toUInt64 <<< 48) |||
+        ((b[8 * i + 7]'(by lia)).toUInt64 <<< 56))
   else
     none
 
@@ -1710,7 +1710,7 @@ public def ofBytesLE! (b : ByteArray) : Float64Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : Float64Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 8]'(by rw [Slice.size_toBytesLE] at h; omega)).toBits >>> (8 * (j % 8)).toUInt64).toUInt8 := by
+      ((s[j / 8]'(by rw [Slice.size_toBytesLE] at h; lia)).toBits >>> (8 * (j % 8)).toUInt64).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 private unsafe def Slice.toBytesBEImpl (s : Float64Array.Slice) : ByteArray :=
@@ -1737,7 +1737,7 @@ where
 @[implemented_by Slice.toBytesBEImpl, expose]
 public def Slice.toBytesBE (s : Float64Array.Slice) : ByteArray :=
   ⟨Array.ofFn (n := 8 * s.size) fun ⟨j, hj⟩ =>
-    ((s[j / 8]'(by omega)).toBits >>> (8 * (7 - j % 8)).toUInt64).toUInt8⟩
+    ((s[j / 8]'(by lia)).toBits >>> (8 * (7 - j % 8)).toUInt64).toUInt8⟩
 
 /-- The elements of `a` as bytes, each in big-endian order, most significant byte first. -/
 @[inline, expose]
@@ -1769,14 +1769,14 @@ Returns `none` if the size of `b` is not a multiple of 8.
 public def ofBytesBE? (b : ByteArray) : Option Float64Array :=
   if b.size % 8 = 0 then
     some <| ofFn (n := b.size / 8) fun ⟨i, hi⟩ =>
-      Float.ofBits (((b[8 * i]'(by omega)).toUInt64 <<< 56) |||
-        ((b[8 * i + 1]'(by omega)).toUInt64 <<< 48) |||
-        ((b[8 * i + 2]'(by omega)).toUInt64 <<< 40) |||
-        ((b[8 * i + 3]'(by omega)).toUInt64 <<< 32) |||
-        ((b[8 * i + 4]'(by omega)).toUInt64 <<< 24) |||
-        ((b[8 * i + 5]'(by omega)).toUInt64 <<< 16) |||
-        ((b[8 * i + 6]'(by omega)).toUInt64 <<< 8) |||
-        (b[8 * i + 7]'(by omega)).toUInt64)
+      Float.ofBits (((b[8 * i]'(by lia)).toUInt64 <<< 56) |||
+        ((b[8 * i + 1]'(by lia)).toUInt64 <<< 48) |||
+        ((b[8 * i + 2]'(by lia)).toUInt64 <<< 40) |||
+        ((b[8 * i + 3]'(by lia)).toUInt64 <<< 32) |||
+        ((b[8 * i + 4]'(by lia)).toUInt64 <<< 24) |||
+        ((b[8 * i + 5]'(by lia)).toUInt64 <<< 16) |||
+        ((b[8 * i + 6]'(by lia)).toUInt64 <<< 8) |||
+        (b[8 * i + 7]'(by lia)).toUInt64)
   else
     none
 
@@ -1799,7 +1799,7 @@ public def ofBytesBE! (b : ByteArray) : Float64Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : Float64Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 8]'(by rw [Slice.size_toBytesBE] at h; omega)).toBits >>> (8 * (7 - j % 8)).toUInt64).toUInt8 := by
+      ((s[j / 8]'(by rw [Slice.size_toBytesBE] at h; lia)).toBits >>> (8 * (7 - j % 8)).toUInt64).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 end Float64Array
