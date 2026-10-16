@@ -6,7 +6,8 @@ Generates the array modules and their tests from the `UInt16` versions.
 
 `ScalarArray/UInt16.lean` and `ScalarArrayTest/UInt16.lean` are the templates: make changes there,
 then run this script from anywhere to regenerate the other types and the root import lists.
-`ScalarArray/Bytes.lean` and its tests come from `bytes_template.py`.
+`ScalarArray/Bytes.lean` and its tests come from `bytes_template.py`. That module is experimental, so
+the root `ScalarArray.lean` does not import it.
 With `--check`, it changes nothing and exits with status 1 if any generated file is out of date.
 """
 
@@ -149,8 +150,7 @@ def generate():
     doc = '\n/-!' + root.split('\n/-!', 1)[1]
     files['ScalarArray.lean'] = (
         head + ''.join(f'public import ScalarArray.{n}\n' for n in names)
-        + 'public import ScalarArray.Conversions\n'
-        + 'public import ScalarArray.Bytes\n' + doc)
+        + 'public import ScalarArray.Conversions\n' + doc)
     files['ScalarArray/Bytes.lean'] = bytes_template.module()
     files['ScalarArrayTest/Bytes.lean'] = bytes_template.tests()
     test_root = (ROOT / 'ScalarArrayTest.lean').read_text()
