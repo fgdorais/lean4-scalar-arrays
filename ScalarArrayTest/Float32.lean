@@ -434,7 +434,7 @@ example (p : Float32 → Bool) (a : Float32Array) : (a.popWhile p).data = a.data
 
 example (a : Float32Array) (v : Float32) : (a.push v).pop = a := by simp [Float32Array.ext_iff]
 example : (Float32Array.replicate 3 big)[1] = big := by simp
-example (a b : Float32Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
+example (a b : Float32Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; lia) = a[0] := by simp [h]
 example (a : Float32Array) (i : Nat) (v : Float32) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
 example (a : Float32Array) : a.extract 0 a.size = a := by simp

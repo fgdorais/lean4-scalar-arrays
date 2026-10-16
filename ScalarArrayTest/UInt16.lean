@@ -474,7 +474,7 @@ example (p : UInt16 → Bool) (a : UInt16Array) : (a.popWhile p).data = a.data.p
 
 example (a : UInt16Array) (v : UInt16) : (a.push v).pop = a := by simp [UInt16Array.ext_iff]
 example : (UInt16Array.replicate 3 big)[1] = big := by simp
-example (a b : UInt16Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
+example (a b : UInt16Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; lia) = a[0] := by simp [h]
 example (a : UInt16Array) (i : Nat) (v : UInt16) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
 example (a : UInt16Array) : a.extract 0 a.size = a := by simp

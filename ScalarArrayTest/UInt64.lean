@@ -474,7 +474,7 @@ example (p : UInt64 → Bool) (a : UInt64Array) : (a.popWhile p).data = a.data.p
 
 example (a : UInt64Array) (v : UInt64) : (a.push v).pop = a := by simp [UInt64Array.ext_iff]
 example : (UInt64Array.replicate 3 big)[1] = big := by simp
-example (a b : UInt64Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
+example (a b : UInt64Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; lia) = a[0] := by simp [h]
 example (a : UInt64Array) (i : Nat) (v : UInt64) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
 example (a : UInt64Array) : a.extract 0 a.size = a := by simp
