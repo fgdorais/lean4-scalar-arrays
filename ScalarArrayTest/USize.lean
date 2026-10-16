@@ -465,7 +465,7 @@ example (p : USize → Bool) (a : USizeArray) : (a.popWhile p).data = a.data.pop
 
 example (a : USizeArray) (v : USize) : (a.push v).pop = a := by simp [USizeArray.ext_iff]
 example : (USizeArray.replicate 3 big)[1] = big := by simp
-example (a b : USizeArray) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
+example (a b : USizeArray) (h : 0 < a.size) : (a ++ b)[0]'(by simp; lia) = a[0] := by simp [h]
 example (a : USizeArray) (i : Nat) (v : USize) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
 example (a : USizeArray) : a.extract 0 a.size = a := by simp

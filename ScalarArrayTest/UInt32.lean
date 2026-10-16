@@ -474,7 +474,7 @@ example (p : UInt32 → Bool) (a : UInt32Array) : (a.popWhile p).data = a.data.p
 
 example (a : UInt32Array) (v : UInt32) : (a.push v).pop = a := by simp [UInt32Array.ext_iff]
 example : (UInt32Array.replicate 3 big)[1] = big := by simp
-example (a b : UInt32Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
+example (a b : UInt32Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; lia) = a[0] := by simp [h]
 example (a : UInt32Array) (i : Nat) (v : UInt32) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
 example (a : UInt32Array) : a.extract 0 a.size = a := by simp

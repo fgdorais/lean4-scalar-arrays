@@ -333,7 +333,7 @@ private def popWhileImpl (p : Float32 → Bool) (a : Float32Array) : Float32Arra
 termination_by a.size
 decreasing_by
   have : a.pop.size = a.size - 1 := by cases a; exact Array.size_pop ..
-  omega
+  lia
 
 /--
 Removes the longest run of elements at the end of `a` that satisfy `p`, in place when `a` is not
@@ -630,7 +630,7 @@ public theorem size_eq (s : Float32Array.Slice) : s.size = s.stop - s.start := r
 @[inline, expose]
 public def get (s : Float32Array.Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) :
     Float32 :=
-  s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega)
+  s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; lia)
 
 public instance : GetElem Float32Array.Slice Nat Float32 fun s i => i < s.size where
   getElem s i h := s.get i h
@@ -668,7 +668,7 @@ public def copy (s : Float32Array.Slice) : Float32Array :=
   s.array.extract s.start s.stop
 
 public theorem getElem_eq (s : Float32Array.Slice) (i : Nat) (h : i < s.size) :
-    s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; omega) := rfl
+    s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; lia) := rfl
 
 public instance : Repr Float32Array.Slice where
   reprPrec s _ := repr s.copy ++ ".toSlice"
@@ -801,7 +801,7 @@ private def SliceIterator.finitenessRelation :
       simp only [Std.IterStep.successor, Option.some.injEq] at h
       subst h
       simp only [InvImage, WellFoundedRelation.rel, sizeOf_nat, Slice.start, Slice.stop] at hs ⊢
-      omega
+      lia
     next =>
       simp [Std.IterStep.successor] at h
 
@@ -1102,7 +1102,7 @@ public theorem ext_getElem {a b : Float32Array} (h₁ : a.size = b.size)
   simp [-getElem_data, getElem_eq_getElem_data, Array.getElem_push, -size_data, size_eq_data_size]
 
 @[simp] public theorem getElem_pop (a : Float32Array) (i : Nat) (h) :
-    a.pop[i]'h = a[i]'(by simp at h; omega) := by
+    a.pop[i]'h = a[i]'(by simp at h; lia) := by
   simp [-getElem_data, getElem_eq_getElem_data]
 
 @[simp] public theorem data_popWhile (p : Float32 → Bool) (a : Float32Array) :
@@ -1110,11 +1110,11 @@ public theorem ext_getElem {a b : Float32Array} (h₁ : a.size = b.size)
   cases a; rfl
 
 @[simp] public theorem getElem_append (a b : Float32Array) (i : Nat) (h) :
-    (a ++ b)[i]'h = if h' : i < a.size then a[i] else b[i - a.size]'(by simp at h; omega) := by
+    (a ++ b)[i]'h = if h' : i < a.size then a[i] else b[i - a.size]'(by simp at h; lia) := by
   simp [-getElem_data, getElem_eq_getElem_data, Array.getElem_append, -size_data, size_eq_data_size]
 
 @[simp] public theorem getElem_extract (a : Float32Array) (start stop i : Nat) (h) :
-    (a.extract start stop)[i]'h = a[start + i]'(by simp at h; omega) := by
+    (a.extract start stop)[i]'h = a[start + i]'(by simp at h; lia) := by
   simp [-getElem_data, getElem_eq_getElem_data]
 
 @[simp] public theorem getElem_replicate (n : Nat) (v : Float32) (i : Nat) (h) :
@@ -1194,15 +1194,15 @@ public theorem append_assoc (a b c : Float32Array) : a ++ b ++ c = a ++ (b ++ c)
   simp only [Float32Array.ext_iff, data_append, Array.append_left_inj]
 
 public theorem getElem_append_left {a b : Float32Array} {i : Nat} (h : i < a.size) :
-    (a ++ b)[i]'(by simp; omega) = a[i] := by
+    (a ++ b)[i]'(by simp; lia) = a[i] := by
   simp [h]
 
 public theorem getElem_append_right {a b : Float32Array} {i : Nat} (h : a.size ≤ i)
-    (h' : i < (a ++ b).size) : (a ++ b)[i] = b[i - a.size]'(by simp at h'; omega) := by
+    (h' : i < (a ++ b).size) : (a ++ b)[i] = b[i - a.size]'(by simp at h'; lia) := by
   simp [Nat.not_lt.mpr h]
 
 @[simp] public theorem extract_same (a : Float32Array) (i : Nat) : a.extract i i = empty := by
-  simp [Float32Array.ext_iff]; omega
+  simp [Float32Array.ext_iff]; lia
 
 @[simp] public theorem extract_zero_size (a : Float32Array) : a.extract 0 a.size = a := by
   simp [Float32Array.ext_iff]
@@ -1244,7 +1244,7 @@ public theorem copySlice_eq_append (src : Float32Array) (srcOff : Nat) (dest : F
 @[simp] public theorem Slice.size_copy (s : Float32Array.Slice) : s.copy.size = s.size := by
   have := s.stop_le_array_size
   simp only [Slice.copy, size_extract, Slice.size_eq]
-  omega
+  lia
 
 /-! ### Lists -/
 
@@ -1432,7 +1432,7 @@ public theorem findIdx?_eq (a : Float32Array) (p : Float32 → Bool) (start : Na
 
 private theorem findFinIdx?_loop_eq (a : Float32Array) (p : Float32 → Bool) (i : Nat) :
     (findFinIdx?.loop a p i).map Fin.val = findIdx?.loop a p i := by
-  fun_induction findFinIdx?.loop a p i <;> rw [findIdx?.loop] <;> simp_all <;> omega
+  fun_induction findFinIdx?.loop a p i <;> rw [findIdx?.loop] <;> simp_all <;> lia
 
 @[simp] public theorem map_val_findFinIdx? (a : Float32Array) (p : Float32 → Bool) (start : Nat) :
     (a.findFinIdx? p start).map Fin.val = a.findIdx? p start := by
@@ -1451,7 +1451,7 @@ private theorem findFinIdx?_loop_eq (a : Float32Array) (p : Float32 → Bool) (i
   rw [← toList_inj]
   unfold toSlice
   split <;> split <;>
-    simp [Slice.copy, Slice.array, Slice.start, Slice.stop] <;> omega
+    simp [Slice.copy, Slice.array, Slice.start, Slice.stop] <;> lia
 
 @[simp] public theorem array_toSlice (a : Float32Array) (start stop : Nat) :
     (a.toSlice start stop).array = a := by
@@ -1461,40 +1461,40 @@ private theorem findFinIdx?_loop_eq (a : Float32Array) (p : Float32 → Bool) (i
 @[simp] public theorem start_toSlice (a : Float32Array) (start stop : Nat) :
     (a.toSlice start stop).start = min start (min stop a.size) := by
   unfold toSlice
-  split <;> split <;> simp only [Slice.start] <;> omega
+  split <;> split <;> simp only [Slice.start] <;> lia
 
 @[simp] public theorem stop_toSlice (a : Float32Array) (start stop : Nat) :
     (a.toSlice start stop).stop = min stop a.size := by
   unfold toSlice
-  split <;> split <;> simp only [Slice.stop] <;> omega
+  split <;> split <;> simp only [Slice.stop] <;> lia
 
 @[simp] public theorem size_toSlice (a : Float32Array) (start stop : Nat) :
     (a.toSlice start stop).size = min stop a.size - start := by
   rw [Slice.size_eq, start_toSlice, stop_toSlice]
-  omega
+  lia
 
 @[simp] public theorem getElem_toSlice (a : Float32Array) (start stop i : Nat) (h) :
-    (a.toSlice start stop)[i]'h = a[start + i]'(by simp at h; omega) := by
+    (a.toSlice start stop)[i]'h = a[start + i]'(by simp at h; lia) := by
   simp only [size_toSlice] at h
   simp only [Slice.getElem_eq, array_toSlice, start_toSlice]
   congr 1
-  omega
+  lia
 
 @[simp] public theorem Slice.size_slice (s : Float32Array.Slice) (start stop : Nat) :
     (s.slice start stop).size = min stop s.size - start := by
   have := s.stop_le_array_size
   rw [slice, size_toSlice, size_eq]
-  omega
+  lia
 
 @[simp] public theorem Slice.getElem_slice (s : Float32Array.Slice) (start stop i : Nat) (h) :
-    (s.slice start stop)[i]'h = s[start + i]'(by simp at h; omega) := by
+    (s.slice start stop)[i]'h = s[start + i]'(by simp at h; lia) := by
   have := s.stop_le_array_size
   have := s.size_eq
   have h' := h
   rw [size_slice, size_eq] at h'
   simp only [Slice.getElem_eq, slice, array_toSlice, start_toSlice]
   congr 1
-  omega
+  lia
 
 @[simp] public theorem Slice.copy_slice (s : Float32Array.Slice) (start stop : Nat) :
     (s.slice start stop).copy = s.copy.extract start stop := by
@@ -1512,7 +1512,7 @@ private theorem findFinIdx?_loop_eq (a : Float32Array) (p : Float32 → Bool) (i
     s.popFront.start = min (s.start + 1) s.stop := by
   rcases s with ⟨⟨_, start, stop, h, _⟩⟩
   simp only [popFront, Slice.start, Slice.stop]
-  by_cases hc : start < stop <;> simp [hc] <;> omega
+  by_cases hc : start < stop <;> simp [hc] <;> lia
 
 @[simp] public theorem Slice.stop_popFront (s : Float32Array.Slice) :
     s.popFront.stop = s.stop := by
@@ -1522,14 +1522,14 @@ private theorem findFinIdx?_loop_eq (a : Float32Array) (p : Float32 → Bool) (i
 @[simp] public theorem Slice.size_popFront (s : Float32Array.Slice) :
     s.popFront.size = s.size - 1 := by
   rw [size_eq, size_eq, start_popFront, stop_popFront]
-  omega
+  lia
 
 @[simp] public theorem Slice.getElem_popFront (s : Float32Array.Slice) (i : Nat) (h) :
-    s.popFront[i]'h = s[i + 1]'(by simp at h; omega) := by
-  have : s.start < s.stop := by rw [size_popFront, size_eq] at h; omega
+    s.popFront[i]'h = s[i + 1]'(by simp at h; lia) := by
+  have : s.start < s.stop := by rw [size_popFront, size_eq] at h; lia
   simp only [Slice.getElem_eq, array_popFront, start_popFront]
   congr 1
-  omega
+  lia
 
 public theorem Slice.getD_eq (s : Float32Array.Slice) (i : Nat) (v₀ : Float32) :
     s.getD i v₀ = if h : i < s.size then s[i] else v₀ := by
@@ -1545,7 +1545,7 @@ private theorem Slice.foldrM_loop_eq {β : Type v} (f : Float32 → β → β)
   induction i generalizing b with
   | zero => rfl
   | succ i ih =>
-    have hi : i < s.copy.toList.length := by simp; omega
+    have hi : i < s.copy.toList.length := by simp; lia
     rw [Slice.foldrM.loop, List.take_add_one, List.getElem?_eq_getElem hi]
     simp [ih]
 
@@ -1580,28 +1580,28 @@ public theorem size_popWhile_le (p : Float32 → Bool) (a : Float32Array) :
     (src.copySlice srcOff dest destOff len exact).size =
       max dest.size (min destOff dest.size + min len (src.size - srcOff)) := by
   simp [-size_data, size_eq_data_size]
-  omega
+  lia
 
 public theorem getElem_copySlice (src : Float32Array) (srcOff : Nat) (dest : Float32Array)
     (destOff len : Nat) (exact : Bool) (i : Nat) (h) :
     (src.copySlice srcOff dest destOff len exact)[i]'h =
-      if h₁ : i < min destOff dest.size then dest[i]'(by omega)
+      if h₁ : i < min destOff dest.size then dest[i]'(by lia)
       else if h₂ : i - min destOff dest.size < min len (src.size - srcOff) then
-        src[srcOff + (i - min destOff dest.size)]'(by omega)
-      else dest[i]'(by simp at h; omega) := by
+        src[srcOff + (i - min destOff dest.size)]'(by lia)
+      else dest[i]'(by simp at h; lia) := by
   have hs := size_copySlice src srcOff dest destOff len exact
   simp only [copySlice_eq_append, getElem_append, getElem_extract, size_append, size_extract,
     Nat.sub_zero, Nat.zero_add]
   by_cases h₁ : i < min destOff dest.size
-  · have : i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by omega
+  · have : i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by lia
     simp [h₁, this]
   · by_cases h₂ : i - min destOff dest.size < min len (src.size - srcOff)
-    · have : i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by omega
+    · have : i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by lia
       simp [h₁, h₂, this]
-    · have : ¬i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by omega
+    · have : ¬i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by lia
       simp only [h₁, h₂, this, ↓reduceDIte]
       congr 1
-      omega
+      lia
 
 /-! ### Monadic folds -/
 
@@ -1670,7 +1670,7 @@ private theorem Slice.cons_take_drop (a : Float32Array) (s t : Nat) (h : s < t)
     (h' : s < a.size) :
     a[s] :: (a.toList.drop (s + 1)).take (t - (s + 1)) = (a.toList.drop s).take (t - s) := by
   rw [List.drop_eq_getElem_cons (by simpa using h' : s < a.toList.length),
-    show t - s = t - (s + 1) + 1 by omega, List.take_succ_cons, getElem_toList]
+    show t - s = t - (s + 1) + 1 by lia, List.take_succ_cons, getElem_toList]
 
 private theorem SliceIterator.toList_eq (it : Std.Iter (α := Float32Array.SliceIterator) Float32) :
     it.toList = it.internalState.xs.copy.toList := by
@@ -1686,14 +1686,14 @@ private theorem SliceIterator.toList_eq (it : Std.Iter (α := Float32Array.Slice
     rw [ihy (out := it.internalState.xs.array[it.internalState.xs.start])]
     · simp only [Slice.copy, Slice.array, Slice.start, Slice.stop, toList_extract,
         List.extract_eq_take_drop, Std.IterM.toIter] at h h₂ ⊢
-      exact Slice.cons_take_drop _ _ _ h (by omega)
+      exact Slice.cons_take_drop _ _ _ h (by lia)
     · show _ = SliceIterator.step _
       simp only [SliceIterator.step, Std.Iter.toIterM, h, ↓reduceDIte]
       rfl
   · simp only [SliceIterator.step, Std.Iter.toIterM, h, ↓reduceDIte,
       Std.IterStep.mapIterator_done]
     simp [Slice.copy]
-    omega
+    lia
 
 /-! ### Slices as copies -/
 
@@ -1745,7 +1745,7 @@ private theorem Slice.foldrM_loop_eq_foldrM {β : Type v} {m : Type v → Type w
   induction i generalizing b with
   | zero => simp [Slice.foldrM.loop]
   | succ i ih =>
-    have hi : i < s.copy.toList.length := by simp; omega
+    have hi : i < s.copy.toList.length := by simp; lia
     rw [Slice.foldrM.loop, List.take_add_one, List.getElem?_eq_getElem hi]
     simp [ih]
 
@@ -1775,7 +1775,7 @@ private theorem foldl_count_eq (p : Float32 → Bool) (l : List Float32) (n : Na
     l.foldl (fun n x => if p x then n + 1 else n) n = n + l.countP p := by
   induction l generalizing n with
   | nil => rfl
-  | cons x l ih => by_cases hx : p x <;> simp [ih, hx] <;> omega
+  | cons x l ih => by_cases hx : p x <;> simp [ih, hx] <;> lia
 
 @[simp] public theorem Slice.count_eq_countP_toList_copy (s : Float32Array.Slice)
     (p : Float32 → Bool) : s.count p = s.copy.toList.countP p := by
@@ -1789,7 +1789,7 @@ private theorem Slice.findSomeRevM?_loop_eq (p : Float32 → Bool) (s : Float32A
   induction i with
   | zero => rfl
   | succ i ih =>
-    have hi : i < s.copy.toList.length := by simp; omega
+    have hi : i < s.copy.toList.length := by simp; lia
     rw [Slice.findSomeRevM?.loop, List.take_add_one, List.getElem?_eq_getElem hi]
     by_cases hp : p s[i] <;> simp [ih, hp] <;> rfl
 
@@ -1842,9 +1842,9 @@ public def foldInPlace.loop {β : Type v} (len' : USize)
   if hk : k < len then
     let p := f k.toUSize (by
       have := len'.toNat_lt_size
-      rw [USize.toNat_ofNat_of_lt' (by omega)]
-      omega) (a[start + k]'(by omega)) b
-    foldInPlace.loop len' f start len (a.set (start + k) p.1 (by omega)) (by simpa using h) hlen
+      rw [USize.toNat_ofNat_of_lt' (by lia)]
+      lia) (a[start + k]'(by lia)) b
+    foldInPlace.loop len' f start len (a.set (start + k) p.1 (by lia)) (by simpa using h) hlen
       (k + 1) p.2
   else
     (a, b)
@@ -1938,12 +1938,12 @@ public def set (s : Float32Array.Slice) (i : Nat) (v : Float32)
     (h : i < s.size := by get_elem_tactic) : Float32Array.Slice :=
   ⟨{ s.internalRepresentation with
       array := s.array.set (s.start + i) v
-        (by have := s.stop_le_array_size; rw [size_eq] at h; omega)
+        (by have := s.stop_le_array_size; rw [size_eq] at h; lia)
       stop_le_array_size := by rw [size_set]; exact s.stop_le_array_size }⟩
 
 @[simp] public theorem array_set (s : Float32Array.Slice) (i : Nat) (v : Float32) (h) :
     (s.set i v h).array =
-      s.array.set (s.start + i) v (by have := s.stop_le_array_size; rw [size_eq] at h; omega) :=
+      s.array.set (s.start + i) v (by have := s.stop_le_array_size; rw [size_eq] at h; lia) :=
   rfl
 
 @[simp] public theorem start_set (s : Float32Array.Slice) (i : Nat) (v : Float32) (h) :
@@ -2022,7 +2022,7 @@ public theorem modify_eq (s : Float32Array.Slice) (i : Nat) (f : Float32 → Flo
   · have e : s.modify i f = s := by simp [modify_eq, h]
     rw [getElem_congr_coll e]
     split
-    · omega
+    · lia
     · rfl
 
 /-- Swaps the elements at indices `i` and `j` of the slice, in place like `set`. -/
@@ -2055,7 +2055,7 @@ public theorem swap_eq (s : Float32Array.Slice) (i j : Nat) (hi hj) :
 @[expose]
 public def reverse.loop (s : Float32Array.Slice) (i j : Nat) (hj : j < s.size) :
     Float32Array.Slice :=
-  if h : i < j then reverse.loop (s.swap i j (by omega)) (i + 1) (j - 1) (by simp; omega) else s
+  if h : i < j then reverse.loop (s.swap i j (by lia)) (i + 1) (j - 1) (by simp; lia) else s
 termination_by j - i
 
 private unsafe def reverseImpl (s : Float32Array.Slice) : Float32Array.Slice :=
@@ -2080,7 +2080,7 @@ once, before the loop, which then stores without checks.
 -/
 @[implemented_by reverseImpl, expose]
 public def reverse (s : Float32Array.Slice) : Float32Array.Slice :=
-  if h : 0 < s.size then reverse.loop s 0 (s.size - 1) (by omega) else s
+  if h : 0 < s.size then reverse.loop s 0 (s.size - 1) (by lia) else s
 
 private theorem reverse_loop_props (s : Float32Array.Slice) (i j : Nat) (hj : j < s.size) :
     (reverse.loop s i j hj).start = s.start ∧ (reverse.loop s i j hj).stop = s.stop := by
@@ -2108,31 +2108,31 @@ private theorem size_reverse_loop (s : Float32Array.Slice) (i j : Nat) (hj : j <
 private theorem getElem_reverse_loop (s : Float32Array.Slice) (i j : Nat) (hj : j < s.size)
     (hij : i ≤ j + 1) (k : Nat) (hk : k < s.size) :
     (reverse.loop s i j hj)[k]'(by rw [size_reverse_loop]; exact hk) =
-      if h : i ≤ k ∧ k ≤ j then s[i + j - k]'(by omega) else s[k] := by
+      if h : i ≤ k ∧ k ≤ j then s[i + j - k]'(by lia) else s[k] := by
   fun_induction reverse.loop s i j hj with
   | case1 s i j hj h ih =>
     have e : reverse.loop s i j hj =
-        reverse.loop (s.swap i j (by omega)) (i + 1) (j - 1) (by simp; omega) := by
+        reverse.loop (s.swap i j (by lia)) (i + 1) (j - 1) (by simp; lia) := by
       rw [reverse.loop]; simp [h]
-    rw [getElem_congr_coll e, ih (by omega) (by simpa using hk)]
+    rw [getElem_congr_coll e, ih (by lia) (by simpa using hk)]
     simp only [getElem_swap]
     repeat' split
-    all_goals first | omega | rfl | (congr 1; omega)
+    all_goals first | lia | rfl | (congr 1; lia)
   | case2 s i j hj h =>
     have e : reverse.loop s i j hj = s := by rw [reverse.loop]; simp [h]
     rw [getElem_congr_coll e]
     split
-    · congr 1; omega
+    · congr 1; lia
     · rfl
 
 @[simp] public theorem getElem_reverse (s : Float32Array.Slice) (i : Nat) (h) :
-    s.reverse[i]'h = s[s.size - 1 - i]'(by simp at h; omega) := by
+    s.reverse[i]'h = s[s.size - 1 - i]'(by simp at h; lia) := by
   have h' : i < s.size := by simpa using h
-  have hs : 0 < s.size := by omega
+  have hs : 0 < s.size := by lia
   simp only [reverse, hs, ↓reduceDIte]
-  rw [getElem_reverse_loop _ _ _ _ (by omega) _ h']
+  rw [getElem_reverse_loop _ _ _ _ (by lia) _ h']
   simp only [Nat.zero_le, true_and, Nat.zero_add]
-  split <;> (try congr 1) <;> omega
+  split <;> (try congr 1) <;> lia
 
 @[simp] public theorem toList_copy_reverse (s : Float32Array.Slice) :
     s.reverse.copy.toList = s.copy.toList.reverse := by
@@ -2152,8 +2152,8 @@ public def foldlInPlace.loop {β : Type v} (n : Nat)
     have hk' : k.toUSize.toNat < n := by
       rw [Nat.toUSize_eq, USize.toNat_ofNat']
       exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) hk
-    let p := f k.toUSize hk' (s[k]'(by omega)) b
-    foldlInPlace.loop n f (s.set k p.1 (by omega)) (by simpa using hs) (k + 1) p.2
+    let p := f k.toUSize hk' (s[k]'(by lia)) b
+    foldlInPlace.loop n f (s.set k p.1 (by lia)) (by simpa using hs) (k + 1) p.2
   else
     (s, b)
 termination_by n - k
@@ -2215,8 +2215,8 @@ public def foldrInPlace.loop {β : Type v} (n : Nat)
     have hk' : k.toUSize.toNat < n := by
       rw [Nat.toUSize_eq, USize.toNat_ofNat']
       exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) hk
-    let p := f k.toUSize hk' (s[k]'(by omega)) b
-    foldrInPlace.loop n f (s.set k p.1 (by omega)) (by simpa using hs) k (by omega) p.2
+    let p := f k.toUSize hk' (s[k]'(by lia)) b
+    foldrInPlace.loop n f (s.set k p.1 (by lia)) (by simpa using hs) k (by lia) p.2
 
 @[specialize]
 private unsafe def foldrInPlaceImpl.loop {β : Type v} {γ : Type w} (base : USize)
