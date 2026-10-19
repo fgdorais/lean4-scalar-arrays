@@ -39,7 +39,7 @@ types = [
 FLOAT_EQ_OLD = """/-- Decides equality by comparing the two arrays' memory. -/
 @[extern "lean_sarray_dec_eq", expose]
 public def decEq (a b : @& UInt16Array) : Decidable (a = b) :=
-  decidable_of_iff (a.data = b.data) ⟨fun h => by cases a; cases b; cases h; rfl, fun h => h ▸ rfl⟩
+  decidable_of_iff (a.data = b.data) ⟨fun h => by rw [← mk_data a, h, mk_data], fun h => h ▸ rfl⟩
 
 public instance : DecidableEq UInt16Array := decEq
 

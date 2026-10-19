@@ -23,21 +23,44 @@ is not shared and copy it otherwise, like `Array` and `ByteArray`.
 
 namespace ScalarArray
 
+universe u
+
 /--
 Arrays of `USize` values, stored unboxed in a scalar array, one machine word per element.
 
-The logical model is an `Array USize`. At runtime a `USizeArray` is a `ScalarArray`, so every
-function that looks inside the constructor must be `extern` or `implemented_by`.
+The logical model is an `Array USize`: `USizeArray.mk` and `USizeArray.data` convert between the
+two. `cases` and `induction` split a `USizeArray` as `mk data`.
 -/
-public inductive USizeArray : Type
-  | public mk (data : Array USize)
+-- At runtime a `USizeArray` is a `ScalarArray`, so every function that looks inside the quotient
+-- must be `extern` or `implemented_by`. A quotient rather than a structure: the compiler represents
+-- a one-field structure by its field, so code in any module could match on the constructor and run
+-- `Array` code on a scalar array. A quotient has no constructor to match on and the compiler gives it
+-- no layout; only `Quot.lift` and `Quot.rec` can see the `Array`.
+@[expose] public def USizeArray : Type := Quot fun _ _ : Array USize => False
 
 namespace USizeArray
 
+-- `noinline` on `mk` and `data`: their `implemented_by` attributes come later, and the compiler would
+-- otherwise inline their bodies, which treat the scalar array as an `Array`.
+
+/-- The `USizeArray` whose elements are `data`. -/
+@[noinline, expose]
+public def mk (data : Array USize) : USizeArray := Quot.mk _ data
+
+/-- The elements of `a` as an `Array USize`. -/
+@[noinline, expose]
+public def data (a : @& USizeArray) : Array USize :=
+  Quot.lift id (fun _ _ h => h.elim) a
+
+@[simp] public theorem data_mk (a : Array USize) : (mk a).data = a := rfl
+
+@[simp] public theorem mk_data (a : USizeArray) : mk a.data = a :=
+  Quot.ind (β := fun a : USizeArray => mk a.data = a) (fun _ => rfl) a
+
 -- `lean_byte_array_size` reads the size of any scalar array, whatever its element size.
 @[extern "lean_byte_array_size", tagged_return, expose]
-public def size : (a : @& USizeArray) → Nat
-  | mk a => a.size
+public def size (a : @& USizeArray) : Nat :=
+  a.data.size
 
 /--
 The size of `a` as a `USize`. Since `USize` can address all memory, no array has more elements than
@@ -48,18 +71,18 @@ public def usize (a : @& USizeArray) : USize :=
   a.size.toUSize
 
 @[extern c inline "((size_t*)lean_sarray_cptr(#1))[#2]", expose]
-public def uget :
-    (a : @& USizeArray) → (i : USize) → (h : i.toNat < a.size := by get_elem_tactic) → USize
-  | mk a, i, h => a.uget i h
+public def uget (a : @& USizeArray) (i : USize) (h : i.toNat < a.size := by get_elem_tactic) :
+    USize :=
+  a.data.uget i h
 
 @[expose]
-public def get :
-    (a : @& USizeArray) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → USize
-  | mk a, i, h => a[i]
+public def get (a : @& USizeArray) (i : @& Nat) (h : i < a.size := by get_elem_tactic) :
+    USize :=
+  a.data[i]
 
--- Public, like `mkImpl`, `usetImpl`, `setImpl` and `pushImpl` below: a private `implemented_by`
--- target attached with a separate `attribute` command is not visible to other modules, so code
--- there that uses `get`, `mk`, `uset` or `set` would fail to compile.
+-- Public, like `mkImpl`, `dataImpl`, `usetImpl`, `setImpl` and `pushImpl` below: a private
+-- `implemented_by` target attached with a separate `attribute` command is not visible to other
+-- modules, so code there that uses `get`, `mk`, `data`, `uset` or `set` would fail to compile.
 @[inline]
 public unsafe def getImpl : type_of% @get :=
   fun a i _ => a.uget i.toUSize lcProof
@@ -71,8 +94,8 @@ Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in
 so that `uset` can be inlined into code in other modules.
 -/
 @[never_extract, extern c inline "#1;\n((size_t*)lean_sarray_cptr(#1))[#2] = #3"]
-public unsafe def setUnsafe : USizeArray → USize → USize → USizeArray
-  | .mk a, i, v => .mk <| a.uset i v lcProof
+public unsafe def setUnsafe (a : USizeArray) (i : USize) (v : USize) : USizeArray :=
+  mk <| a.data.uset i v lcProof
 
 /--
 `a` itself when it is not shared, and a copy otherwise. Public only so that `uset` can be inlined
@@ -107,16 +130,20 @@ public unsafe def mkImpl (a : Array USize) : USizeArray :=
 
 attribute [implemented_by mkImpl] USizeArray.mk
 
-private unsafe def dataImpl (a : @& USizeArray) : Array USize :=
+public unsafe def dataImpl (a : @& USizeArray) : Array USize :=
   loop a.usize 0 (Array.replicate a.size default)
 where
   loop (sz i : USize) (r : Array USize) : Array USize :=
     if i < sz then loop sz (i + 1) (r.uset i (a.uget i lcProof) lcProof) else r
 
-/-- The elements of `a` as an `Array USize`. -/
-@[implemented_by dataImpl, expose]
-public def data : (a : @& USizeArray) → Array USize
-  | mk a => a
+attribute [implemented_by dataImpl] data
+
+-- After the `implemented_by` attributes of `mk` and `data`, so that the compiled code uses them.
+/-- Case analysis on a `USizeArray` as `mk data`. It is the default for `cases` and `induction`. -/
+@[elab_as_elim, cases_eliminator, induction_eliminator]
+public def casesMk {motive : USizeArray → Sort u} (mk : (data : Array USize) → motive (mk data))
+    (a : USizeArray) : motive a :=
+  mk_data a ▸ mk a.data
 
 private unsafe def emptyWithCapacityImpl (capacity : Nat) : USizeArray :=
   mkWithCapacityImpl #[] capacity
@@ -137,10 +164,9 @@ Replaces the element at index `i`, in place when `a` is not shared. It compiles 
 check that `a` is exclusive, copying it if not, and one store.
 -/
 @[expose]
-public def uset :
-    (a : USizeArray) → (i : USize) → (v : USize) →
-    (h : i.toNat < a.size := by get_elem_tactic) → USizeArray
-  | mk a, i, v, h => mk (a.uset i v h)
+public def uset (a : USizeArray) (i : USize) (v : USize)
+    (h : i.toNat < a.size := by get_elem_tactic) : USizeArray :=
+  mk (a.data.uset i v h)
 
 -- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
 @[inline]
@@ -150,10 +176,9 @@ public unsafe def usetImpl : type_of% @uset :=
 attribute [implemented_by usetImpl] uset
 
 @[expose]
-public def set :
-    (a : USizeArray) → (i : Nat) → (v : USize) → (h : i < a.size := by get_elem_tactic) →
-    USizeArray
-  | mk a, i, v, h => mk (a.set i v h)
+public def set (a : USizeArray) (i : Nat) (v : USize) (h : i < a.size := by get_elem_tactic) :
+    USizeArray :=
+  mk (a.data.set i v h)
 
 @[inline]
 public unsafe def setImpl : type_of% @set :=
@@ -174,8 +199,8 @@ private unsafe def setBangImpl (a : USizeArray) (i : Nat) (v : USize) : USizeArr
 
 /-- Replaces the element at index `i`. If `i` is out of bounds, the array is returned unmodified. -/
 @[implemented_by setBangImpl, expose]
-public def set! : USizeArray → Nat → USize → USizeArray
-  | mk a, i, v => mk (a.set! i v)
+public def set! (a : USizeArray) (i : Nat) (v : USize) : USizeArray :=
+  mk (a.data.set! i v)
 
 public instance : GetElem USizeArray Nat USize fun a i => i < a.size where
   getElem a i h := a.get i h
@@ -226,8 +251,8 @@ public unsafe def pushImpl (a : USizeArray) (v : USize) : USizeArray :=
     pushGrowUnsafe a v
 
 @[implemented_by pushImpl, expose]
-public def push : USizeArray → USize → USizeArray
-  | mk a, v => mk (a.push v)
+public def push (a : USizeArray) (v : USize) : USizeArray :=
+  mk (a.data.push v)
 
 /--
 Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting
@@ -270,8 +295,8 @@ private unsafe def appendImpl (a b : USizeArray) : USizeArray :=
 
 /-- Appends the elements of `b` to `a`, in place when `a` is not shared and has room. -/
 @[implemented_by appendImpl, expose]
-public def append : USizeArray → USizeArray → USizeArray
-  | mk a, mk b => mk (a ++ b)
+public def append (a b : USizeArray) : USizeArray :=
+  mk (a.data ++ b.data)
 
 public instance : Append USizeArray := ⟨append⟩
 
@@ -315,8 +340,8 @@ private unsafe def popImpl (a : USizeArray) : USizeArray :=
 
 /-- Removes the last element of `a`, if any, in place when `a` is not shared. -/
 @[implemented_by popImpl, expose]
-public def pop : USizeArray → USizeArray
-  | mk a => mk a.pop
+public def pop (a : USizeArray) : USizeArray :=
+  mk a.data.pop
 
 public def back? (a : @& USizeArray) : Option USize := a[a.size - 1]?
 
@@ -340,8 +365,8 @@ Removes the longest run of elements at the end of `a` that satisfy `p`, in place
 shared.
 -/
 @[implemented_by popWhileImpl, expose]
-public def popWhile (p : USize → Bool) : USizeArray → USizeArray
-  | mk a => mk (a.popWhile p)
+public def popWhile (p : USize → Bool) (a : USizeArray) : USizeArray :=
+  mk (a.data.popWhile p)
 
 private unsafe def extractImpl (a : @& USizeArray) (start stop : Nat) : USizeArray :=
   let stop := min stop a.size
@@ -356,8 +381,8 @@ The elements of `a` from index `start` up to, but not including, `min stop a.siz
 new array.
 -/
 @[implemented_by extractImpl, expose]
-public def extract : (a : @& USizeArray) → (start stop : Nat) → USizeArray
-  | mk a, start, stop => mk (a.extract start stop)
+public def extract (a : @& USizeArray) (start stop : Nat) : USizeArray :=
+  mk (a.data.extract start stop)
 
 /-! ## Linearity -/
 
@@ -546,13 +571,13 @@ public instance : Membership USize USizeArray where
 
 /-! ## Equality and hashing -/
 
-private theorem data_injective : {a b : USizeArray} → a.data = b.data → a = b
-  | mk _, mk _, rfl => rfl
+private theorem data_injective {a b : USizeArray} (h : a.data = b.data) : a = b := by
+  rw [← mk_data a, h, mk_data]
 
 /-- Decides equality by comparing the two arrays' memory. -/
 @[extern "lean_sarray_dec_eq", expose]
 public def decEq (a b : @& USizeArray) : Decidable (a = b) :=
-  decidable_of_iff (a.data = b.data) ⟨fun h => by cases a; cases b; cases h; rfl, fun h => h ▸ rfl⟩
+  decidable_of_iff (a.data = b.data) ⟨fun h => by rw [← mk_data a, h, mk_data], fun h => h ▸ rfl⟩
 
 public instance : DecidableEq USizeArray := decEq
 
@@ -1002,22 +1027,18 @@ public def _root_.Std.Iter.toUSizeArrayWithCapacity {α : Type} [Std.Iterator α
 
 @[simp] public theorem size_mk (a : Array USize) : (mk a).size = a.size := rfl
 
-@[simp] public theorem data_mk (a : Array USize) : (mk a).data = a := rfl
-
-@[simp] public theorem mk_data (a : USizeArray) : mk a.data = a := by cases a; rfl
-
 public theorem size_eq_data_size (a : USizeArray) : a.size = a.data.size := by cases a; rfl
 
 @[simp] public theorem size_data (a : USizeArray) : a.data.size = a.size :=
   (size_eq_data_size a).symm
 
 @[simp] public theorem size_uset (a : USizeArray) (i : USize) (v : USize) (h) :
-    (a.uset i v h).size = a.size := by
-  cases a; exact Array.size_set ..
+    (a.uset i v h).size = a.size :=
+  Array.size_set (h := h)
 
 @[simp] public theorem size_set (a : USizeArray) (i : Nat) (v : USize) (h) :
-    (a.set i v h).size = a.size := by
-  cases a; exact Array.size_set ..
+    (a.set i v h).size = a.size :=
+  Array.size_set (h := h)
 
 @[simp] public theorem size_push (a : USizeArray) (v : USize) :
     (a.push v).size = a.size + 1 := by
@@ -1154,8 +1175,7 @@ public theorem size_eq_zero_iff {a : USizeArray} : a.size = 0 ↔ a = empty := b
   simp [-size_data, size_eq_data_size]
 
 public theorem getElem!_eq_getElem!_data (a : USizeArray) (i : Nat) : a[i]! = a.data[i]! := by
-  rcases a with ⟨a⟩
-  by_cases h : i < a.size <;> simp [getElem!_def, getElem?_def, h] <;> rfl
+  by_cases h : i < a.size <;> simp [h] <;> rfl
 
 @[simp] public theorem data_ofList (l : List USize) : (ofList l).data = l.toArray := rfl
 
@@ -1622,7 +1642,8 @@ public theorem getElem_copySlice (src : USizeArray) (srcOff : Nat) (dest : USize
 
 @[simp] public theorem forM_toList {m : Type v → Type w} [Monad m] (f : USize → m PUnit)
     (a : USizeArray) : ForM.forM a.toList f = ForM.forM a f := by
-  rcases a with ⟨⟨l⟩⟩
+  cases a with | mk a
+  rcases a with ⟨l⟩
   exact (List.forM_toArray l f).symm
 
 /-! ### Membership -/

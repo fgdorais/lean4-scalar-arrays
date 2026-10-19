@@ -26,21 +26,44 @@ as the other arrays in this library.
 
 namespace ScalarArray
 
+universe u
+
 /--
 Arrays of `Float` values, stored unboxed in a scalar array, 8 bytes per element.
 
-The logical model is an `Array Float`. At runtime a `Float64Array` is a `ScalarArray`, so every
-function that looks inside the constructor must be `extern` or `implemented_by`.
+The logical model is an `Array Float`: `Float64Array.mk` and `Float64Array.data` convert between the
+two. `cases` and `induction` split a `Float64Array` as `mk data`.
 -/
-public inductive Float64Array : Type
-  | public mk (data : Array Float)
+-- At runtime a `Float64Array` is a `ScalarArray`, so every function that looks inside the quotient
+-- must be `extern` or `implemented_by`. A quotient rather than a structure: the compiler represents
+-- a one-field structure by its field, so code in any module could match on the constructor and run
+-- `Array` code on a scalar array. A quotient has no constructor to match on and the compiler gives it
+-- no layout; only `Quot.lift` and `Quot.rec` can see the `Array`.
+@[expose] public def Float64Array : Type := Quot fun _ _ : Array Float => False
 
 namespace Float64Array
 
+-- `noinline` on `mk` and `data`: their `implemented_by` attributes come later, and the compiler would
+-- otherwise inline their bodies, which treat the scalar array as an `Array`.
+
+/-- The `Float64Array` whose elements are `data`. -/
+@[noinline, expose]
+public def mk (data : Array Float) : Float64Array := Quot.mk _ data
+
+/-- The elements of `a` as an `Array Float`. -/
+@[noinline, expose]
+public def data (a : @& Float64Array) : Array Float :=
+  Quot.lift id (fun _ _ h => h.elim) a
+
+@[simp] public theorem data_mk (a : Array Float) : (mk a).data = a := rfl
+
+@[simp] public theorem mk_data (a : Float64Array) : mk a.data = a :=
+  Quot.ind (β := fun a : Float64Array => mk a.data = a) (fun _ => rfl) a
+
 -- `lean_byte_array_size` reads the size of any scalar array, whatever its element size.
 @[extern "lean_byte_array_size", tagged_return, expose]
-public def size : (a : @& Float64Array) → Nat
-  | mk a => a.size
+public def size (a : @& Float64Array) : Nat :=
+  a.data.size
 
 /--
 The size of `a` as a `USize`. Since `USize` can address all memory, no array has more elements than
@@ -51,18 +74,18 @@ public def usize (a : @& Float64Array) : USize :=
   a.size.toUSize
 
 @[extern c inline "((double*)lean_sarray_cptr(#1))[#2]", expose]
-public def uget :
-    (a : @& Float64Array) → (i : USize) → (h : i.toNat < a.size := by get_elem_tactic) → Float
-  | mk a, i, h => a.uget i h
+public def uget (a : @& Float64Array) (i : USize) (h : i.toNat < a.size := by get_elem_tactic) :
+    Float :=
+  a.data.uget i h
 
 @[expose]
-public def get :
-    (a : @& Float64Array) → (i : @& Nat) → (h : i < a.size := by get_elem_tactic) → Float
-  | mk a, i, h => a[i]
+public def get (a : @& Float64Array) (i : @& Nat) (h : i < a.size := by get_elem_tactic) :
+    Float :=
+  a.data[i]
 
--- Public, like `mkImpl`, `usetImpl`, `setImpl` and `pushImpl` below: a private `implemented_by`
--- target attached with a separate `attribute` command is not visible to other modules, so code
--- there that uses `get`, `mk`, `uset` or `set` would fail to compile.
+-- Public, like `mkImpl`, `dataImpl`, `usetImpl`, `setImpl` and `pushImpl` below: a private
+-- `implemented_by` target attached with a separate `attribute` command is not visible to other
+-- modules, so code there that uses `get`, `mk`, `data`, `uset` or `set` would fail to compile.
 @[inline]
 public unsafe def getImpl : type_of% @get :=
   fun a i _ => a.uget i.toUSize lcProof
@@ -74,8 +97,8 @@ Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in
 so that `uset` can be inlined into code in other modules.
 -/
 @[never_extract, extern c inline "#1;\n((double*)lean_sarray_cptr(#1))[#2] = #3"]
-public unsafe def setUnsafe : Float64Array → USize → Float → Float64Array
-  | .mk a, i, v => .mk <| a.uset i v lcProof
+public unsafe def setUnsafe (a : Float64Array) (i : USize) (v : Float) : Float64Array :=
+  mk <| a.data.uset i v lcProof
 
 /--
 `a` itself when it is not shared, and a copy otherwise. Public only so that `uset` can be inlined
@@ -110,16 +133,20 @@ public unsafe def mkImpl (a : Array Float) : Float64Array :=
 
 attribute [implemented_by mkImpl] Float64Array.mk
 
-private unsafe def dataImpl (a : @& Float64Array) : Array Float :=
+public unsafe def dataImpl (a : @& Float64Array) : Array Float :=
   loop a.usize 0 (Array.replicate a.size default)
 where
   loop (sz i : USize) (r : Array Float) : Array Float :=
     if i < sz then loop sz (i + 1) (r.uset i (a.uget i lcProof) lcProof) else r
 
-/-- The elements of `a` as an `Array Float`. -/
-@[implemented_by dataImpl, expose]
-public def data : (a : @& Float64Array) → Array Float
-  | mk a => a
+attribute [implemented_by dataImpl] data
+
+-- After the `implemented_by` attributes of `mk` and `data`, so that the compiled code uses them.
+/-- Case analysis on a `Float64Array` as `mk data`. It is the default for `cases` and `induction`. -/
+@[elab_as_elim, cases_eliminator, induction_eliminator]
+public def casesMk {motive : Float64Array → Sort u} (mk : (data : Array Float) → motive (mk data))
+    (a : Float64Array) : motive a :=
+  mk_data a ▸ mk a.data
 
 private unsafe def emptyWithCapacityImpl (capacity : Nat) : Float64Array :=
   mkWithCapacityImpl #[] capacity
@@ -140,10 +167,9 @@ Replaces the element at index `i`, in place when `a` is not shared. It compiles 
 check that `a` is exclusive, copying it if not, and one store.
 -/
 @[expose]
-public def uset :
-    (a : Float64Array) → (i : USize) → (v : Float) →
-    (h : i.toNat < a.size := by get_elem_tactic) → Float64Array
-  | mk a, i, v, h => mk (a.uset i v h)
+public def uset (a : Float64Array) (i : USize) (v : Float)
+    (h : i.toNat < a.size := by get_elem_tactic) : Float64Array :=
+  mk (a.data.uset i v h)
 
 -- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
 @[inline]
@@ -153,10 +179,9 @@ public unsafe def usetImpl : type_of% @uset :=
 attribute [implemented_by usetImpl] uset
 
 @[expose]
-public def set :
-    (a : Float64Array) → (i : Nat) → (v : Float) → (h : i < a.size := by get_elem_tactic) →
-    Float64Array
-  | mk a, i, v, h => mk (a.set i v h)
+public def set (a : Float64Array) (i : Nat) (v : Float) (h : i < a.size := by get_elem_tactic) :
+    Float64Array :=
+  mk (a.data.set i v h)
 
 @[inline]
 public unsafe def setImpl : type_of% @set :=
@@ -177,8 +202,8 @@ private unsafe def setBangImpl (a : Float64Array) (i : Nat) (v : Float) : Float6
 
 /-- Replaces the element at index `i`. If `i` is out of bounds, the array is returned unmodified. -/
 @[implemented_by setBangImpl, expose]
-public def set! : Float64Array → Nat → Float → Float64Array
-  | mk a, i, v => mk (a.set! i v)
+public def set! (a : Float64Array) (i : Nat) (v : Float) : Float64Array :=
+  mk (a.data.set! i v)
 
 public instance : GetElem Float64Array Nat Float fun a i => i < a.size where
   getElem a i h := a.get i h
@@ -229,8 +254,8 @@ public unsafe def pushImpl (a : Float64Array) (v : Float) : Float64Array :=
     pushGrowUnsafe a v
 
 @[implemented_by pushImpl, expose]
-public def push : Float64Array → Float → Float64Array
-  | mk a, v => mk (a.push v)
+public def push (a : Float64Array) (v : Float) : Float64Array :=
+  mk (a.data.push v)
 
 /--
 Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting
@@ -273,8 +298,8 @@ private unsafe def appendImpl (a b : Float64Array) : Float64Array :=
 
 /-- Appends the elements of `b` to `a`, in place when `a` is not shared and has room. -/
 @[implemented_by appendImpl, expose]
-public def append : Float64Array → Float64Array → Float64Array
-  | mk a, mk b => mk (a ++ b)
+public def append (a b : Float64Array) : Float64Array :=
+  mk (a.data ++ b.data)
 
 public instance : Append Float64Array := ⟨append⟩
 
@@ -318,8 +343,8 @@ private unsafe def popImpl (a : Float64Array) : Float64Array :=
 
 /-- Removes the last element of `a`, if any, in place when `a` is not shared. -/
 @[implemented_by popImpl, expose]
-public def pop : Float64Array → Float64Array
-  | mk a => mk a.pop
+public def pop (a : Float64Array) : Float64Array :=
+  mk a.data.pop
 
 public def back? (a : @& Float64Array) : Option Float := a[a.size - 1]?
 
@@ -343,8 +368,8 @@ Removes the longest run of elements at the end of `a` that satisfy `p`, in place
 shared.
 -/
 @[implemented_by popWhileImpl, expose]
-public def popWhile (p : Float → Bool) : Float64Array → Float64Array
-  | mk a => mk (a.popWhile p)
+public def popWhile (p : Float → Bool) (a : Float64Array) : Float64Array :=
+  mk (a.data.popWhile p)
 
 private unsafe def extractImpl (a : @& Float64Array) (start stop : Nat) : Float64Array :=
   let stop := min stop a.size
@@ -359,8 +384,8 @@ The elements of `a` from index `start` up to, but not including, `min stop a.siz
 new array.
 -/
 @[implemented_by extractImpl, expose]
-public def extract : (a : @& Float64Array) → (start stop : Nat) → Float64Array
-  | mk a, start, stop => mk (a.extract start stop)
+public def extract (a : @& Float64Array) (start stop : Nat) : Float64Array :=
+  mk (a.data.extract start stop)
 
 /-! ## Linearity -/
 
@@ -549,8 +574,8 @@ public instance : Membership Float Float64Array where
 
 /-! ## Equality -/
 
-private theorem data_injective : {a b : Float64Array} → a.data = b.data → a = b
-  | mk _, mk _, rfl => rfl
+private theorem data_injective {a b : Float64Array} (h : a.data = b.data) : a = b := by
+  rw [← mk_data a, h, mk_data]
 
 private unsafe def beqImpl (a b : @& Float64Array) : Bool :=
   a.usize == b.usize && loop 0
@@ -1004,22 +1029,18 @@ public def _root_.Std.Iter.toFloat64ArrayWithCapacity {α : Type} [Std.Iterator 
 
 @[simp] public theorem size_mk (a : Array Float) : (mk a).size = a.size := rfl
 
-@[simp] public theorem data_mk (a : Array Float) : (mk a).data = a := rfl
-
-@[simp] public theorem mk_data (a : Float64Array) : mk a.data = a := by cases a; rfl
-
 public theorem size_eq_data_size (a : Float64Array) : a.size = a.data.size := by cases a; rfl
 
 @[simp] public theorem size_data (a : Float64Array) : a.data.size = a.size :=
   (size_eq_data_size a).symm
 
 @[simp] public theorem size_uset (a : Float64Array) (i : USize) (v : Float) (h) :
-    (a.uset i v h).size = a.size := by
-  cases a; exact Array.size_set ..
+    (a.uset i v h).size = a.size :=
+  Array.size_set (h := h)
 
 @[simp] public theorem size_set (a : Float64Array) (i : Nat) (v : Float) (h) :
-    (a.set i v h).size = a.size := by
-  cases a; exact Array.size_set ..
+    (a.set i v h).size = a.size :=
+  Array.size_set (h := h)
 
 @[simp] public theorem size_push (a : Float64Array) (v : Float) :
     (a.push v).size = a.size + 1 := by
@@ -1156,8 +1177,7 @@ public theorem size_eq_zero_iff {a : Float64Array} : a.size = 0 ↔ a = empty :=
   simp [-size_data, size_eq_data_size]
 
 public theorem getElem!_eq_getElem!_data (a : Float64Array) (i : Nat) : a[i]! = a.data[i]! := by
-  rcases a with ⟨a⟩
-  by_cases h : i < a.size <;> simp [getElem!_def, getElem?_def, h] <;> rfl
+  by_cases h : i < a.size <;> simp [h] <;> rfl
 
 @[simp] public theorem data_ofList (l : List Float) : (ofList l).data = l.toArray := rfl
 
@@ -1624,7 +1644,8 @@ public theorem getElem_copySlice (src : Float64Array) (srcOff : Nat) (dest : Flo
 
 @[simp] public theorem forM_toList {m : Type v → Type w} [Monad m] (f : Float → m PUnit)
     (a : Float64Array) : ForM.forM a.toList f = ForM.forM a f := by
-  rcases a with ⟨⟨l⟩⟩
+  cases a with | mk a
+  rcases a with ⟨l⟩
   exact (List.forM_toArray l f).symm
 
 /-! ### Membership -/
