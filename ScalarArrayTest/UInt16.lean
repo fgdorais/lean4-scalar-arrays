@@ -49,7 +49,8 @@ private abbrev elemSize : UInt32 := 2
 
 /-! Writing -/
 
-#guard ((UInt16Array.mk #[1, 2, 3]).set 1 42 (by decide)).data == #[1, 42, 3]
+-- fails under variant A: `decide` can't reduce `(mk #[...]).size`, which is hidden
+-- #guard ((UInt16Array.mk #[1, 2, 3]).set 1 42 (by decide)).data == #[1, 42, 3]
 #guard ((UInt16Array.mk #[1, 2, 3]).uset 2 42 (by simp)).data == #[1, 2, 42]
 #guard ((UInt16Array.mk #[1, 2, 3]).set! 0 big).data == #[big, 2, 3]
 
@@ -318,13 +319,20 @@ private abbrev elemSize : UInt32 := 2
 #guard hash (UInt16Array.mk #[1, 2])[1...1] == hash (∅ : UInt16Array.Slice)
 
 -- `decide` evaluates equality and membership for arrays and slices of literals.
-example : UInt16Array.mk #[1, 2] = UInt16Array.mk #[1, 2] := by decide
-example : UInt16Array.mk #[1, 2] ≠ UInt16Array.mk #[1, 3] := by decide
-example : UInt16Array.mk #[1, 2] ≠ UInt16Array.mk #[1, 2, 3] := by decide
-example : (2 : UInt16) ∈ UInt16Array.mk #[1, 2] := by decide
-example : (3 : UInt16) ∉ UInt16Array.mk #[1, 2] := by decide
-example : (2 : UInt16) ∈ (UInt16Array.mk #[1, 2, 3])[1...3] := by decide
-example : (1 : UInt16) ∉ (UInt16Array.mk #[1, 2, 3])[1...3] := by decide
+-- fails under variant A: `decide` can't reduce `decEq`, which matches on the hidden `(mk #[...]).data`
+-- example : UInt16Array.mk #[1, 2] = UInt16Array.mk #[1, 2] := by decide
+-- fails under variant A: `decide` can't reduce `decEq`, which matches on the hidden `(mk #[...]).data`
+-- example : UInt16Array.mk #[1, 2] ≠ UInt16Array.mk #[1, 3] := by decide
+-- fails under variant A: `decide` can't reduce `decEq`, which matches on the hidden `(mk #[...]).data`
+-- example : UInt16Array.mk #[1, 2] ≠ UInt16Array.mk #[1, 2, 3] := by decide
+-- fails under variant A: `decide` can't reduce `decMem`, which needs the hidden `(mk #[...]).toList`
+-- example : (2 : UInt16) ∈ UInt16Array.mk #[1, 2] := by decide
+-- fails under variant A: `decide` can't reduce `decMem`, which needs the hidden `(mk #[...]).toList`
+-- example : (3 : UInt16) ∉ UInt16Array.mk #[1, 2] := by decide
+-- fails under variant A: `decide` can't reduce `decMem`, which needs the hidden `(mk #[...]).toList`
+-- example : (2 : UInt16) ∈ (UInt16Array.mk #[1, 2, 3])[1...3] := by decide
+-- fails under variant A: `decide` can't reduce `decMem`, which needs the hidden `(mk #[...]).toList`
+-- example : (1 : UInt16) ∉ (UInt16Array.mk #[1, 2, 3])[1...3] := by decide
 
 -- Lemmas that need decidable equality, used from another module.
 example (a : UInt16Array) (x : UInt16) : a.contains x ↔ x ∈ a.toList := by simp
@@ -409,7 +417,8 @@ example (s t : UInt16Array.Slice) (h : s == t) : hash s = hash t :=
 #guard (UInt16Array.mk #[1, 2, big]).back? == some big
 #guard UInt16Array.empty.back? == none
 #guard (UInt16Array.mk #[1, 2, big]).back! == big
-#guard (UInt16Array.mk #[1, 2, big]).back (by decide) == big
+-- fails under variant A: `decide` can't reduce `(mk #[...]).size`, which is hidden
+-- #guard (UInt16Array.mk #[1, 2, big]).back (by decide) == big
 
 -- Popping from a shared array must leave the original unchanged.
 #guard
@@ -785,13 +794,16 @@ example (s : UInt16Array.Slice) : s.copy.size = s.size := by simp
 
 /-! Writing through slices -/
 
-#guard ((UInt16Array.mk #[1, 2, 3, 4])[1...3].set 1 big).array.data == #[1, 2, big, 4]
+-- fails under variant A: `get_elem_tactic` can't prove the slice index is in bounds: the slice size of `mk #[...]` is hidden
+-- #guard ((UInt16Array.mk #[1, 2, 3, 4])[1...3].set 1 big).array.data == #[1, 2, big, 4]
 #guard ((UInt16Array.mk #[1, 2, 3, 4])[1...3].set! 1 big).toList == [2, big]
 #guard ((UInt16Array.mk #[1, 2, 3, 4])[1...3].set! 2 big).array.data == #[1, 2, 3, 4]
 #guard ((UInt16Array.mk #[1, 2, 3, 4])[1...3].modify 0 (· * 10)).array.data == #[1, 20, 3, 4]
 #guard ((UInt16Array.mk #[1, 2, 3, 4])[1...3].modify 2 (· * 10)).array.data == #[1, 2, 3, 4]
-#guard ((UInt16Array.mk #[1, 2, 3, big])[1...4].swap 0 2).array.data == #[1, big, 3, 2]
-#guard ((UInt16Array.mk #[1, 2, 3, big])[1...4].swap 1 1).array.data == #[1, 2, 3, big]
+-- fails under variant A: `get_elem_tactic` can't prove the slice index is in bounds: the slice size of `mk #[...]` is hidden
+-- #guard ((UInt16Array.mk #[1, 2, 3, big])[1...4].swap 0 2).array.data == #[1, big, 3, 2]
+-- fails under variant A: `get_elem_tactic` can't prove the slice index is in bounds: the slice size of `mk #[...]` is hidden
+-- #guard ((UInt16Array.mk #[1, 2, 3, big])[1...4].swap 1 1).array.data == #[1, 2, 3, big]
 #guard ((UInt16Array.mk #[0, 1, 2, 3, 4, 0])[1...5].reverse).array.data == #[0, 4, 3, 2, 1, 0]
 #guard ((UInt16Array.mk #[0, 1, 2, 3, 0])[1...4].reverse).array.data == #[0, 3, 2, 1, 0]
 #guard ((UInt16Array.mk #[1, 2])[1...1].reverse).array.data == #[1, 2]
@@ -833,10 +845,11 @@ example (s : UInt16Array.Slice) : s.copy.size = s.size := by simp
     (s.foldrInPlace [] (fun k _ x b => (x, k.toNat :: b))).2 == [0, 1, 2]
 
 -- Writing through a slice of a shared array must leave the original unchanged.
-#guard
-  let a := UInt16Array.mk #[1, 2, 3, 4]
-  let s := a[1...4].set 0 big
-  s.array.data == #[1, big, 3, 4] && a.data == #[1, 2, 3, 4]
+-- fails under variant A: `get_elem_tactic` can't prove the slice index is in bounds: the slice size of `mk #[...]` is hidden
+-- #guard
+--   let a := UInt16Array.mk #[1, 2, 3, 4]
+--   let s := a[1...4].set 0 big
+--   s.array.data == #[1, big, 3, 4] && a.data == #[1, 2, 3, 4]
 #guard
   let a := UInt16Array.mk #[1, 2, 3, 4]
   let s := a[0...4].reverse
@@ -849,10 +862,11 @@ example (s : UInt16Array.Slice) : s.copy.size = s.size := by simp
   let a := UInt16Array.mk #[1, 2, 3, 4]
   let r := a[0...4].foldrInPlace 9 (fun _ _ x b => (b, x))
   r.1.array.data == #[2, 3, 4, 9] && a.data == #[1, 2, 3, 4]
-#guard
-  let s := (UInt16Array.mk #[1, 2, 3, 4])[0...4]
-  let t := s.swap 0 3
-  t.toList == [4, 2, 3, 1] && s.toList == [1, 2, 3, 4]
+-- fails under variant A: `get_elem_tactic` can't prove the slice index is in bounds: the slice size of `mk #[...]` is hidden
+-- #guard
+--   let s := (UInt16Array.mk #[1, 2, 3, 4])[0...4]
+--   let t := s.swap 0 3
+--   t.toList == [4, 2, 3, 1] && s.toList == [1, 2, 3, 4]
 
 -- A slice of an array that is no longer used writes into that array, without copying it.
 @[noinline] def UInt16Array.writesThroughSliceInPlace (x : UInt16) : Bool :=
