@@ -224,6 +224,93 @@ example (a : UInt8Array) : UInt8 := match a with | ⟨data⟩ => data[0]!
 #guard rawCapacity ((UInt8Array.mk #[1, 2, 3, 4]).push 5) ≥ 8
 
 
+/-! Ensuring exclusivity and capacity -/
+
+#guard (UInt8Array.mk #[1, 2, 3]).ensureExclusive.data == #[1, 2, 3]
+#guard ((UInt8Array.mk #[1, 2, 3]).ensureCapacity 100).data == #[1, 2, 3]
+#guard ((UInt8Array.mk #[1, 2, 3]).ensureCapacity 0).data == #[1, 2, 3]
+#guard ((UInt8Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100).data == #[1, 2, 3]
+#guard ((UInt8Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 0).data == #[1, 2, 3]
+
+#guard rawCapacity ((UInt8Array.mk #[1, 2, 3]).ensureCapacity 100) ≥ 100
+#guard rawCapacity ((UInt8Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100) ≥ 100
+-- A copy never has less room than the size.
+#guard rawCapacity ((UInt8Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 0) ≥ 3
+#guard rawElemSize ((UInt8Array.mk #[1, 2, 3]).ensureCapacity 100) == elemSize
+
+-- The array is built from a parameter so that it isn't extracted as a shared closed term.
+@[noinline] def UInt8Array.ensuresInPlace (x : UInt8) : Bool :=
+  let a := (UInt8Array.emptyWithCapacity 10).push x
+  let p := rawAddr a
+  let a := a.ensureExclusive.ensureCapacity 5 |>.ensureExclusiveWithCapacity 10
+  rawAddr a == p && a.data == #[x]
+
+-- Pushes after `ensureExclusiveWithCapacity` don't reallocate.
+@[noinline] def UInt8Array.pushesInPlaceAfterEnsure (x : UInt8) : Bool :=
+  let a := (UInt8Array.mk #[x]).ensureExclusiveWithCapacity 4
+  let p := rawAddr a
+  let a := a.push 2 |>.push 3 |>.push 4
+  rawAddr a == p && a.data == #[x, 2, 3, 4]
+
+-- `ensureCapacity` doesn't copy a shared array that has room.
+@[noinline] def UInt8Array.ensureCapacityKeepsShared (x : UInt8) : Bool :=
+  let a := (UInt8Array.emptyWithCapacity 10).push x
+  let b := a.ensureCapacity 5
+  rawAddr b == rawAddr a && b.data == #[x]
+
+-- `ensureExclusiveWithCapacity` copies a shared array once, even when it also needs room.
+@[noinline] def UInt8Array.ensureExclusiveWithCapacityCopiesShared (x : UInt8) : Bool :=
+  let a := (UInt8Array.emptyWithCapacity 2).push x
+  let b := a.ensureExclusiveWithCapacity 20
+  rawAddr b != rawAddr a && rawCapacity b ≥ 20 && b.data == #[x] && a.data == #[x]
+
+#guard UInt8Array.ensuresInPlace 1
+#guard UInt8Array.pushesInPlaceAfterEnsure 1
+#guard UInt8Array.ensureCapacityKeepsShared 1
+#guard UInt8Array.ensureExclusiveWithCapacityCopiesShared 1
+
+-- After any of them, a write to a shared array must leave the original unchanged. The results
+-- are checked first so that they are computed while the original is still live.
+#guard
+  let a := UInt8Array.mk #[1, 2, 3]
+  let b := a.ensureExclusive.set! 0 big
+  b.data == #[big, 2, 3] && a.data == #[1, 2, 3]
+#guard
+  let a := UInt8Array.mk #[1, 2, 3]
+  let b := (a.ensureCapacity 10).set! 0 big |>.push 4
+  b.data == #[big, 2, 3, 4] && a.data == #[1, 2, 3]
+#guard
+  let a := UInt8Array.mk #[1, 2, 3]
+  let b := (a.ensureExclusiveWithCapacity 10).set! 0 big |>.push 4
+  b.data == #[big, 2, 3, 4] && a.data == #[1, 2, 3]
+
+-- On a closed array, they must not hand out a shared constant: a later call must not change an
+-- earlier result.
+@[noinline] def UInt8Array.ensureExclusiveConstant (x : UInt8) : UInt8Array :=
+  (UInt8Array.mk #[0, 0]).ensureExclusive.uset 0 x
+
+@[noinline] def UInt8Array.ensureCapacityConstant (x : UInt8) : UInt8Array :=
+  ((UInt8Array.mk #[0, 0]).ensureCapacity 10).uset 0 x |>.push x
+
+@[noinline] def UInt8Array.ensureExclusiveWithCapacityConstant (x : UInt8) : UInt8Array :=
+  ((UInt8Array.mk #[0, 0]).ensureExclusiveWithCapacity 10).uset 0 x |>.push x
+
+#guard
+  let a := UInt8Array.ensureExclusiveConstant 1
+  let b := UInt8Array.ensureExclusiveConstant 2
+  b.data == #[2, 0] && a.data == #[1, 0]
+
+#guard
+  let a := UInt8Array.ensureCapacityConstant 1
+  let b := UInt8Array.ensureCapacityConstant 2
+  b.data == #[2, 0, 2] && a.data == #[1, 0, 1]
+
+#guard
+  let a := UInt8Array.ensureExclusiveWithCapacityConstant 1
+  let b := UInt8Array.ensureExclusiveWithCapacityConstant 2
+  b.data == #[2, 0, 2] && a.data == #[1, 0, 1]
+
+
 /-! Appending -/
 
 #guard (UInt8Array.mk #[1, 2] ++ UInt8Array.mk #[3, big]).data == #[1, 2, 3, big]

@@ -103,18 +103,53 @@ public unsafe def setUnsafe (a : Float32Array) (i : USize) (v : Float32) : Float
   mk <| a.data.uset i v lcProof
 
 /--
-`a` itself when it is not shared, and a copy otherwise. Public only so that `uset` can be inlined
-into code in other modules.
+Returns `a` itself when it is not shared, and a copy otherwise. Logically this is the identity.
+It is useful before a run of in-place writes, so that only the first one can copy.
 -/
 -- The same runtime function as the private `ScalarArray.ensureExclusive`, which code in other
--- modules can't reach. `never_extract`: once `uset` or `push` is inlined, `ensureExclusiveUnsafe c`
--- on a closed array `c` would otherwise be hoisted into a shared constant, which the following
--- in-place write would then modify.
-@[never_extract, extern "lean_sarray_ensure_exclusive"]
-public unsafe def ensureExclusiveUnsafe (a : Float32Array) : Float32Array := a
+-- modules can't reach. `never_extract`: once `uset` or `push` is inlined, `c.ensureExclusive` on a
+-- closed array `c` would otherwise be hoisted into a shared constant, which the following in-place
+-- write would then modify.
+@[never_extract, extern "lean_sarray_ensure_exclusive", expose]
+public def ensureExclusive (a : Float32Array) : Float32Array := a
 
 private def toUSizeChecked (n : Nat) : USize :=
   if n < USize.size >>> 1 then n.toUSize else panic! "out of memory"
+
+-- Public, like `usetImpl`: the `never_extract` attribute of a private declaration is not visible to
+-- other modules, which could then hoist a call on a closed array. `n > capacity ≥ size` in the
+-- `else` branch, so the new capacity is `max n a.size`.
+@[never_extract]
+public unsafe def ensureCapacityImpl (a : Float32Array) (n : Nat) : Float32Array :=
+  let s : ScalarArray := unsafeCast a
+  if n ≤ s.capacity.toNat then a
+  else unsafeCast (s.copyWithCapacity (toUSizeChecked n) lcProof)
+
+/--
+Returns `a` itself when it has room for `n` elements, and otherwise a copy with room for exactly
+`max n a.size` elements. Logically this is the identity. Unlike `ensureExclusiveWithCapacity`, it
+does not copy `a` just because it is shared.
+-/
+-- `never_extract`, here and on the implementation, which is what compiled code calls: on a closed
+-- array, a hoisted copy would be a shared constant, so the writes that follow would copy it again.
+@[never_extract, implemented_by ensureCapacityImpl, expose]
+public def ensureCapacity (a : Float32Array) (n : Nat) : Float32Array := a
+
+-- Public, for the same reason as `ensureCapacityImpl`.
+@[never_extract]
+public unsafe def ensureExclusiveWithCapacityImpl (a : Float32Array) (n : Nat) : Float32Array :=
+  let s : ScalarArray := unsafeCast a
+  if isExclusiveUnsafe a && n ≤ s.capacity.toNat then a
+  else unsafeCast (s.copyWithCapacity (toUSizeChecked (max n s.size.toNat)) lcProof)
+
+/--
+Returns `a` itself when it is not shared and has room for `n` elements, and otherwise a single copy
+with room for exactly `max n a.size` elements. Logically this is the identity. It is useful before a
+run of in-place writes and pushes, so that none of them copies.
+-/
+-- `never_extract`, for the same reason as `ensureCapacity`.
+@[never_extract, implemented_by ensureExclusiveWithCapacityImpl, expose]
+public def ensureExclusiveWithCapacity (a : Float32Array) (n : Nat) : Float32Array := a
 
 /-- A new array of size `size` with room for `capacity` elements. Requires `size ≤ capacity`. -/
 private unsafe def allocUnsafe (size capacity : USize) : Float32Array :=
@@ -227,7 +262,7 @@ public def uset (a : Float32Array) (i : USize) (v : Float32)
 -- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
 @[inline]
 public unsafe def usetImpl : type_of% @uset :=
-  fun a i v _ => setUnsafe (ensureExclusiveUnsafe a) i v
+  fun a i v _ => setUnsafe a.ensureExclusive i v
 
 attribute [implemented_by usetImpl] uset
 
@@ -297,7 +332,7 @@ public unsafe def pushGrowUnsafe (a : Float32Array) (v : Float32) : Float32Array
 @[inline]
 public unsafe def pushImpl (a : Float32Array) (v : Float32) : Float32Array :=
   if a.usize < capacityUnsafe a then
-    let a := ensureExclusiveUnsafe a
+    let a := a.ensureExclusive
     let i := a.usize
     setUnsafe (setSizeUnsafe a (i + 1)) i v
   else
@@ -1708,6 +1743,14 @@ public theorem getElem!_eq_getElem!_data (a : Float32Array) (i : Nat) : a[i]! = 
 @[simp] public theorem ofList_toList (a : Float32Array) : ofList a.toList = a := by
   simp [Float32Array.ext_iff, ← toList_data]
 
+@[simp] public theorem ensureExclusive_eq (a : Float32Array) : a.ensureExclusive = a := rfl
+
+@[simp] public theorem ensureCapacity_eq (a : Float32Array) (n : Nat) :
+    a.ensureCapacity n = a := rfl
+
+@[simp] public theorem ensureExclusiveWithCapacity_eq (a : Float32Array) (n : Nat) :
+    a.ensureExclusiveWithCapacity n = a := rfl
+
 @[simp] public theorem markLinear_eq (a : Float32Array) : a.markLinear = a := rfl
 
 @[simp] public theorem propagateMark_eq (a b : Float32Array) : a.propagateMark b = b := rfl
@@ -2365,7 +2408,7 @@ public theorem Slice.getElem_mem {s : Float32Array.Slice} {i : Nat} (h : i < s.s
 private unsafe def foldInPlaceImpl {β : Type v} (a : Float32Array) (start len : USize) (init : β)
     (f : (k : USize) → k.toNat < len.toNat → Float32 → β → Float32 × β)
     (_ : start.toNat + len.toNat ≤ a.size) : Float32Array × β :=
-  loop (ensureExclusiveUnsafe a) 0 init
+  loop a.ensureExclusive 0 init
 where
   @[specialize] loop (a : Float32Array) (k : USize) (b : β) : Float32Array × β :=
     if k < len then
@@ -2434,7 +2477,7 @@ private unsafe def foldInPlaceThenImpl {β : Type v} {γ : Type w} (a : Float32A
     (start len : USize) (init : β)
     (f : (k : USize) → k.toNat < len.toNat → Float32 → β → Float32 × β)
     (g : Float32Array → β → γ) (_ : start.toNat + len.toNat ≤ a.size) : γ :=
-  loop (ensureExclusiveUnsafe a) 0 init
+  loop a.ensureExclusive 0 init
 where
   @[specialize] loop (a : Float32Array) (k : USize) (b : β) : γ :=
     if k < len then
@@ -2603,7 +2646,7 @@ private unsafe def reverseImpl (s : Float32Array.Slice) : Float32Array.Slice :=
   match s with
   | ⟨⟨a, start, stop, h, _⟩⟩ =>
     if start < stop then
-      ⟨⟨loop (ensureExclusiveUnsafe a) start.toUSize (stop.toUSize - 1), start, stop, h, lcProof⟩⟩
+      ⟨⟨loop a.ensureExclusive start.toUSize (stop.toUSize - 1), start, stop, h, lcProof⟩⟩
     else
       s
 where
@@ -2777,7 +2820,7 @@ private unsafe def foldrInPlaceImpl {β : Type v} (s : Float32Array.Slice) (init
   | ⟨⟨a, start, stop, h, _⟩⟩ =>
     foldrInPlaceImpl.loop start.toUSize (fun k => f k lcProof)
       (fun a b => (⟨⟨a, start, stop, h, lcProof⟩⟩, b))
-      (ensureExclusiveUnsafe a) (stop - start).toUSize init
+      a.ensureExclusive (stop - start).toUSize init
 
 /--
 Replaces each element of the slice while threading an accumulator, like `foldlInPlace` but from
@@ -2855,7 +2898,7 @@ private unsafe def foldrInPlaceThenImpl {β : Type v} {γ : Type w} (s : Float32
   | ⟨⟨a, start, stop, h, _⟩⟩ =>
     foldrInPlaceImpl.loop start.toUSize (fun k => f k lcProof)
       (fun a b => g ⟨⟨a, start, stop, h, lcProof⟩⟩ b)
-      (ensureExclusiveUnsafe a) (stop - start).toUSize init
+      a.ensureExclusive (stop - start).toUSize init
 
 /--
 `foldrInPlace` followed by `g` on the new slice and the last accumulator, which the loop calls
