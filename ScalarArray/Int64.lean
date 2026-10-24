@@ -70,6 +70,10 @@ The size of `a` as a `USize`. Since `USize` can address all memory, no array has
 public def usize (a : @& Int64Array) : USize :=
   a.size.toUSize
 
+/-- `a.usize` is at most the size, so it bounds the indices of loops that stop at `a.usize`. -/
+public theorem toNat_usize_le (a : Int64Array) : a.usize.toNat ≤ a.size := by
+  simp [Nat.mod_le]
+
 @[extern c inline "((uint64_t*)lean_sarray_cptr(#1))[#2]", expose]
 public def uget (a : @& Int64Array) (i : USize) (h : i.toNat < a.size := by get_elem_tactic) :
     Int64 :=
@@ -130,11 +134,17 @@ public unsafe def mkImpl (a : Array Int64) : Int64Array :=
 
 attribute [implemented_by mkImpl] Int64Array.mk
 
-public unsafe def dataImpl (a : @& Int64Array) : Array Int64 :=
-  loop a.usize 0 (Array.replicate a.size default)
+public def dataImpl (a : @& Int64Array) : Array Int64 :=
+  loop a.usize a.toNat_usize_le 0 (Array.replicate a.size default) Array.size_replicate
 where
-  loop (sz i : USize) (r : Array Int64) : Array Int64 :=
-    if i < sz then loop sz (i + 1) (r.uset i (a.uget i lcProof) lcProof) else r
+  loop (sz : USize) (hsz : sz.toNat ≤ a.size) (i : USize) (r : Array Int64)
+      (hr : r.size = a.size) : Array Int64 :=
+    if h : i < sz then
+      have := toNat_lt_of_lt h hsz
+      loop sz hsz (i + 1) (r.uset i (a.uget i) (hr ▸ this)) (by simp [hr])
+    else r
+  termination_by sz.toNat - i.toNat
+  decreasing_by exact sub_toNat_add_one_lt h
 
 attribute [implemented_by dataImpl] data
 
@@ -462,13 +472,18 @@ public def ofList (l : List Int64) : Int64Array :=
 /-! ## Iteration -/
 
 @[specialize]
-private unsafe def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : β → Int64 → m β)
+private def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : β → Int64 → m β)
     (init : β) (a : @& Int64Array) (start := 0) (stop := a.size) : m β :=
   let stop := min stop a.size
-  if start < stop then loop stop.toUSize start.toUSize init else pure init
+  if start < stop then
+    loop stop.toUSize (by simp; have := Nat.mod_le stop USize.size; lia) start.toUSize init
+  else pure init
 where
-  @[specialize] loop (stop i : USize) (b : β) : m β :=
-    if i < stop then do loop stop (i + 1) (← f b (a.uget i lcProof)) else pure b
+  @[specialize] loop (stop : USize) (hstop : stop.toNat ≤ a.size) (i : USize) (b : β) : m β :=
+    if h : i < stop then do loop stop hstop (i + 1) (← f b (a.uget i (toNat_lt_of_lt h hstop)))
+    else pure b
+  termination_by stop.toNat - i.toNat
+  decreasing_by exact sub_toNat_add_one_lt h
 
 /--
 Folds a monadic function over the elements of `a` from index `start` up to, but not including,
@@ -480,12 +495,18 @@ public def foldlM {β : Type v} {m : Type v → Type w} [Monad m] (f : β → In
   a.data.foldlM f init start stop
 
 @[specialize]
-private unsafe def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : Int64 → β → m β)
+private def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : Int64 → β → m β)
     (init : β) (a : @& Int64Array) : m β :=
-  loop a.usize init
+  loop a.usize a.toNat_usize_le init
 where
-  @[specialize] loop (i : USize) (b : β) : m β :=
-    if 0 < i then do loop (i - 1) (← f (a.uget (i - 1) lcProof) b) else pure b
+  @[specialize] loop (i : USize) (hi : i.toNat ≤ a.size) (b : β) : m β :=
+    if h : 0 < i then
+      have := toNat_sub_one_of_lt h
+      have := USize.lt_iff_toNat_lt.1 h
+      do loop (i - 1) (by lia) (← f (a.uget (i - 1) (by simp at *; lia)) b)
+    else pure b
+  termination_by i.toNat
+  decreasing_by lia
 
 /-- Folds a monadic function over the elements of `a`, from last to first. -/
 @[implemented_by foldrMImpl, expose]
@@ -508,16 +529,18 @@ public def forM {m : Type v → Type w} [Monad m] (f : Int64 → m PUnit) (a : @
   a.foldlM (fun _ x => f x) ⟨⟩
 
 @[specialize]
-private unsafe def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Int64Array)
+private def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Int64Array)
     (init : β) (f : Int64 → β → m (ForInStep β)) : m β :=
-  loop a.usize 0 init
+  loop a.usize a.toNat_usize_le 0 init
 where
-  @[specialize] loop (stop i : USize) (b : β) : m β :=
-    if i < stop then do
-      match ← f (a.uget i lcProof) b with
+  @[specialize] loop (stop : USize) (hstop : stop.toNat ≤ a.size) (i : USize) (b : β) : m β :=
+    if h : i < stop then do
+      match ← f (a.uget i (toNat_lt_of_lt h hstop)) b with
       | .done b => pure b
-      | .yield b => loop stop (i + 1) b
+      | .yield b => loop stop hstop (i + 1) b
     else pure b
+  termination_by stop.toNat - i.toNat
+  decreasing_by exact sub_toNat_add_one_lt h
 
 @[implemented_by forInImpl, expose]
 public def forIn {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Int64Array) (init : β)
@@ -531,11 +554,14 @@ public instance [Monad m] : ForM m Int64Array Int64 where
   forM a f := a.forM f
 
 @[specialize]
-private unsafe def anyImpl (a : @& Int64Array) (p : Int64 → Bool) : Bool :=
-  loop a.usize 0
+private def anyImpl (a : @& Int64Array) (p : Int64 → Bool) : Bool :=
+  loop a.usize a.toNat_usize_le 0
 where
-  @[specialize] loop (stop i : USize) : Bool :=
-    if i < stop then p (a.uget i lcProof) || loop stop (i + 1) else false
+  @[specialize] loop (stop : USize) (hstop : stop.toNat ≤ a.size) (i : USize) : Bool :=
+    if h : i < stop then p (a.uget i (toNat_lt_of_lt h hstop)) || loop stop hstop (i + 1)
+    else false
+  termination_by stop.toNat - i.toNat
+  decreasing_by exact sub_toNat_add_one_lt h
 
 /-- Whether some element of `a` satisfies `p`. -/
 @[implemented_by anyImpl, expose]
@@ -543,11 +569,14 @@ public def any (a : @& Int64Array) (p : Int64 → Bool) : Bool :=
   a.data.any p
 
 @[specialize]
-private unsafe def allImpl (a : @& Int64Array) (p : Int64 → Bool) : Bool :=
-  loop a.usize 0
+private def allImpl (a : @& Int64Array) (p : Int64 → Bool) : Bool :=
+  loop a.usize a.toNat_usize_le 0
 where
-  @[specialize] loop (stop i : USize) : Bool :=
-    if i < stop then p (a.uget i lcProof) && loop stop (i + 1) else true
+  @[specialize] loop (stop : USize) (hstop : stop.toNat ≤ a.size) (i : USize) : Bool :=
+    if h : i < stop then p (a.uget i (toNat_lt_of_lt h hstop)) && loop stop hstop (i + 1)
+    else true
+  termination_by stop.toNat - i.toNat
+  decreasing_by exact sub_toNat_add_one_lt h
 
 /-- Whether every element of `a` satisfies `p`. -/
 @[implemented_by allImpl, expose]
@@ -643,6 +672,14 @@ public theorem start_le_stop (s : Int64Array.Slice) : s.start ≤ s.stop :=
 @[inherit_doc SliceData.stop_le_array_size]
 public theorem stop_le_array_size (s : Int64Array.Slice) : s.stop ≤ s.array.size :=
   s.internalRepresentation.stop_le_array_size
+
+/-- `s.stop.toUSize` bounds the indices of loops over the slice. -/
+private theorem toNat_toUSize_stop_le (s : Int64Array.Slice) :
+    s.stop.toUSize.toNat ≤ s.array.size := by
+  have := Nat.mod_le s.stop USize.size
+  have := s.stop_le_array_size
+  simp only [Nat.toUSize_eq, USize.toNat_ofNat']
+  lia
 
 public instance : Std.Slice.SliceSize Int64Array.SliceData where
   size s := s.internalRepresentation.stop - s.internalRepresentation.start
@@ -888,12 +925,18 @@ public def iter (a : Int64Array) : Std.Iter (α := Int64Array.SliceIterator) Int
 namespace Slice
 
 @[specialize]
-private unsafe def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m]
+private def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m]
     (f : Int64 → β → m β) (init : β) (s : Int64Array.Slice) : m β :=
-  loop s.array s.start.toUSize s.stop.toUSize init
+  loop s.array s.start.toUSize s.stop.toUSize s.toNat_toUSize_stop_le init
 where
-  @[specialize] loop (a : Int64Array) (start i : USize) (b : β) : m β :=
-    if start < i then do loop a start (i - 1) (← f (a.uget (i - 1) lcProof) b) else pure b
+  @[specialize] loop (a : Int64Array) (start i : USize) (hi : i.toNat ≤ a.size) (b : β) : m β :=
+    if h : start < i then
+      have := toNat_sub_one_of_lt h
+      have := USize.lt_iff_toNat_lt.1 h
+      do loop a start (i - 1) (by lia) (← f (a.uget (i - 1) (by lia)) b)
+    else pure b
+  termination_by i.toNat
+  decreasing_by lia
 
 /-- Folds a monadic function over the elements of `s`, from last to first. -/
 @[implemented_by foldrMImpl, expose]
@@ -917,16 +960,22 @@ public def forRevM {m : Type v → Type w} [Monad m] (f : Int64 → m PUnit)
   s.foldrM (fun x _ => f x) ⟨⟩
 
 @[specialize]
-private unsafe def findSomeRevMImpl {β : Type v} {m : Type v → Type w} [Monad m]
+private def findSomeRevMImpl {β : Type v} {m : Type v → Type w} [Monad m]
     (s : Int64Array.Slice) (f : Int64 → m (Option β)) : m (Option β) :=
-  loop s.array s.start.toUSize s.stop.toUSize
+  loop s.array s.start.toUSize s.stop.toUSize s.toNat_toUSize_stop_le
 where
-  @[specialize] loop (a : Int64Array) (start i : USize) : m (Option β) :=
-    if start < i then do
-      match ← f (a.uget (i - 1) lcProof) with
-      | some b => pure (some b)
-      | none => loop a start (i - 1)
+  @[specialize] loop (a : Int64Array) (start i : USize) (hi : i.toNat ≤ a.size) :
+      m (Option β) :=
+    if h : start < i then
+      have := toNat_sub_one_of_lt h
+      have := USize.lt_iff_toNat_lt.1 h
+      do
+        match ← f (a.uget (i - 1) (by lia)) with
+        | some b => pure (some b)
+        | none => loop a start (i - 1) (by lia)
     else pure none
+  termination_by i.toNat
+  decreasing_by lia
 
 /-- The result of the last element of `s` for which `f` returns `some`, searching from the end. -/
 @[implemented_by findSomeRevMImpl, expose]
@@ -981,12 +1030,33 @@ public def count (s : Int64Array.Slice) (p : Int64 → Bool) : Nat :=
 public instance : Membership Int64 Int64Array.Slice where
   mem s x := x ∈ s.copy
 
-private unsafe def beqImpl (s t : Int64Array.Slice) : Bool :=
-  s.size == t.size && loop s.array t.array s.stop.toUSize s.start.toUSize t.start.toUSize
+-- Compares the sizes as `USize`s, so that the loop knows that the indices into `t` stay in bounds.
+private def beqImpl (s t : Int64Array.Slice) : Bool :=
+  let stop := s.stop.toUSize
+  let i := s.start.toUSize
+  let tstop := t.stop.toUSize
+  let j := t.start.toUSize
+  if h : j ≤ tstop ∧ stop - i = tstop - j then
+    loop s.array t.array stop s.toNat_toUSize_stop_le i j (by
+      have : tstop.toNat ≤ t.array.size := t.toNat_toUSize_stop_le
+      have := USize.le_iff_toNat_le.1 h.1
+      have := congrArg USize.toNat h.2
+      rw [USize.toNat_sub_of_le _ _ h.1] at this
+      have := toNat_sub_le_toNat_sub stop i
+      lia)
+  else false
 where
-  loop (a b : Int64Array) (stop i j : USize) : Bool :=
-    if i < stop then a.uget i lcProof == b.uget j lcProof && loop a b stop (i + 1) (j + 1)
+  loop (a b : Int64Array) (stop : USize) (hstop : stop.toNat ≤ a.size) (i j : USize)
+      (hj : stop.toNat - i.toNat + j.toNat ≤ b.size) : Bool :=
+    if h : i < stop then
+      have := USize.lt_iff_toNat_lt.1 h
+      have := toNat_add_one_of_lt h
+      have := toNat_add_one_le j
+      a.uget i (toNat_lt_of_lt h hstop) == b.uget j (by lia) &&
+        loop a b stop hstop (i + 1) (j + 1) (by lia)
     else true
+  termination_by stop.toNat - i.toNat
+  decreasing_by exact sub_toNat_add_one_lt h
 
 /--
 Compares the elements of two slices with `==`: slices of different arrays, or at different offsets,

@@ -56,14 +56,15 @@ public instance : Hashable UInt16Array := ⟨hash⟩
 public theorem hash_eq_hash_data (a : UInt16Array) : Hashable.hash a = Hashable.hash a.data := by
   rfl
 """
-FLOAT_EQ_NEW = """private unsafe def beqImpl (a b : @& UInt16Array) : Bool :=
-  a.usize == b.usize && loop 0
+FLOAT_EQ_NEW = """private def beqImpl (a b : @& UInt16Array) : Bool :=
+  if h : a.usize = b.usize then loop a.usize a.toNat_usize_le (h ▸ b.toNat_usize_le) 0 else false
 where
-  loop (i : USize) : Bool :=
-    if h : i.toNat < a.size then
-      if h' : i.toNat < b.size then a.uget i h == b.uget i h' && loop (i + 1) else false
-    else
-      true
+  loop (stop : USize) (ha : stop.toNat ≤ a.size) (hb : stop.toNat ≤ b.size) (i : USize) : Bool :=
+    if h : i < stop then
+      a.uget i (toNat_lt_of_lt h ha) == b.uget i (toNat_lt_of_lt h hb) && loop stop ha hb (i + 1)
+    else true
+  termination_by stop.toNat - i.toNat
+  decreasing_by exact sub_toNat_add_one_lt h
 
 /--
 Compares the elements with `==`, like `Array`. Floating-point equality is not decidable equality:
