@@ -541,7 +541,7 @@ private def foldlMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : β �
     (init : β) (a : @& USizeArray) (start stop : Nat) : m β :=
   a.foldlM f init start stop
 
-@[specialize]
+@[inline]
 public def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : β → USize → m β)
     (init : β) (a : @& USizeArray) (start := 0) (stop := a.size) : m β :=
   if a.size < USize.size then
@@ -614,7 +614,7 @@ private def foldrMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : USiz
     (init : β) (a : @& USizeArray) : m β :=
   a.foldrM f init
 
-@[specialize]
+@[inline]
 public def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : USize → β → m β)
     (init : β) (a : @& USizeArray) : m β :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le init else foldrMSlow f init a
@@ -684,7 +684,7 @@ private def forInSlow {β : Type v} {m : Type v → Type w} [Monad m] (a : @& US
     (init : β) (f : USize → β → m (ForInStep β)) : m β :=
   a.forIn init f
 
-@[specialize]
+@[inline]
 public def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a : @& USizeArray)
     (init : β) (f : USize → β → m (ForInStep β)) : m β :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 init else forInSlow a init f
@@ -748,7 +748,7 @@ public def any (a : @& USizeArray) (p : USize → Bool) : Bool :=
 private def anySlow (a : @& USizeArray) (p : USize → Bool) : Bool :=
   a.any p
 
-@[specialize]
+@[inline]
 public def anyImpl (a : @& USizeArray) (p : USize → Bool) : Bool :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else anySlow a p
 where
@@ -793,7 +793,7 @@ public def all (a : @& USizeArray) (p : USize → Bool) : Bool :=
 private def allSlow (a : @& USizeArray) (p : USize → Bool) : Bool :=
   a.all p
 
-@[specialize]
+@[inline]
 public def allImpl (a : @& USizeArray) (p : USize → Bool) : Bool :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else allSlow a p
 where
@@ -1114,7 +1114,7 @@ public instance : Std.Iterators.Finite USizeArray.SliceIterator Id :=
 
 -- Each element goes through `lift`, like each step of the iterator in the default implementation,
 -- so the two agree for every lawful `lift`, which is what core's consumers pass.
-@[specialize]
+@[inline]
 private unsafe def SliceIterator.forInImpl {n : Type x → Type x'} [Monad n]
     (lift : (γ : Type) → (δ : Type x) → (γ → n δ) → Id γ → n δ) (γ : Type x)
     (Pl : USize → γ → ForInStep γ → Prop)
@@ -1183,7 +1183,7 @@ private def foldrMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : USiz
     (init : β) (s : USizeArray.Slice) : m β :=
   s.foldrM f init
 
-@[specialize]
+@[inline]
 public def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m]
     (f : USize → β → m β) (init : β) (s : USizeArray.Slice) : m β :=
   if s.array.size < USize.size then
@@ -1259,7 +1259,7 @@ private def findSomeRevMSlow {β : Type v} {m : Type v → Type w} [Monad m]
     (s : USizeArray.Slice) (f : USize → m (Option β)) : m (Option β) :=
   s.findSomeRevM? f
 
-@[specialize]
+@[inline]
 public def findSomeRevMImpl {β : Type v} {m : Type v → Type w} [Monad m]
     (s : USizeArray.Slice) (f : USize → m (Option β)) : m (Option β) :=
   if s.array.size < USize.size then
@@ -2318,7 +2318,7 @@ public theorem Slice.getElem_mem {s : USizeArray.Slice} {i : Nat} (h : i < s.siz
 
 /-! ## In-place folds -/
 
-@[specialize]
+@[inline]
 private unsafe def foldInPlaceImpl {β : Type v} (a : USizeArray) (start len : USize) (init : β)
     (f : (k : USize) → k.toNat < len.toNat → USize → β → USize × β)
     (_ : start.toNat + len.toNat ≤ a.size) : USizeArray × β :=
@@ -2386,7 +2386,7 @@ public theorem size_foldInPlace_loop {β : Type v} (len' : USize)
     (a.foldInPlace start len init f h).1.size = a.size :=
   size_foldInPlace_loop len f _ _ a h _ 0 init
 
-@[specialize]
+@[inline]
 private unsafe def foldInPlaceThenImpl {β : Type v} {γ : Type w} (a : USizeArray)
     (start len : USize) (init : β)
     (f : (k : USize) → k.toNat < len.toNat → USize → β → USize × β)
@@ -2656,7 +2656,7 @@ public def foldlInPlace.loop {β : Type v} (n : Nat)
     (s, b)
 termination_by n - k
 
-@[specialize]
+@[inline]
 private unsafe def foldlInPlaceImpl {β : Type v} (s : USizeArray.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → USize → β → USize × β) : USizeArray.Slice × β :=
   match s with
@@ -2727,7 +2727,7 @@ private unsafe def foldrInPlaceImpl.loop {β : Type v} {γ : Type w} (base : USi
   else
     g a b
 
-@[specialize]
+@[inline]
 private unsafe def foldrInPlaceImpl {β : Type v} (s : USizeArray.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → USize → β → USize × β) : USizeArray.Slice × β :=
   match s with
@@ -2776,7 +2776,7 @@ private theorem foldrInPlace_loop_props {β : Type v} (n : Nat)
     (s.foldrInPlace init f).1.size = s.size := by
   rw [size_eq, size_eq, start_foldrInPlace, stop_foldrInPlace]
 
-@[specialize]
+@[inline]
 private unsafe def foldlInPlaceThenImpl {β : Type v} {γ : Type w} (s : USizeArray.Slice)
     (init : β) (f : (k : USize) → k.toNat < s.size → USize → β → USize × β)
     (g : USizeArray.Slice → β → γ) : γ :=
@@ -2804,7 +2804,7 @@ public def foldlInPlaceThen {β : Type v} {γ : Type w} (s : USizeArray.Slice) (
     s.foldlInPlaceThen init f g = g (s.foldlInPlace init f).1 (s.foldlInPlace init f).2 :=
   rfl
 
-@[specialize]
+@[inline]
 private unsafe def foldrInPlaceThenImpl {β : Type v} {γ : Type w} (s : USizeArray.Slice)
     (init : β) (f : (k : USize) → k.toNat < s.size → USize → β → USize × β)
     (g : USizeArray.Slice → β → γ) : γ :=
