@@ -116,38 +116,50 @@ public def ensureExclusive (a : UInt64Array) : UInt64Array := a
 private def toUSizeChecked (n : Nat) : USize :=
   if n < USize.size >>> 1 then n.toUSize else panic! "out of memory"
 
--- Public, like `usetImpl`: the `never_extract` attribute of a private declaration is not visible to
--- other modules, which could then hoist a call on a closed array. `n > capacity ≥ size` in the
--- `else` branch, so the new capacity is `max n a.size`.
+/--
+The number of elements `a` has room for before it must be reallocated. Public only so that `push`,
+`ensureCapacity` and `ensureExclusiveWithCapacity` can be inlined into code in other modules.
+-/
+@[extern "lean_sarray_capacity"]
+public unsafe def capacityUnsafe (a : @& UInt64Array) : USize := a.usize
+
+/--
+`ensureCapacity` and `ensureExclusiveWithCapacity` when `a` lacks room for `n` elements: copies `a`
+with room for exactly `max n a.size` elements. Out of line so that inlined call sites stay small.
+Public only so that those functions can be inlined into code in other modules.
+-/
+-- `never_extract`: on a closed array, a hoisted copy would be a shared constant, so the writes that
+-- follow would copy it again.
 @[never_extract]
-public unsafe def ensureCapacityImpl (a : UInt64Array) (n : Nat) : UInt64Array :=
+public unsafe def ensureCapacityGrowUnsafe (a : UInt64Array) (n : Nat) : UInt64Array :=
   let s : ScalarArray := unsafeCast a
-  if n ≤ s.capacity.toNat then a
-  else unsafeCast (s.copyWithCapacity (toUSizeChecked n) lcProof)
+  unsafeCast (s.copyWithCapacity (toUSizeChecked (max n s.size.toNat)) lcProof)
+
+-- Inline, and made of public inline externs, so that the common path compiles to an inline capacity
+-- check in other modules.
+@[inline]
+public unsafe def ensureCapacityImpl (a : UInt64Array) (n : Nat) : UInt64Array :=
+  if n ≤ (capacityUnsafe a).toNat then a else ensureCapacityGrowUnsafe a n
 
 /--
 Returns `a` itself when it has room for `n` elements, and otherwise a copy with room for exactly
 `max n a.size` elements. Logically this is the identity. Unlike `ensureExclusiveWithCapacity`, it
 does not copy `a` just because it is shared.
 -/
--- `never_extract`, here and on the implementation, which is what compiled code calls: on a closed
--- array, a hoisted copy would be a shared constant, so the writes that follow would copy it again.
 @[never_extract, implemented_by ensureCapacityImpl, expose]
 public def ensureCapacity (a : UInt64Array) (n : Nat) : UInt64Array := a
 
--- Public, for the same reason as `ensureCapacityImpl`.
-@[never_extract]
+-- Inline, like `ensureCapacityImpl`: one capacity check, then one exclusivity check. The copy made
+-- when `a` lacks room is exclusive, so `a` is copied at most once.
+@[inline]
 public unsafe def ensureExclusiveWithCapacityImpl (a : UInt64Array) (n : Nat) : UInt64Array :=
-  let s : ScalarArray := unsafeCast a
-  if isExclusiveUnsafe a && n ≤ s.capacity.toNat then a
-  else unsafeCast (s.copyWithCapacity (toUSizeChecked (max n s.size.toNat)) lcProof)
+  if n ≤ (capacityUnsafe a).toNat then a.ensureExclusive else ensureCapacityGrowUnsafe a n
 
 /--
 Returns `a` itself when it is not shared and has room for `n` elements, and otherwise a single copy
 with room for exactly `max n a.size` elements. Logically this is the identity. It is useful before a
 run of in-place writes and pushes, so that none of them copies.
 -/
--- `never_extract`, for the same reason as `ensureCapacity`.
 @[never_extract, implemented_by ensureExclusiveWithCapacityImpl, expose]
 public def ensureExclusiveWithCapacity (a : UInt64Array) (n : Nat) : UInt64Array := a
 
@@ -295,13 +307,6 @@ public instance : GetElem UInt64Array Nat UInt64 fun a i => i < a.size where
 
 public instance : GetElem UInt64Array USize UInt64 fun a i => i.toNat < a.size where
   getElem a i h := a.uget i h
-
-/--
-The number of elements `a` has room for before it must be reallocated. Public only so that `push`
-can be inlined into code in other modules.
--/
-@[extern "lean_sarray_capacity"]
-public unsafe def capacityUnsafe (a : @& UInt64Array) : USize := a.usize
 
 /--
 Sets the size of `a` to `_n`. Only valid when `a` is exclusive and `_n` is at most its capacity;
