@@ -43,8 +43,8 @@ public def decEq (a b : @& UInt16Array) : Decidable (a = b) :=
 
 public instance : DecidableEq UInt16Array := decEq
 
-private unsafe def hashImpl (a : @& UInt16Array) : UInt64 :=
-  foldlMImpl (m := Id) (fun r x => mixHash r (Hashable.hash x)) 7 a
+private def hashImpl (a : @& UInt16Array) : UInt64 :=
+  a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
 
 /-- The same hash as `a.data`. -/
 @[implemented_by hashImpl]

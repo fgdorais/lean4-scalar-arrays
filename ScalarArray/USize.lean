@@ -108,7 +108,7 @@ into code in other modules.
 @[never_extract, extern "lean_sarray_ensure_exclusive"]
 public unsafe def ensureExclusiveUnsafe (a : USizeArray) : USizeArray := a
 
-private unsafe def toUSizeChecked (n : Nat) : USize :=
+private def toUSizeChecked (n : Nat) : USize :=
   if n < USize.size >>> 1 then n.toUSize else panic! "out of memory"
 
 /-- A new array of size `size` with room for `capacity` elements. Requires `size ≤ capacity`. -/
@@ -194,13 +194,10 @@ public def get! (a : @& USizeArray) (i : @& Nat) : USize :=
 public def getD (a : @& USizeArray) (i : @& Nat) (v₀ : USize) : USize :=
   if h : i < a.size then a.get i h else v₀
 
-private unsafe def setBangImpl (a : USizeArray) (i : Nat) (v : USize) : USizeArray :=
-  if h : i < a.size then setImpl a i v h else a
-
 /-- Replaces the element at index `i`. If `i` is out of bounds, the array is returned unmodified. -/
-@[implemented_by setBangImpl, expose]
+@[expose]
 public def set! (a : USizeArray) (i : Nat) (v : USize) : USizeArray :=
-  mk (a.data.set! i v)
+  if h : i < a.size then a.set i v h else a
 
 public instance : GetElem USizeArray Nat USize fun a i => i < a.size where
   getElem a i h := a.get i h
@@ -450,7 +447,7 @@ where
 public def ofFn {n : Nat} (f : Fin n → USize) : USizeArray :=
   mk (Array.ofFn f)
 
-private unsafe def ofListImpl (l : List USize) : USizeArray :=
+private def ofListImpl (l : List USize) : USizeArray :=
   loop l (emptyWithCapacity l.length)
 where
   loop : List USize → USizeArray → USizeArray
@@ -557,8 +554,8 @@ where
 public def all (a : @& USizeArray) (p : USize → Bool) : Bool :=
   a.data.all p
 
-private unsafe def containsImpl (a : @& USizeArray) (v : USize) : Bool :=
-  anyImpl a (v == ·)
+private def containsImpl (a : @& USizeArray) (v : USize) : Bool :=
+  a.any (v == ·)
 
 /-- Whether some element of `a` is `==` to `v`. -/
 @[implemented_by containsImpl, expose]
@@ -581,8 +578,8 @@ public def decEq (a b : @& USizeArray) : Decidable (a = b) :=
 
 public instance : DecidableEq USizeArray := decEq
 
-private unsafe def hashImpl (a : @& USizeArray) : UInt64 :=
-  foldlMImpl (m := Id) (fun r x => mixHash r (Hashable.hash x)) 7 a
+private def hashImpl (a : @& USizeArray) : UInt64 :=
+  a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
 
 /-- The same hash as `a.data`. -/
 @[implemented_by hashImpl]
@@ -1168,7 +1165,8 @@ public theorem size_eq_zero_iff {a : USizeArray} : a.size = 0 ↔ a = empty := b
 
 @[simp] public theorem data_set! (a : USizeArray) (i : Nat) (v : USize) :
     (a.set! i v).data = a.data.set! i v := by
-  cases a; rfl
+  simp only [set!, Array.set!_eq_setIfInBounds, Array.setIfInBounds, size_eq_data_size]
+  split <;> rfl
 
 @[simp] public theorem size_set! (a : USizeArray) (i : Nat) (v : USize) :
     (a.set! i v).size = a.size := by

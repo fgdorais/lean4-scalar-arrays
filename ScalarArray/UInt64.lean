@@ -108,7 +108,7 @@ into code in other modules.
 @[never_extract, extern "lean_sarray_ensure_exclusive"]
 public unsafe def ensureExclusiveUnsafe (a : UInt64Array) : UInt64Array := a
 
-private unsafe def toUSizeChecked (n : Nat) : USize :=
+private def toUSizeChecked (n : Nat) : USize :=
   if n < USize.size >>> 1 then n.toUSize else panic! "out of memory"
 
 /-- A new array of size `size` with room for `capacity` elements. Requires `size ≤ capacity`. -/
@@ -194,13 +194,10 @@ public def get! (a : @& UInt64Array) (i : @& Nat) : UInt64 :=
 public def getD (a : @& UInt64Array) (i : @& Nat) (v₀ : UInt64) : UInt64 :=
   if h : i < a.size then a.get i h else v₀
 
-private unsafe def setBangImpl (a : UInt64Array) (i : Nat) (v : UInt64) : UInt64Array :=
-  if h : i < a.size then setImpl a i v h else a
-
 /-- Replaces the element at index `i`. If `i` is out of bounds, the array is returned unmodified. -/
-@[implemented_by setBangImpl, expose]
+@[expose]
 public def set! (a : UInt64Array) (i : Nat) (v : UInt64) : UInt64Array :=
-  mk (a.data.set! i v)
+  if h : i < a.size then a.set i v h else a
 
 public instance : GetElem UInt64Array Nat UInt64 fun a i => i < a.size where
   getElem a i h := a.get i h
@@ -450,7 +447,7 @@ where
 public def ofFn {n : Nat} (f : Fin n → UInt64) : UInt64Array :=
   mk (Array.ofFn f)
 
-private unsafe def ofListImpl (l : List UInt64) : UInt64Array :=
+private def ofListImpl (l : List UInt64) : UInt64Array :=
   loop l (emptyWithCapacity l.length)
 where
   loop : List UInt64 → UInt64Array → UInt64Array
@@ -557,8 +554,8 @@ where
 public def all (a : @& UInt64Array) (p : UInt64 → Bool) : Bool :=
   a.data.all p
 
-private unsafe def containsImpl (a : @& UInt64Array) (v : UInt64) : Bool :=
-  anyImpl a (v == ·)
+private def containsImpl (a : @& UInt64Array) (v : UInt64) : Bool :=
+  a.any (v == ·)
 
 /-- Whether some element of `a` is `==` to `v`. -/
 @[implemented_by containsImpl, expose]
@@ -581,8 +578,8 @@ public def decEq (a b : @& UInt64Array) : Decidable (a = b) :=
 
 public instance : DecidableEq UInt64Array := decEq
 
-private unsafe def hashImpl (a : @& UInt64Array) : UInt64 :=
-  foldlMImpl (m := Id) (fun r x => mixHash r (Hashable.hash x)) 7 a
+private def hashImpl (a : @& UInt64Array) : UInt64 :=
+  a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
 
 /-- The same hash as `a.data`. -/
 @[implemented_by hashImpl]
@@ -1168,7 +1165,8 @@ public theorem size_eq_zero_iff {a : UInt64Array} : a.size = 0 ↔ a = empty := 
 
 @[simp] public theorem data_set! (a : UInt64Array) (i : Nat) (v : UInt64) :
     (a.set! i v).data = a.data.set! i v := by
-  cases a; rfl
+  simp only [set!, Array.set!_eq_setIfInBounds, Array.setIfInBounds, size_eq_data_size]
+  split <;> rfl
 
 @[simp] public theorem size_set! (a : UInt64Array) (i : Nat) (v : UInt64) :
     (a.set! i v).size = a.size := by

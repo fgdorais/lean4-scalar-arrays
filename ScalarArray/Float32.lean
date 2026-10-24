@@ -108,7 +108,7 @@ into code in other modules.
 @[never_extract, extern "lean_sarray_ensure_exclusive"]
 public unsafe def ensureExclusiveUnsafe (a : Float32Array) : Float32Array := a
 
-private unsafe def toUSizeChecked (n : Nat) : USize :=
+private def toUSizeChecked (n : Nat) : USize :=
   if n < USize.size >>> 1 then n.toUSize else panic! "out of memory"
 
 /-- A new array of size `size` with room for `capacity` elements. Requires `size ≤ capacity`. -/
@@ -194,13 +194,10 @@ public def get! (a : @& Float32Array) (i : @& Nat) : Float32 :=
 public def getD (a : @& Float32Array) (i : @& Nat) (v₀ : Float32) : Float32 :=
   if h : i < a.size then a.get i h else v₀
 
-private unsafe def setBangImpl (a : Float32Array) (i : Nat) (v : Float32) : Float32Array :=
-  if h : i < a.size then setImpl a i v h else a
-
 /-- Replaces the element at index `i`. If `i` is out of bounds, the array is returned unmodified. -/
-@[implemented_by setBangImpl, expose]
+@[expose]
 public def set! (a : Float32Array) (i : Nat) (v : Float32) : Float32Array :=
-  mk (a.data.set! i v)
+  if h : i < a.size then a.set i v h else a
 
 public instance : GetElem Float32Array Nat Float32 fun a i => i < a.size where
   getElem a i h := a.get i h
@@ -450,7 +447,7 @@ where
 public def ofFn {n : Nat} (f : Fin n → Float32) : Float32Array :=
   mk (Array.ofFn f)
 
-private unsafe def ofListImpl (l : List Float32) : Float32Array :=
+private def ofListImpl (l : List Float32) : Float32Array :=
   loop l (emptyWithCapacity l.length)
 where
   loop : List Float32 → Float32Array → Float32Array
@@ -557,8 +554,8 @@ where
 public def all (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
   a.data.all p
 
-private unsafe def containsImpl (a : @& Float32Array) (v : Float32) : Bool :=
-  anyImpl a (v == ·)
+private def containsImpl (a : @& Float32Array) (v : Float32) : Bool :=
+  a.any (v == ·)
 
 /-- Whether some element of `a` is `==` to `v`. -/
 @[implemented_by containsImpl, expose]
@@ -1167,7 +1164,8 @@ public theorem size_eq_zero_iff {a : Float32Array} : a.size = 0 ↔ a = empty :=
 
 @[simp] public theorem data_set! (a : Float32Array) (i : Nat) (v : Float32) :
     (a.set! i v).data = a.data.set! i v := by
-  cases a; rfl
+  simp only [set!, Array.set!_eq_setIfInBounds, Array.setIfInBounds, size_eq_data_size]
+  split <;> rfl
 
 @[simp] public theorem size_set! (a : Float32Array) (i : Nat) (v : Float32) :
     (a.set! i v).size = a.size := by
