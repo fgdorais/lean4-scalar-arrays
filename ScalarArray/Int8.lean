@@ -40,8 +40,9 @@ two. `cases` and `induction` split a `Int8Array` as `mk data`.
 
 namespace Int8Array
 
--- `noinline` on `mk` and `data`: their `implemented_by` attributes come later, and the compiler would
--- otherwise inline their bodies, which treat the scalar array as an `Array`.
+-- `noinline` on `mk` and `data`: the `implemented_by` attribute of `mk` and the `csimp` theorem of
+-- `data` come later, and the compiler would otherwise inline their bodies, which treat the scalar
+-- array as an `Array`.
 
 /-- The `Int8Array` whose elements are `data`. -/
 @[noinline, expose]
@@ -84,7 +85,7 @@ public def get (a : @& Int8Array) (i : @& Nat) (h : i < a.size := by get_elem_ta
     Int8 :=
   a.data[i]
 
--- Public, like `mkImpl`, `dataImpl`, `usetImpl`, `setImpl` and `pushImpl` below: a private
+-- Public, like `mkImpl`, `usetImpl`, `setImpl` and `pushImpl` below: a private
 -- `implemented_by` target attached with a separate `attribute` command is not visible to other
 -- modules, so code there that uses `get`, `mk`, `data`, `uset` or `set` would fail to compile.
 @[inline]
@@ -134,8 +135,26 @@ public unsafe def mkImpl (a : Array Int8) : Int8Array :=
 
 attribute [implemented_by mkImpl] Int8Array.mk
 
+private theorem size_data' (a : Int8Array) : a.data.size = a.size := rfl
+
+/-- `n.toUSize` is `n` for every `n` up to the size of an array with fewer than `USize.size`
+elements. -/
+private theorem toNat_toUSize_of_le {a : Int8Array} (hsize : a.size < USize.size) {n : Nat}
+    (h : n ≤ a.size) : n.toUSize.toNat = n := by
+  simp only [Nat.toUSize_eq, USize.toNat_ofNat']
+  exact Nat.mod_eq_of_lt (by lia)
+
+-- `dataImpl` and the other `Impl` functions below are proved equal to their specifications by
+-- `csimp` theorems, which make the compiler call them instead. A `csimp` theorem must be public,
+-- and so must the functions it names. The loops index with `USize`, so the proofs need
+-- `a.size < USize.size`: the `else` branches are never taken, since no array in memory has
+-- `USize.size` elements. Elsewhere they call a `Slow` function that is neither inlined nor
+-- specialized, so that the dead branch stays a single call; here the compiled body of `data` would
+-- treat the scalar array as an `Array`, so the `else` branch reads the elements with `get` instead.
 public def dataImpl (a : @& Int8Array) : Array Int8 :=
-  loop a.usize a.toNat_usize_le 0 (Array.replicate a.size default) Array.size_replicate
+  if a.size < USize.size then
+    loop a.usize a.toNat_usize_le 0 (Array.replicate a.size default) Array.size_replicate
+  else Array.ofFn fun i : Fin a.size => a.get i i.2
 where
   loop (sz : USize) (hsz : sz.toNat ≤ a.size) (i : USize) (r : Array Int8)
       (hr : r.size = a.size) : Array Int8 :=
@@ -146,9 +165,36 @@ where
   termination_by sz.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
 
-attribute [implemented_by dataImpl] data
+private theorem dataImpl_loop (a : Int8Array) (sz : USize) (hsz : sz.toNat ≤ a.size)
+    (hsz' : a.size ≤ sz.toNat) (i : USize) (r : Array Int8) (hr : r.size = a.size)
+    (hi : i.toNat ≤ sz.toNat) (h : ∀ (k : Nat) (hk : k < i.toNat), r[k]'(by lia) = a.data[k]'(by
+      rw [size_data']; lia)) :
+    dataImpl.loop a sz hsz i r hr = a.data := by
+  fun_induction dataImpl.loop a sz hsz i r hr with
+  | case1 i r hr hi' _ ih =>
+    have := USize.lt_iff_toNat_lt.1 hi'
+    apply ih (by rw [toNat_add_one_of_lt hi']; lia)
+    intro k hk
+    rw [toNat_add_one_of_lt hi'] at hk
+    simp only [Array.uset, uget, Array.uget, Array.getElem_set]
+    split
+    · subst k; rfl
+    · exact h k (by lia)
+  | case2 i r hr hi' =>
+    have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hi')
+    exact Array.ext (by rw [hr]; rfl) fun k hk _ => h k (by lia)
 
--- After the `implemented_by` attributes of `mk` and `data`, so that the compiled code uses them.
+@[csimp] public theorem data_eq_dataImpl : @data = @dataImpl := by
+  funext a
+  simp only [dataImpl]
+  split
+  · rename_i hsize
+    have := toNat_toUSize_of_le hsize (Nat.le_refl _)
+    exact (dataImpl_loop a _ _ (by simp only [usize]; lia) 0 _ _ (by simp) (by simp)).symm
+  · exact (Array.ofFn_getElem (xs := a.data)).symm
+
+-- After the `implemented_by` attribute of `mk` and the `csimp` theorem of `data`, so that the
+-- compiled code uses them.
 /-- Case analysis on a `Int8Array` as `mk data`. It is the default for `cases` and `induction`. -/
 @[elab_as_elim, cases_eliminator, induction_eliminator]
 public def casesMk {motive : Int8Array → Sort u} (mk : (data : Array Int8) → motive (mk data))
@@ -457,27 +503,53 @@ where
 public def ofFn {n : Nat} (f : Fin n → Int8) : Int8Array :=
   mk (Array.ofFn f)
 
-private def ofListImpl (l : List Int8) : Int8Array :=
+/-- The array with the elements of `l`. -/
+@[expose]
+public def ofList (l : List Int8) : Int8Array :=
+  mk l.toArray
+
+public def ofListImpl (l : List Int8) : Int8Array :=
   loop l (emptyWithCapacity l.length)
 where
   loop : List Int8 → Int8Array → Int8Array
     | [], r => r
     | x :: xs, r => loop xs (r.push x)
 
-/-- The array with the elements of `l`. -/
-@[implemented_by ofListImpl, expose]
-public def ofList (l : List Int8) : Int8Array :=
-  mk l.toArray
+private theorem ofListImpl_loop (l : List Int8) (r : Int8Array) :
+    ofListImpl.loop l r = mk (r.data ++ l.toArray) := by
+  induction l generalizing r with
+  | nil => simp [ofListImpl.loop]
+  | cons x xs ih => simp [ofListImpl.loop, ih, push]
+
+@[csimp] public theorem ofList_eq_ofListImpl : @ofList = @ofListImpl := by
+  funext l
+  simp [ofList, ofListImpl, ofListImpl_loop, emptyWithCapacity]
 
 /-! ## Iteration -/
 
+/--
+Folds a monadic function over the elements of `a` from index `start` up to, but not including,
+`stop`, from first to last.
+-/
+@[expose]
+public def foldlM {β : Type v} {m : Type v → Type w} [Monad m] (f : β → Int8 → m β) (init : β)
+    (a : @& Int8Array) (start := 0) (stop := a.size) : m β :=
+  a.data.foldlM f init start stop
+
+@[noinline, nospecialize]
+private def foldlMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : β → Int8 → m β)
+    (init : β) (a : @& Int8Array) (start stop : Nat) : m β :=
+  a.foldlM f init start stop
+
 @[specialize]
-private def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : β → Int8 → m β)
+public def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : β → Int8 → m β)
     (init : β) (a : @& Int8Array) (start := 0) (stop := a.size) : m β :=
-  let stop := min stop a.size
-  if start < stop then
-    loop stop.toUSize (by simp; have := Nat.mod_le stop USize.size; lia) start.toUSize init
-  else pure init
+  if a.size < USize.size then
+    let stop := min stop a.size
+    if start < stop then
+      loop stop.toUSize (by simp; have := Nat.mod_le stop USize.size; lia) start.toUSize init
+    else pure init
+  else foldlMSlow f init a start stop
 where
   @[specialize] loop (stop : USize) (hstop : stop.toNat ≤ a.size) (i : USize) (b : β) : m β :=
     if h : i < stop then do loop stop hstop (i + 1) (← f b (a.uget i (toNat_lt_of_lt h hstop)))
@@ -485,19 +557,67 @@ where
   termination_by stop.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
 
-/--
-Folds a monadic function over the elements of `a` from index `start` up to, but not including,
-`stop`, from first to last.
--/
-@[implemented_by foldlMImpl, expose]
-public def foldlM {β : Type v} {m : Type v → Type w} [Monad m] (f : β → Int8 → m β) (init : β)
-    (a : @& Int8Array) (start := 0) (stop := a.size) : m β :=
-  a.data.foldlM f init start stop
+private theorem foldlMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
+    (f : β → Int8 → m β) (a : Int8Array) (stop : USize) (hstop : stop.toNat ≤ a.size)
+    (h : stop.toNat ≤ a.data.size) (i : USize) (b : β) (k : Nat)
+    (hk : stop.toNat - i.toNat ≤ k) :
+    foldlMImpl.loop f a stop hstop i b = Array.foldlM.loop f a.data stop.toNat h k i.toNat b := by
+  fun_induction foldlMImpl.loop f a stop hstop i b generalizing k with
+  | case1 i b hi ih =>
+    have := USize.lt_iff_toNat_lt.1 hi
+    obtain ⟨k, rfl⟩ : ∃ k', k = k' + 1 := ⟨k - 1, by lia⟩
+    rw [Array.foldlM.loop.eq_1, dite_eq_left this]
+    simp only [uget, Array.uget]
+    congr 1; funext b
+    rw [ih b k (by rw [toNat_add_one_of_lt hi]; lia), toNat_add_one_of_lt hi]
+  | case2 i b hi =>
+    have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hi)
+    rw [Array.foldlM.loop.eq_1, dite_eq_right (by lia)]
+
+private theorem foldlMImpl_eq {β : Type v} {m : Type v → Type w} [Monad m]
+    (f : β → Int8 → m β) (init : β) (a : Int8Array) (start stop : Nat)
+    (hsize : a.size < USize.size) (h : stop ≤ a.data.size) (hstop : stop.toUSize.toNat ≤ a.size) :
+    (if start < stop then foldlMImpl.loop f a stop.toUSize hstop start.toUSize init
+      else pure init) = Array.foldlM.loop f a.data stop h (stop - start) start init := by
+  have := size_data' a
+  split <;> rename_i hlt
+  · rw [foldlMImpl_loop (h := by rwa [toNat_toUSize_of_le hsize (by lia)]) (k := stop - start)
+      (hk := by
+        rw [toNat_toUSize_of_le hsize (by lia), toNat_toUSize_of_le hsize (by lia)]
+        exact Nat.le_refl _)]
+    simp only [toNat_toUSize_of_le hsize (show stop ≤ a.size by lia),
+      toNat_toUSize_of_le hsize (show start ≤ a.size by lia)]
+  · rw [Array.foldlM.loop.eq_1, dite_eq_right hlt]
+
+@[csimp] public theorem foldlM_eq_foldlMImpl : @foldlM = @foldlMImpl := by
+  funext β m _ f init a start stop
+  simp only [foldlMImpl]
+  split
+  · rename_i hsize
+    have := size_data' a
+    simp only [foldlM, Array.foldlM]
+    split <;> rename_i h
+    · simp only [Nat.min_eq_left (show stop ≤ a.size by lia)]
+      exact (foldlMImpl_eq (hsize := hsize) ..).symm
+    · simp only [Nat.min_eq_right (show a.size ≤ stop by lia)]
+      exact (foldlMImpl_eq (hsize := hsize) ..).symm
+  · rfl
+
+/-- Folds a monadic function over the elements of `a`, from last to first. -/
+@[expose]
+public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : Int8 → β → m β) (init : β)
+    (a : @& Int8Array) : m β :=
+  a.data.foldrM f init
+
+@[noinline, nospecialize]
+private def foldrMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : Int8 → β → m β)
+    (init : β) (a : @& Int8Array) : m β :=
+  a.foldrM f init
 
 @[specialize]
-private def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : Int8 → β → m β)
+public def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : Int8 → β → m β)
     (init : β) (a : @& Int8Array) : m β :=
-  loop a.usize a.toNat_usize_le init
+  if a.size < USize.size then loop a.usize a.toNat_usize_le init else foldrMSlow f init a
 where
   @[specialize] loop (i : USize) (hi : i.toNat ≤ a.size) (b : β) : m β :=
     if h : 0 < i then
@@ -508,11 +628,37 @@ where
   termination_by i.toNat
   decreasing_by lia
 
-/-- Folds a monadic function over the elements of `a`, from last to first. -/
-@[implemented_by foldrMImpl, expose]
-public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : Int8 → β → m β) (init : β)
-    (a : @& Int8Array) : m β :=
-  a.data.foldrM f init
+private theorem foldrMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
+    (f : Int8 → β → m β) (a : Int8Array) (i : USize) (hi : i.toNat ≤ a.size)
+    (h : i.toNat ≤ a.data.size) (b : β) :
+    foldrMImpl.loop f a i hi b = Array.foldrM.fold f a.data 0 i.toNat h b := by
+  fun_induction foldrMImpl.loop f a i hi b with
+  | case1 i hi b hpos _ _ ih =>
+    have := USize.lt_iff_toNat_lt.1 hpos
+    obtain ⟨k, hk⟩ : ∃ k, i.toNat = k + 1 := ⟨i.toNat - 1, by simp at this; lia⟩
+    simp only [hk, Array.foldrM.fold.eq_2, Nat.succ_eq_add_one, Nat.add_one_ne_zero, beq_iff_eq,
+      ite_false, uget, Array.uget, toNat_sub_one_of_lt hpos]
+    congr 1; funext b
+    rw [ih b (by rw [toNat_sub_one_of_lt hpos]; lia)]
+    simp only [toNat_sub_one_of_lt hpos, hk, Nat.add_sub_cancel]
+  | case2 i hi b hpos =>
+    have : i.toNat = 0 := by simp [USize.lt_iff_toNat_lt] at hpos; lia
+    simp only [this, Array.foldrM.fold.eq_1, beq_self_eq_true, ite_self]
+
+@[csimp] public theorem foldrM_eq_foldrMImpl : @foldrM = @foldrMImpl := by
+  funext β m _ f init a
+  simp only [foldrMImpl]
+  split
+  · rename_i hsize
+    have h := toNat_toUSize_of_le hsize (Nat.le_refl _)
+    simp only [usize] at *
+    rw [foldrMImpl_loop (h := by rw [h]; exact Nat.le_refl _)]
+    simp only [foldrM, Array.foldrM, Nat.le_refl, dite_true, h]
+    split
+    · rfl
+    · have : a.size = 0 := by rw [← size_data']; lia
+      simp only [this, Array.foldrM.fold.eq_1, beq_self_eq_true, ite_true]
+  · rfl
 
 @[inline, expose]
 public def foldl {β : Type v} (f : β → Int8 → β) (init : β) (a : @& Int8Array) (start := 0)
@@ -528,10 +674,20 @@ public def forM {m : Type v → Type w} [Monad m] (f : Int8 → m PUnit) (a : @&
     m PUnit :=
   a.foldlM (fun _ x => f x) ⟨⟩
 
-@[specialize]
-private def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Int8Array)
+@[expose]
+public def forIn {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Int8Array) (init : β)
+    (f : Int8 → β → m (ForInStep β)) : m β :=
+  ForIn.forIn a.data init f
+
+@[noinline, nospecialize]
+private def forInSlow {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Int8Array)
     (init : β) (f : Int8 → β → m (ForInStep β)) : m β :=
-  loop a.usize a.toNat_usize_le 0 init
+  a.forIn init f
+
+@[specialize]
+public def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Int8Array)
+    (init : β) (f : Int8 → β → m (ForInStep β)) : m β :=
+  if a.size < USize.size then loop a.usize a.toNat_usize_le 0 init else forInSlow a init f
 where
   @[specialize] loop (stop : USize) (hstop : stop.toNat ≤ a.size) (i : USize) (b : β) : m β :=
     if h : i < stop then do
@@ -542,10 +698,40 @@ where
   termination_by stop.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
 
-@[implemented_by forInImpl, expose]
-public def forIn {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Int8Array) (init : β)
-    (f : Int8 → β → m (ForInStep β)) : m β :=
-  ForIn.forIn a.data init f
+private theorem forInImpl_loop {β : Type v} {m : Type v → Type w} [Monad m] (a : Int8Array)
+    (f : Int8 → β → m (ForInStep β)) (stop : USize) (hstop : stop.toNat ≤ a.size)
+    (hsize : a.size ≤ stop.toNat) (i : USize) (b : β) (hi : i.toNat ≤ a.data.size)
+    (h : a.data.size - i.toNat ≤ a.data.size) :
+    forInImpl.loop a f stop hstop i b =
+      Array.forIn'.loop a.data (fun x _ b => f x b) (a.data.size - i.toNat) h b := by
+  fun_induction forInImpl.loop a f stop hstop i b with
+  | case1 i b hi' ih =>
+    have := USize.lt_iff_toNat_lt.1 hi'
+    have := size_data' a
+    obtain ⟨k, hk⟩ : ∃ k, a.data.size - i.toNat = k + 1 := ⟨a.data.size - i.toNat - 1, by lia⟩
+    simp only [hk, Array.forIn'.loop.eq_2, uget, Array.uget]
+    have : a.data.size - 1 - k = i.toNat := by lia
+    simp only [this]
+    congr 1; funext r
+    split
+    · rfl
+    · rw [ih _ (by rw [toNat_add_one_of_lt hi']; lia) (by lia)]
+      simp only [toNat_add_one_of_lt hi']
+      congr 1; lia
+  | case2 i b hi' =>
+    have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hi')
+    have : a.data.size - i.toNat = 0 := by rw [size_data']; lia
+    simp only [this, Array.forIn'.loop.eq_1]
+
+@[csimp] public theorem forIn_eq_forInImpl : @forIn = @forInImpl := by
+  funext β m _ a init f
+  simp only [forInImpl]
+  split
+  · rename_i hsize
+    have h := toNat_toUSize_of_le hsize (Nat.le_refl _)
+    rw [forInImpl_loop (hsize := by simp only [usize]; lia) (hi := by simp) (h := by simp)]
+    simp only [forIn, ForIn.forIn, ForIn'.forIn', Array.forIn', USize.toNat_zero, Nat.sub_zero]
+  · rfl
 
 public instance [Monad m] : ForIn m Int8Array Int8 where
   forIn a b f := Int8Array.forIn a b f
@@ -553,9 +739,18 @@ public instance [Monad m] : ForIn m Int8Array Int8 where
 public instance [Monad m] : ForM m Int8Array Int8 where
   forM a f := a.forM f
 
+/-- Whether some element of `a` satisfies `p`. -/
+@[expose]
+public def any (a : @& Int8Array) (p : Int8 → Bool) : Bool :=
+  a.data.any p
+
+@[noinline, nospecialize]
+private def anySlow (a : @& Int8Array) (p : Int8 → Bool) : Bool :=
+  a.any p
+
 @[specialize]
-private def anyImpl (a : @& Int8Array) (p : Int8 → Bool) : Bool :=
-  loop a.usize a.toNat_usize_le 0
+public def anyImpl (a : @& Int8Array) (p : Int8 → Bool) : Bool :=
+  if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else anySlow a p
 where
   @[specialize] loop (stop : USize) (hstop : stop.toNat ≤ a.size) (i : USize) : Bool :=
     if h : i < stop then p (a.uget i (toNat_lt_of_lt h hstop)) || loop stop hstop (i + 1)
@@ -563,14 +758,44 @@ where
   termination_by stop.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
 
-/-- Whether some element of `a` satisfies `p`. -/
-@[implemented_by anyImpl, expose]
-public def any (a : @& Int8Array) (p : Int8 → Bool) : Bool :=
-  a.data.any p
+private theorem anyImpl_loop (a : Int8Array) (p : Int8 → Bool) (stop : USize)
+    (hstop : stop.toNat ≤ a.size) (h : stop.toNat ≤ a.data.size) (i : USize) :
+    anyImpl.loop a p stop hstop i =
+      Array.anyM.loop (m := Id) (pure <| p ·) a.data stop.toNat h i.toNat := by
+  fun_induction anyImpl.loop a p stop hstop i with
+  | case1 i hi ih =>
+    have := USize.lt_iff_toNat_lt.1 hi
+    rw [Array.anyM.loop.eq_1, dite_eq_left this, ih, toNat_add_one_of_lt hi]
+    simp only [uget, Array.uget]
+    cases p a.data[i.toNat] <;> rfl
+  | case2 i hi =>
+    have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hi)
+    rw [Array.anyM.loop.eq_1, dite_eq_right (by lia)]
+    rfl
+
+@[csimp] public theorem any_eq_anyImpl : @any = @anyImpl := by
+  funext a p
+  simp only [anyImpl]
+  split
+  · rename_i hsize
+    have h := toNat_toUSize_of_le hsize (Nat.le_refl _)
+    rw [anyImpl_loop (h := by simp only [usize]; rw [h]; exact Nat.le_refl _)]
+    simp only [any, Array.any, Array.anyM, Nat.le_refl, dite_true, usize, h, USize.toNat_zero]
+    rfl
+  · rfl
+
+/-- Whether every element of `a` satisfies `p`. -/
+@[expose]
+public def all (a : @& Int8Array) (p : Int8 → Bool) : Bool :=
+  a.data.all p
+
+@[noinline, nospecialize]
+private def allSlow (a : @& Int8Array) (p : Int8 → Bool) : Bool :=
+  a.all p
 
 @[specialize]
-private def allImpl (a : @& Int8Array) (p : Int8 → Bool) : Bool :=
-  loop a.usize a.toNat_usize_le 0
+public def allImpl (a : @& Int8Array) (p : Int8 → Bool) : Bool :=
+  if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else allSlow a p
 where
   @[specialize] loop (stop : USize) (hstop : stop.toNat ≤ a.size) (i : USize) : Bool :=
     if h : i < stop then p (a.uget i (toNat_lt_of_lt h hstop)) && loop stop hstop (i + 1)
@@ -578,18 +803,32 @@ where
   termination_by stop.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
 
-/-- Whether every element of `a` satisfies `p`. -/
-@[implemented_by allImpl, expose]
-public def all (a : @& Int8Array) (p : Int8 → Bool) : Bool :=
-  a.data.all p
+private theorem allImpl_loop (a : Int8Array) (p : Int8 → Bool) (stop : USize)
+    (hstop : stop.toNat ≤ a.size) (i : USize) :
+    allImpl.loop a p stop hstop i = !anyImpl.loop a (!p ·) stop hstop i := by
+  fun_induction allImpl.loop a p stop hstop i with
+  | case1 i hi ih =>
+    rw [anyImpl.loop, dite_eq_left hi, ih]
+    cases p (a.uget i _) <;> rfl
+  | case2 i hi => rw [anyImpl.loop, dite_eq_right hi]; rfl
 
-private def containsImpl (a : @& Int8Array) (v : Int8) : Bool :=
-  a.any (v == ·)
+@[csimp] public theorem all_eq_allImpl : @all = @allImpl := by
+  funext a p
+  simp only [allImpl]
+  split
+  · rw [allImpl_loop, all, Array.all_eq_not_any_not, ← any, any_eq_anyImpl, anyImpl,
+      ite_eq_left ‹_›]
+  · rfl
 
 /-- Whether some element of `a` is `==` to `v`. -/
-@[implemented_by containsImpl, expose]
+@[expose]
 public def contains (a : @& Int8Array) (v : Int8) : Bool :=
   a.data.contains v
+
+public def containsImpl (a : @& Int8Array) (v : Int8) : Bool :=
+  a.any (v == ·)
+
+@[csimp] public theorem contains_eq_containsImpl : @contains = @containsImpl := by rfl
 
 /-- `x ∈ a` when `x` is an element of `a`. -/
 public instance : Membership Int8 Int8Array where
@@ -607,13 +846,18 @@ public def decEq (a b : @& Int8Array) : Decidable (a = b) :=
 
 public instance : DecidableEq Int8Array := decEq
 
-private def hashImpl (a : @& Int8Array) : UInt64 :=
-  a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
+private theorem beq_eq_beq_data (a b : Int8Array) : (a == b) = (a.data == b.data) := by
+  rw [Bool.eq_iff_iff, beq_iff_eq, beq_iff_eq]
+  exact ⟨congrArg data, data_injective⟩
 
 /-- The same hash as `a.data`. -/
-@[implemented_by hashImpl]
 public def hash (a : @& Int8Array) : UInt64 :=
   Hashable.hash a.data
+
+public def hashImpl (a : @& Int8Array) : UInt64 :=
+  a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
+
+@[csimp] public theorem hash_eq_hashImpl : @hash = @hashImpl := by rfl
 
 public instance : Hashable Int8Array := ⟨hash⟩
 
@@ -924,10 +1168,27 @@ public def iter (a : Int8Array) : Std.Iter (α := Int8Array.SliceIterator) Int8 
 
 namespace Slice
 
+/-- Folds a monadic function over the elements of `s`, from last to first. -/
+@[expose]
+public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : Int8 → β → m β) (init : β)
+    (s : Int8Array.Slice) : m β :=
+  loop s.size (Nat.le_refl _) init
+where
+  @[specialize] loop : (i : Nat) → i ≤ s.size → β → m β
+    | 0, _, b => pure b
+    | i + 1, h, b => do loop i (Nat.le_of_succ_le h) (← f s[i] b)
+
+@[noinline, nospecialize]
+private def foldrMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : Int8 → β → m β)
+    (init : β) (s : Int8Array.Slice) : m β :=
+  s.foldrM f init
+
 @[specialize]
-private def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m]
+public def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m]
     (f : Int8 → β → m β) (init : β) (s : Int8Array.Slice) : m β :=
-  loop s.array s.start.toUSize s.stop.toUSize s.toNat_toUSize_stop_le init
+  if s.array.size < USize.size then
+    loop s.array s.start.toUSize s.stop.toUSize s.toNat_toUSize_stop_le init
+  else foldrMSlow f init s
 where
   @[specialize] loop (a : Int8Array) (start i : USize) (hi : i.toNat ≤ a.size) (b : β) : m β :=
     if h : start < i then
@@ -938,15 +1199,36 @@ where
   termination_by i.toNat
   decreasing_by lia
 
-/-- Folds a monadic function over the elements of `s`, from last to first. -/
-@[implemented_by foldrMImpl, expose]
-public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : Int8 → β → m β) (init : β)
-    (s : Int8Array.Slice) : m β :=
-  loop s.size (Nat.le_refl _) init
-where
-  @[specialize] loop : (i : Nat) → i ≤ s.size → β → m β
-    | 0, _, b => pure b
-    | i + 1, h, b => do loop i (Nat.le_of_succ_le h) (← f s[i] b)
+private theorem foldrMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
+    (f : Int8 → β → m β) (s : Int8Array.Slice) (start i : USize)
+    (hi : i.toNat ≤ s.array.size) (hstart : start.toNat = s.start) (k : Nat) (hk : k ≤ s.size)
+    (hik : i.toNat = s.start + k) (b : β) :
+    foldrMImpl.loop f s.array start i hi b = foldrM.loop f s k hk b := by
+  fun_induction foldrMImpl.loop f s.array start i hi b generalizing k with
+  | case1 i hi b hlt _ _ ih =>
+    have := USize.lt_iff_toNat_lt.1 hlt
+    obtain ⟨k, rfl⟩ : ∃ k', k = k' + 1 := ⟨k - 1, by lia⟩
+    simp only [foldrM.loop, uget, Array.uget, getElem_eq, toNat_sub_one_of_lt hlt]
+    congr 1
+    · simp only [hik]; rfl
+    · funext b; exact ih b k _ (by rw [toNat_sub_one_of_lt hlt]; lia)
+  | case2 i hi b hlt =>
+    have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hlt)
+    obtain rfl : k = 0 := by lia
+    rfl
+
+@[csimp] public theorem foldrM_eq_foldrMImpl : @foldrM = @foldrMImpl := by
+  funext β m _ f init s
+  simp only [foldrMImpl]
+  split
+  · rename_i hsize
+    have := s.start_le_stop
+    have := s.stop_le_array_size
+    rw [foldrMImpl_loop (k := s.size) (hk := Nat.le_refl _)
+      (hstart := toNat_toUSize_of_le hsize (by lia))
+      (hik := by rw [toNat_toUSize_of_le hsize (by lia), size_eq]; lia)]
+    rfl
+  · rfl
 
 /-- Folds a function over the elements of `s`, from last to first. -/
 @[inline, expose]
@@ -959,10 +1241,30 @@ public def forRevM {m : Type v → Type w} [Monad m] (f : Int8 → m PUnit)
     (s : Int8Array.Slice) : m PUnit :=
   s.foldrM (fun x _ => f x) ⟨⟩
 
-@[specialize]
-private def findSomeRevMImpl {β : Type v} {m : Type v → Type w} [Monad m]
+/-- The result of the last element of `s` for which `f` returns `some`, searching from the end. -/
+@[expose]
+public def findSomeRevM? {β : Type v} {m : Type v → Type w} [Monad m] (s : Int8Array.Slice)
+    (f : Int8 → m (Option β)) : m (Option β) :=
+  loop s.size (Nat.le_refl _)
+where
+  @[specialize] loop : (i : Nat) → i ≤ s.size → m (Option β)
+    | 0, _ => pure none
+    | i + 1, h => do
+      match ← f s[i] with
+      | some b => pure (some b)
+      | none => loop i (Nat.le_of_succ_le h)
+
+@[noinline, nospecialize]
+private def findSomeRevMSlow {β : Type v} {m : Type v → Type w} [Monad m]
     (s : Int8Array.Slice) (f : Int8 → m (Option β)) : m (Option β) :=
-  loop s.array s.start.toUSize s.stop.toUSize s.toNat_toUSize_stop_le
+  s.findSomeRevM? f
+
+@[specialize]
+public def findSomeRevMImpl {β : Type v} {m : Type v → Type w} [Monad m]
+    (s : Int8Array.Slice) (f : Int8 → m (Option β)) : m (Option β) :=
+  if s.array.size < USize.size then
+    loop s.array s.start.toUSize s.stop.toUSize s.toNat_toUSize_stop_le
+  else findSomeRevMSlow s f
 where
   @[specialize] loop (a : Int8Array) (start i : USize) (hi : i.toNat ≤ a.size) :
       m (Option β) :=
@@ -977,18 +1279,40 @@ where
   termination_by i.toNat
   decreasing_by lia
 
-/-- The result of the last element of `s` for which `f` returns `some`, searching from the end. -/
-@[implemented_by findSomeRevMImpl, expose]
-public def findSomeRevM? {β : Type v} {m : Type v → Type w} [Monad m] (s : Int8Array.Slice)
-    (f : Int8 → m (Option β)) : m (Option β) :=
-  loop s.size (Nat.le_refl _)
-where
-  @[specialize] loop : (i : Nat) → i ≤ s.size → m (Option β)
-    | 0, _ => pure none
-    | i + 1, h => do
-      match ← f s[i] with
-      | some b => pure (some b)
-      | none => loop i (Nat.le_of_succ_le h)
+private theorem findSomeRevMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
+    (f : Int8 → m (Option β)) (s : Int8Array.Slice) (start i : USize)
+    (hi : i.toNat ≤ s.array.size) (hstart : start.toNat = s.start) (k : Nat) (hk : k ≤ s.size)
+    (hik : i.toNat = s.start + k) :
+    findSomeRevMImpl.loop f s.array start i hi = findSomeRevM?.loop s f k hk := by
+  fun_induction findSomeRevMImpl.loop f s.array start i hi generalizing k with
+  | case1 i hi hlt _ _ ih =>
+    have := USize.lt_iff_toNat_lt.1 hlt
+    obtain ⟨k, rfl⟩ : ∃ k', k = k' + 1 := ⟨k - 1, by lia⟩
+    simp only [findSomeRevM?.loop, uget, Array.uget, getElem_eq, toNat_sub_one_of_lt hlt]
+    congr 1
+    · simp only [hik]; rfl
+    · funext r
+      split
+      · rfl
+      · exact ih k _ (by rw [toNat_sub_one_of_lt hlt]; lia)
+  | case2 i hi hlt =>
+    have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hlt)
+    obtain rfl : k = 0 := by lia
+    rfl
+
+@[csimp] public theorem findSomeRevM?_eq_findSomeRevMImpl :
+    @findSomeRevM? = @findSomeRevMImpl := by
+  funext β m _ s f
+  simp only [findSomeRevMImpl]
+  split
+  · rename_i hsize
+    have := s.start_le_stop
+    have := s.stop_le_array_size
+    rw [findSomeRevMImpl_loop (k := s.size) (hk := Nat.le_refl _)
+      (hstart := toNat_toUSize_of_le hsize (by lia))
+      (hik := by rw [toNat_toUSize_of_le hsize (by lia), size_eq]; lia)]
+    rfl
+  · rfl
 
 /-- The last element of `s` that satisfies the monadic predicate `p`. -/
 @[inline, expose]
@@ -1030,21 +1354,36 @@ public def count (s : Int8Array.Slice) (p : Int8 → Bool) : Nat :=
 public instance : Membership Int8 Int8Array.Slice where
   mem s x := x ∈ s.copy
 
+/--
+Compares the elements of two slices with `==`: slices of different arrays, or at different offsets,
+are equal when their elements are. Logically it compares the copies.
+-/
+-- There is no `DecidableEq` instance: structural equality of slices compares the underlying arrays
+-- and the bounds, so it would disagree with `==`.
+public def beq (s t : Int8Array.Slice) : Bool :=
+  s.copy == t.copy
+
+@[noinline]
+private def beqSlow (s t : Int8Array.Slice) : Bool :=
+  s.beq t
+
 -- Compares the sizes as `USize`s, so that the loop knows that the indices into `t` stay in bounds.
-private def beqImpl (s t : Int8Array.Slice) : Bool :=
-  let stop := s.stop.toUSize
-  let i := s.start.toUSize
-  let tstop := t.stop.toUSize
-  let j := t.start.toUSize
-  if h : j ≤ tstop ∧ stop - i = tstop - j then
-    loop s.array t.array stop s.toNat_toUSize_stop_le i j (by
-      have : tstop.toNat ≤ t.array.size := t.toNat_toUSize_stop_le
-      have := USize.le_iff_toNat_le.1 h.1
-      have := congrArg USize.toNat h.2
-      rw [USize.toNat_sub_of_le _ _ h.1] at this
-      have := toNat_sub_le_toNat_sub stop i
-      lia)
-  else false
+public def beqImpl (s t : Int8Array.Slice) : Bool :=
+  if s.array.size < USize.size ∧ t.array.size < USize.size then
+    let stop := s.stop.toUSize
+    let i := s.start.toUSize
+    let tstop := t.stop.toUSize
+    let j := t.start.toUSize
+    if h : j ≤ tstop ∧ stop - i = tstop - j then
+      loop s.array t.array stop s.toNat_toUSize_stop_le i j (by
+        have : tstop.toNat ≤ t.array.size := t.toNat_toUSize_stop_le
+        have := USize.le_iff_toNat_le.1 h.1
+        have := congrArg USize.toNat h.2
+        rw [USize.toNat_sub_of_le _ _ h.1] at this
+        have := toNat_sub_le_toNat_sub stop i
+        lia)
+    else false
+  else beqSlow s t
 where
   loop (a b : Int8Array) (stop : USize) (hstop : stop.toNat ≤ a.size) (i j : USize)
       (hj : stop.toNat - i.toNat + j.toNat ≤ b.size) : Bool :=
@@ -1058,15 +1397,84 @@ where
   termination_by stop.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
 
-/--
-Compares the elements of two slices with `==`: slices of different arrays, or at different offsets,
-are equal when their elements are. Logically it compares the copies.
--/
--- There is no `DecidableEq` instance: structural equality of slices compares the underlying arrays
--- and the bounds, so it would disagree with `==`.
-@[implemented_by beqImpl]
-public def beq (s t : Int8Array.Slice) : Bool :=
-  s.copy == t.copy
+private theorem beqImpl_loop (a b : Int8Array) (hb : b.size < USize.size) (stop : USize)
+    (hstop : stop.toNat ≤ a.size) (i j : USize) (hj : stop.toNat - i.toNat + j.toNat ≤ b.size) :
+    beqImpl.loop a b stop hstop i j hj = true ↔ ∀ (k : Nat) (hk : k < stop.toNat - i.toNat),
+      (a.data[i.toNat + k]'(by rw [size_data']; lia) ==
+        b.data[j.toNat + k]'(by rw [size_data']; lia)) = true := by
+  fun_induction beqImpl.loop a b stop hstop i j hj with
+  | case1 i j hj hi _ _ _ ih =>
+    have := USize.lt_iff_toNat_lt.1 hi
+    have hj1 : (j + 1).toNat = j.toNat + 1 := by
+      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]
+    rw [Bool.and_eq_true, ih]
+    simp only [uget, Array.uget, toNat_add_one_of_lt hi, hj1]
+    constructor
+    · rintro ⟨h0, h⟩ k hk
+      cases k with
+      | zero => exact h0
+      | succ k =>
+        have := h k (by lia)
+        simp only [Nat.add_assoc, Nat.add_comm 1 k] at this ⊢
+        exact this
+    · intro h
+      refine ⟨h 0 (by lia), fun k hk => ?_⟩
+      have := h (k + 1) (by lia)
+      simp only [Nat.add_assoc, Nat.add_comm 1 k] at this ⊢
+      exact this
+  | case2 i j hj hi =>
+    have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hi)
+    simp only [true_iff]
+    intro k hk
+    lia
+
+private theorem beq_iff (s t : Int8Array.Slice) :
+    beq s t = true ↔ s.size = t.size ∧ ∀ (k : Nat) (hk : k < s.size) (hk' : k < t.size),
+      (s.array.data[s.start + k]'(by
+        have := s.stop_le_array_size; rw [size_data']; rw [size_eq] at hk; lia) ==
+      t.array.data[t.start + k]'(by
+        have := t.stop_le_array_size; rw [size_data']; rw [size_eq] at hk'; lia)) = true := by
+  have hc (u : Int8Array.Slice) : u.copy.data = u.array.data.extract u.start u.stop := rfl
+  have hs (u : Int8Array.Slice) : min u.stop u.array.data.size - u.start = u.size := by
+    have := u.stop_le_array_size
+    rw [size_eq, size_data']; lia
+  rw [beq, beq_eq_beq_data, hc, hc, Array.beq_eq_decide]
+  split
+  · rename_i h
+    simp only [Array.size_extract, hs] at h
+    simp only [decide_eq_true_eq, Array.size_extract, Array.getElem_extract, hs, h, true_and]
+    exact ⟨fun h' k hk _ => h' k hk, fun h' k hk => h' k hk (h ▸ hk)⟩
+  · rename_i h
+    simp only [Array.size_extract, hs] at h
+    simp [h]
+
+@[csimp] public theorem beq_eq_beqImpl : @beq = @beqImpl := by
+  funext s t
+  simp only [beqImpl]
+  split
+  · rename_i hsize
+    have := s.start_le_stop
+    have := s.stop_le_array_size
+    have := t.start_le_stop
+    have := t.stop_le_array_size
+    have hs1 := toNat_toUSize_of_le hsize.1 (n := s.start) (by lia)
+    have hs2 := toNat_toUSize_of_le hsize.1 (n := s.stop) (by lia)
+    have ht1 := toNat_toUSize_of_le hsize.2 (n := t.start) (by lia)
+    have ht2 := toNat_toUSize_of_le hsize.2 (n := t.stop) (by lia)
+    have hle : t.start.toUSize ≤ t.stop.toUSize := USize.le_iff_toNat_le.2 (by lia)
+    have hsub : s.stop.toUSize - s.start.toUSize = t.stop.toUSize - t.start.toUSize ↔
+        s.size = t.size := by
+      rw [← USize.toNat_inj, USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 (by lia)),
+        USize.toNat_sub_of_le _ _ hle, size_eq, size_eq]
+      lia
+    rw [Bool.eq_iff_iff, beq_iff]
+    by_cases h : s.size = t.size
+    · rw [dite_eq_left ⟨hle, hsub.2 h⟩, beqImpl_loop (hb := hsize.2)]
+      simp only [hs1, hs2, ht1, h, true_and, ← size_eq]
+      exact ⟨fun h' k hk => h' k hk (h ▸ hk), fun h' k hk _ => h' k hk⟩
+    · rw [dite_eq_right fun h' => h (hsub.1 h'.2)]
+      simp [h]
+  · rfl
 
 public instance : BEq Int8Array.Slice := ⟨beq⟩
 

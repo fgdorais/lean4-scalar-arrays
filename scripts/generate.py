@@ -43,21 +43,39 @@ public def decEq (a b : @& UInt16Array) : Decidable (a = b) :=
 
 public instance : DecidableEq UInt16Array := decEq
 
-private def hashImpl (a : @& UInt16Array) : UInt64 :=
-  a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
+private theorem beq_eq_beq_data (a b : UInt16Array) : (a == b) = (a.data == b.data) := by
+  rw [Bool.eq_iff_iff, beq_iff_eq, beq_iff_eq]
+  exact ⟨congrArg data, data_injective⟩
 
 /-- The same hash as `a.data`. -/
-@[implemented_by hashImpl]
 public def hash (a : @& UInt16Array) : UInt64 :=
   Hashable.hash a.data
+
+public def hashImpl (a : @& UInt16Array) : UInt64 :=
+  a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
+
+@[csimp] public theorem hash_eq_hashImpl : @hash = @hashImpl := by rfl
 
 public instance : Hashable UInt16Array := ⟨hash⟩
 
 public theorem hash_eq_hash_data (a : UInt16Array) : Hashable.hash a = Hashable.hash a.data := by
   rfl
 """
-FLOAT_EQ_NEW = """private def beqImpl (a b : @& UInt16Array) : Bool :=
-  if h : a.usize = b.usize then loop a.usize a.toNat_usize_le (h ▸ b.toNat_usize_le) 0 else false
+FLOAT_EQ_NEW = """/--
+Compares the elements with `==`, like `Array`. Floating-point equality is not decidable equality:
+`NaN` is not equal to itself and `0.0 == -0.0`.
+-/
+public def beq (a b : @& UInt16Array) : Bool :=
+  a.data == b.data
+
+@[noinline]
+private def beqSlow (a b : @& UInt16Array) : Bool :=
+  a.beq b
+
+public def beqImpl (a b : @& UInt16Array) : Bool :=
+  if a.size < USize.size ∧ b.size < USize.size then
+    if h : a.usize = b.usize then loop a.usize a.toNat_usize_le (h ▸ b.toNat_usize_le) 0 else false
+  else beqSlow a b
 where
   loop (stop : USize) (ha : stop.toNat ≤ a.size) (hb : stop.toNat ≤ b.size) (i : USize) : Bool :=
     if h : i < stop then
@@ -66,15 +84,50 @@ where
   termination_by stop.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
 
-/--
-Compares the elements with `==`, like `Array`. Floating-point equality is not decidable equality:
-`NaN` is not equal to itself and `0.0 == -0.0`.
--/
-@[implemented_by beqImpl]
-public def beq (a b : @& UInt16Array) : Bool :=
-  a.data == b.data
+private theorem beqImpl_loop (a b : UInt16Array) (stop : USize) (ha : stop.toNat ≤ a.size)
+    (hb : stop.toNat ≤ b.size) (i : USize) :
+    beqImpl.loop a b stop ha hb i = true ↔ ∀ (k : Nat) (_ : i.toNat ≤ k) (hk : k < stop.toNat),
+      (a.data[k]'(by rw [size_data']; lia) == b.data[k]'(by rw [size_data']; lia)) = true := by
+  fun_induction beqImpl.loop a b stop ha hb i with
+  | case1 i hi ih =>
+    have := USize.lt_iff_toNat_lt.1 hi
+    rw [Bool.and_eq_true, ih]
+    simp only [uget, Array.uget, toNat_add_one_of_lt hi]
+    constructor
+    · rintro ⟨h0, h⟩ k hik hk
+      by_cases hk' : k = i.toNat
+      · subst hk'; exact h0
+      · exact h k (by lia) hk
+    · intro h
+      exact ⟨h _ (Nat.le_refl _) this, fun k hik hk => h k (by lia) hk⟩
+  | case2 i hi =>
+    have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hi)
+    simp only [true_iff]
+    intro k hik hk
+    lia
+
+@[csimp] public theorem beq_eq_beqImpl : @beq = @beqImpl := by
+  funext a b
+  simp only [beqImpl]
+  split
+  · rename_i hsize
+    have ha := toNat_toUSize_of_le hsize.1 (Nat.le_refl _)
+    have hb := toNat_toUSize_of_le hsize.2 (Nat.le_refl _)
+    have husize : a.usize = b.usize ↔ a.size = b.size := by
+      rw [← USize.toNat_inj, usize, usize, ha, hb]
+    rw [beq, Array.beq_eq_decide]
+    have hdata : a.data.size = b.data.size ↔ a.size = b.size := .rfl
+    by_cases h : a.size = b.size
+    · rw [dite_eq_left (husize.2 h), dite_eq_left (hdata.2 h), Bool.eq_iff_iff, decide_eq_true_eq,
+        beqImpl_loop]
+      simp only [usize, ha, USize.toNat_zero, Nat.zero_le, forall_const]
+      exact ⟨fun h' k hk => h' k hk, fun h' k hk => h' k hk⟩
+    · rw [dite_eq_right fun h' => h (husize.1 h'), dite_eq_right fun h' => h (hdata.1 h')]
+  · rfl
 
 public instance : BEq UInt16Array := ⟨beq⟩
+
+private theorem beq_eq_beq_data (a b : UInt16Array) : (a == b) = (a.data == b.data) := rfl
 """
 # Also left out for the float types, from the first line up to, but not including, the second: the
 # lemmas and instances that need decidable equality or hashing, and their tests.
