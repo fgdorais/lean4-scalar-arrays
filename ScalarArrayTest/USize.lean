@@ -29,6 +29,24 @@ private abbrev elemSize : UInt32 := (System.Platform.numBits / 8).toUInt32
 #guard (USizeArray.mk (Array.range 1000 |>.map Nat.toUSize)).data ==
   (Array.range 1000).map Nat.toUSize
 
+/-! Case analysis -/
+
+-- `cases` splits an array as `mk data`, also in compiled code.
+private def headOrZero (a : USizeArray) : USize := by
+  cases a with | mk data => exact data[0]?.getD 0
+
+#guard headOrZero (USizeArray.mk #[7, 8]) == 7
+#guard headOrZero USizeArray.empty == 0
+
+-- There is no constructor to match on, which would run `Array` code on a scalar array.
+/--
+error: Invalid `⟨...⟩` notation: The expected type `Quot fun x x_1 => False` is not an inductive type
+
+Note: This notation can only be used when the expected type is an inductive type with a single constructor
+-/
+#guard_msgs in
+example (a : USizeArray) : USize := match a with | ⟨data⟩ => data[0]!
+
 /-! Size -/
 
 #guard (USizeArray.mk #[1, 2, 3, big]).size == 4

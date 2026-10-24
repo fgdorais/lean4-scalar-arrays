@@ -29,6 +29,24 @@ private abbrev elemSize : UInt32 := 1
 #guard (Int8Array.mk (Array.range 1000 |>.map Nat.toInt8)).data ==
   (Array.range 1000).map Nat.toInt8
 
+/-! Case analysis -/
+
+-- `cases` splits an array as `mk data`, also in compiled code.
+private def headOrZero (a : Int8Array) : Int8 := by
+  cases a with | mk data => exact data[0]?.getD 0
+
+#guard headOrZero (Int8Array.mk #[7, 8]) == 7
+#guard headOrZero Int8Array.empty == 0
+
+-- There is no constructor to match on, which would run `Array` code on a scalar array.
+/--
+error: Invalid `⟨...⟩` notation: The expected type `Quot fun x x_1 => False` is not an inductive type
+
+Note: This notation can only be used when the expected type is an inductive type with a single constructor
+-/
+#guard_msgs in
+example (a : Int8Array) : Int8 := match a with | ⟨data⟩ => data[0]!
+
 /-! Size -/
 
 #guard (Int8Array.mk #[1, 2, 3, big]).size == 4
