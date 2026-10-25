@@ -54,3 +54,42 @@ private unsafe def resizeUnsafe (a : ScalarArray) (size : USize) (h : size ≤ a
 
 @[extern "lean_sarray_ensure_exclusive"]
 private def ensureExclusive (a : ScalarArray) : ScalarArray := a.copy
+
+/-! ## Loop indices -/
+
+/-- The guard `i < stop` of a loop over `USize` indices bounds the index by any bound on `stop`. -/
+private theorem toNat_lt_of_lt {i stop : USize} {n : Nat} (h : i < stop) (hn : stop.toNat ≤ n) :
+    i.toNat < n := by
+  have := USize.lt_iff_toNat_lt.1 h
+  lia
+
+/-- `i + 1` doesn't wrap around when `i < stop`. -/
+private theorem toNat_add_one_of_lt {i stop : USize} (h : i < stop) :
+    (i + 1).toNat = i.toNat + 1 := by
+  have := USize.lt_iff_toNat_lt.1 h
+  have := stop.toNat_lt_size
+  rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]
+
+/-- `i - 1` doesn't wrap around when `j < i`. -/
+private theorem toNat_sub_one_of_lt {i j : USize} (h : j < i) : (i - 1).toNat = i.toNat - 1 := by
+  have := USize.lt_iff_toNat_lt.1 h
+  rw [USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 (by simp; lia)), USize.toNat_one]
+
+/-- `j + 1` is at most one more than `j`, even when it wraps around. -/
+private theorem toNat_add_one_le (j : USize) : (j + 1).toNat ≤ j.toNat + 1 := by
+  rw [USize.toNat_add, USize.toNat_one]
+  exact Nat.mod_le _ _
+
+/-- `USize` subtraction is at least the truncated subtraction of the `Nat` values. -/
+private theorem toNat_sub_le_toNat_sub (a b : USize) : a.toNat - b.toNat ≤ (a - b).toNat := by
+  by_cases h : b ≤ a
+  · exact Nat.le_of_eq (USize.toNat_sub_of_le _ _ h).symm
+  · have := USize.lt_iff_toNat_lt.1 (USize.not_le.1 h)
+    lia
+
+/-- The measure `stop - i` of a loop over `USize` indices decreases at each step. -/
+private theorem sub_toNat_add_one_lt {i stop : USize} (h : i < stop) :
+    stop.toNat - (i + 1).toNat < stop.toNat - i.toNat := by
+  have := USize.lt_iff_toNat_lt.1 h
+  rw [toNat_add_one_of_lt h]
+  lia
