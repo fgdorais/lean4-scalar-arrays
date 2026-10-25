@@ -3075,6 +3075,145 @@ public def foldlInPlace2Then {β : Type v} {γ : Type w} (a : Int32Array) (xs ys
         (a.foldlInPlace2 xs ys rs len hx hy hr init f).2 :=
   rfl
 
+/-! ### In-place folds over a `USize` range -/
+
+@[inline]
+private unsafe def foldlInPlaceRangeImpl {β : Type v} (a : Int32Array) (start len : USize)
+    (_ : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β) :
+    Int32Array × β :=
+  Slice.foldlInPlaceImpl.loop start len f Prod.mk a.ensureExclusive 0 init
+
+/--
+`foldlInPlace` on the slice `a[start.toNat...start.toNat + len.toNat]`, for bounds that are
+already `USize`: returns the new array and the last accumulator. It is specified as that slice
+fold, so the slice lemmas apply after `foldlInPlaceRange_eq`. The implementation runs the loop of
+`foldlInPlace` on the `USize` bounds directly, without building the slice, whose `Nat` bounds
+cost a conversion on the way in and out of every call.
+-/
+@[implemented_by foldlInPlaceRangeImpl, expose]
+public def foldlInPlaceRange {β : Type v} (a : Int32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β) :
+    Int32Array × β :=
+  (((a.toSlice start.toNat (start.toNat + len.toNat)).foldlInPlace init
+      fun k hk => f k (by simp only [size_toSlice] at hk; lia)).1.array,
+    ((a.toSlice start.toNat (start.toNat + len.toNat)).foldlInPlace init
+      fun k hk => f k (by simp only [size_toSlice] at hk; lia)).2)
+
+@[simp] public theorem foldlInPlaceRange_eq {β : Type v} (a : Int32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β) :
+    a.foldlInPlaceRange start len h init f =
+      (((a.toSlice start.toNat (start.toNat + len.toNat)).foldlInPlace init
+          fun k hk => f k (by simp only [size_toSlice] at hk; lia)).1.array,
+        ((a.toSlice start.toNat (start.toNat + len.toNat)).foldlInPlace init
+          fun k hk => f k (by simp only [size_toSlice] at hk; lia)).2) :=
+  rfl
+
+@[simp] public theorem size_foldlInPlaceRange {β : Type v} (a : Int32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β) :
+    (a.foldlInPlaceRange start len h init f).1.size = a.size := by
+  simp
+
+@[inline]
+private unsafe def foldlInPlaceRangeThenImpl {β : Type v} {γ : Type w} (a : Int32Array)
+    (start len : USize) (_ : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β)
+    (g : (a' : Int32Array) → a'.size = a.size → β → γ) : γ :=
+  Slice.foldlInPlaceImpl.loop start len f (fun a' b => g a' lcProof b)
+    a.ensureExclusive 0 init
+
+/--
+`foldlInPlaceRange` followed by `g` on the new array and the last accumulator, which the loop
+calls itself where `foldlInPlaceRange` returns them as a pair, like `Slice.foldlInPlaceThen`.
+`g` also receives a proof that the size is unchanged, like `foldlInPlace2Then`, so that it can go
+on with bounded reads and writes.
+-/
+@[implemented_by foldlInPlaceRangeThenImpl, expose]
+public def foldlInPlaceRangeThen {β : Type v} {γ : Type w} (a : Int32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β)
+    (g : (a' : Int32Array) → a'.size = a.size → β → γ) : γ :=
+  g (a.foldlInPlaceRange start len h init f).1 (size_foldlInPlaceRange ..)
+        (a.foldlInPlaceRange start len h init f).2
+
+@[simp] public theorem foldlInPlaceRangeThen_eq {β : Type v} {γ : Type w} (a : Int32Array)
+    (start len : USize) (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β)
+    (g : (a' : Int32Array) → a'.size = a.size → β → γ) :
+    a.foldlInPlaceRangeThen start len h init f g =
+      g (a.foldlInPlaceRange start len h init f).1 (size_foldlInPlaceRange ..)
+        (a.foldlInPlaceRange start len h init f).2 :=
+  rfl
+
+@[inline]
+private unsafe def foldrInPlaceRangeImpl {β : Type v} (a : Int32Array) (start len : USize)
+    (_ : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β) :
+    Int32Array × β :=
+  Slice.foldrInPlaceImpl.loop start (fun k => f k lcProof) Prod.mk a.ensureExclusive len init
+
+/--
+`foldrInPlace` on the slice `a[start.toNat...start.toNat + len.toNat]`, for bounds that are
+already `USize`, like `foldlInPlaceRange`: returns the new array and the last accumulator.
+-/
+@[implemented_by foldrInPlaceRangeImpl, expose]
+public def foldrInPlaceRange {β : Type v} (a : Int32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β) :
+    Int32Array × β :=
+  (((a.toSlice start.toNat (start.toNat + len.toNat)).foldrInPlace init
+      fun k hk => f k (by simp only [size_toSlice] at hk; lia)).1.array,
+    ((a.toSlice start.toNat (start.toNat + len.toNat)).foldrInPlace init
+      fun k hk => f k (by simp only [size_toSlice] at hk; lia)).2)
+
+@[simp] public theorem foldrInPlaceRange_eq {β : Type v} (a : Int32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β) :
+    a.foldrInPlaceRange start len h init f =
+      (((a.toSlice start.toNat (start.toNat + len.toNat)).foldrInPlace init
+          fun k hk => f k (by simp only [size_toSlice] at hk; lia)).1.array,
+        ((a.toSlice start.toNat (start.toNat + len.toNat)).foldrInPlace init
+          fun k hk => f k (by simp only [size_toSlice] at hk; lia)).2) :=
+  rfl
+
+@[simp] public theorem size_foldrInPlaceRange {β : Type v} (a : Int32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β) :
+    (a.foldrInPlaceRange start len h init f).1.size = a.size := by
+  simp
+
+@[inline]
+private unsafe def foldrInPlaceRangeThenImpl {β : Type v} {γ : Type w} (a : Int32Array)
+    (start len : USize) (_ : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β)
+    (g : (a' : Int32Array) → a'.size = a.size → β → γ) : γ :=
+  Slice.foldrInPlaceImpl.loop start (fun k => f k lcProof) (fun a' b => g a' lcProof b)
+    a.ensureExclusive len init
+
+/--
+`foldrInPlaceRange` followed by `g` on the new array, a proof that its size is unchanged and the
+last accumulator, like `foldlInPlaceRangeThen`.
+-/
+@[implemented_by foldrInPlaceRangeThenImpl, expose]
+public def foldrInPlaceRangeThen {β : Type v} {γ : Type w} (a : Int32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β)
+    (g : (a' : Int32Array) → a'.size = a.size → β → γ) : γ :=
+  g (a.foldrInPlaceRange start len h init f).1 (size_foldrInPlaceRange ..)
+        (a.foldrInPlaceRange start len h init f).2
+
+@[simp] public theorem foldrInPlaceRangeThen_eq {β : Type v} {γ : Type w} (a : Int32Array)
+    (start len : USize) (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Int32 → β → Int32 × β)
+    (g : (a' : Int32Array) → a'.size = a.size → β → γ) :
+    a.foldrInPlaceRangeThen start len h init f g =
+      g (a.foldrInPlaceRange start len h init f).1 (size_foldrInPlaceRange ..)
+        (a.foldrInPlaceRange start len h init f).2 :=
+  rfl
+
 /-! ### Decidable membership and slice hashing -/
 
 public theorem contains_iff_mem {a : Int32Array} {x : Int32} :
