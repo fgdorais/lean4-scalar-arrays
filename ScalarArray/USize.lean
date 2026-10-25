@@ -2364,111 +2364,6 @@ public theorem Slice.getElem_mem {s : USizeArray.Slice} {i : Nat} (h : i < s.siz
     (s == t) = (s.copy == t.copy) := by
   rfl
 
-/-! ## In-place folds -/
-
-@[inline]
-private unsafe def foldInPlaceImpl {β : Type v} (a : USizeArray) (start len : USize) (init : β)
-    (f : (k : USize) → k.toNat < len.toNat → USize → β → USize × β)
-    (_ : start.toNat + len.toNat ≤ a.size) : USizeArray × β :=
-  loop a.ensureExclusive 0 init
-where
-  @[specialize] loop (a : USizeArray) (k : USize) (b : β) : USizeArray × β :=
-    if k < len then
-      let p := f k lcProof (a.uget (start + k) lcProof) b
-      loop (setUnsafe a (start + k) p.1) (k + 1) p.2
-    else
-      (a, b)
-
-/-- The loop of `foldInPlace`, over `Nat` indices. -/
-@[expose]
-public def foldInPlace.loop {β : Type v} (len' : USize)
-    (f : (k : USize) → k.toNat < len'.toNat → USize → β → USize × β)
-    (start len : Nat) (a : USizeArray) (h : start + len ≤ a.size) (hlen : len ≤ len'.toNat)
-    (k : Nat) (b : β) : USizeArray × β :=
-  if hk : k < len then
-    let p := f k.toUSize (by
-      have := len'.toNat_lt_size
-      rw [USize.toNat_ofNat_of_lt' (by lia)]
-      lia) (a[start + k]'(by lia)) b
-    foldInPlace.loop len' f start len (a.set (start + k) p.1 (by lia)) (by simpa using h) hlen
-      (k + 1) p.2
-  else
-    (a, b)
-termination_by len - k
-
-/--
-Replaces each element of `a` from index `start` for `len` elements while threading an
-accumulator, in place when `a` is not shared: for each `k < len`, the element `x` at `start + k`
-becomes the first component of `f k hk x b`, whose second component is the next accumulator.
-Returns the new array and the last accumulator. The proof `hk : k.toNat < len.toNat` lets `f`
-read other arrays with `uget`.
-
-The point is the implementation: the result is that of a loop of `set`s, but `a` is made
-exclusive once, before the loop, which then stores without checks, where each `uset` checks at
-every write. `f` only sees the elements, never the array, which is what makes skipping the
-checks safe.
--/
-@[implemented_by foldInPlaceImpl, expose]
-public def foldInPlace {β : Type v} (a : USizeArray) (start len : USize) (init : β)
-    (f : (k : USize) → k.toNat < len.toNat → USize → β → USize × β)
-    (h : start.toNat + len.toNat ≤ a.size) : USizeArray × β :=
-  foldInPlace.loop len f start.toNat len.toNat a h (Nat.le_refl _) 0 init
-
-public theorem size_foldInPlace_loop {β : Type v} (len' : USize)
-    (f : (k : USize) → k.toNat < len'.toNat → USize → β → USize × β) (start len : Nat)
-    (a : USizeArray) (h : start + len ≤ a.size) (hlen : len ≤ len'.toNat) (k : Nat) (b : β) :
-    (foldInPlace.loop len' f start len a h hlen k b).1.size = a.size := by
-  induction a, h, k, b using foldInPlace.loop.induct len' f start len hlen with
-  | case1 a h k b hk p ih =>
-    rw [foldInPlace.loop]
-    simp only [hk, ↓reduceDIte]
-    rw [ih]
-    simp
-  | case2 a h k b hk =>
-    rw [foldInPlace.loop]
-    simp [hk]
-
-@[simp] public theorem size_foldInPlace {β : Type v} (a : USizeArray) (start len : USize)
-    (init : β) (f : (k : USize) → k.toNat < len.toNat → USize → β → USize × β)
-    (h : start.toNat + len.toNat ≤ a.size) :
-    (a.foldInPlace start len init f h).1.size = a.size :=
-  size_foldInPlace_loop len f _ _ a h _ 0 init
-
-@[inline]
-private unsafe def foldInPlaceThenImpl {β : Type v} {γ : Type w} (a : USizeArray)
-    (start len : USize) (init : β)
-    (f : (k : USize) → k.toNat < len.toNat → USize → β → USize × β)
-    (g : USizeArray → β → γ) (_ : start.toNat + len.toNat ≤ a.size) : γ :=
-  loop a.ensureExclusive 0 init
-where
-  @[specialize] loop (a : USizeArray) (k : USize) (b : β) : γ :=
-    if k < len then
-      let p := f k lcProof (a.uget (start + k) lcProof) b
-      loop (setUnsafe a (start + k) p.1) (k + 1) p.2
-    else
-      g a b
-
-/--
-`foldInPlace` followed by `g` on the new array and the last accumulator, which the loop calls
-itself where `foldInPlace` returns them as a pair. The pair is a heap object, allocated once per
-call, which shows when the fold runs over short ranges many times; when `g` consumes the
-accumulator, for example by writing it into the array, no pair is allocated at all.
-`foldInPlace` is the case `g := Prod.mk`.
--/
-@[implemented_by foldInPlaceThenImpl, expose]
-public def foldInPlaceThen {β : Type v} {γ : Type w} (a : USizeArray) (start len : USize)
-    (init : β) (f : (k : USize) → k.toNat < len.toNat → USize → β → USize × β)
-    (g : USizeArray → β → γ) (h : start.toNat + len.toNat ≤ a.size) : γ :=
-  g (a.foldInPlace start len init f h).1 (a.foldInPlace start len init f h).2
-
-@[simp] public theorem foldInPlaceThen_eq {β : Type v} {γ : Type w} (a : USizeArray)
-    (start len : USize) (init : β)
-    (f : (k : USize) → k.toNat < len.toNat → USize → β → USize × β)
-    (g : USizeArray → β → γ) (h : start.toNat + len.toNat ≤ a.size) :
-    a.foldInPlaceThen start len init f g h =
-      g (a.foldInPlace start len init f h).1 (a.foldInPlace start len init f h).2 :=
-  rfl
-
 /-! ## Writing through slices -/
 
 namespace Slice
@@ -2704,14 +2599,24 @@ public def foldlInPlace.loop {β : Type v} (n : Nat)
     (s, b)
 termination_by n - k
 
+@[specialize]
+private unsafe def foldlInPlaceImpl.loop {β : Type v} {γ : Type w} (base len : USize)
+    (f : (k : USize) → k.toNat < len.toNat → USize → β → USize × β) (g : USizeArray → β → γ)
+    (a : USizeArray) (k : USize) (b : β) : γ :=
+  if k < len then
+    let p := f k lcProof (a.uget (base + k) lcProof) b
+    foldlInPlaceImpl.loop base len f g (setUnsafe a (base + k) p.1) (k + 1) p.2
+  else
+    g a b
+
 @[inline]
 private unsafe def foldlInPlaceImpl {β : Type v} (s : USizeArray.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → USize → β → USize × β) : USizeArray.Slice × β :=
   match s with
   | ⟨⟨a, start, stop, h, _⟩⟩ =>
-    USizeArray.foldInPlaceThenImpl a start.toUSize (stop - start).toUSize init
-      (fun k _ => f k lcProof)
-      (fun a b => (⟨⟨a, start, stop, h, lcProof⟩⟩, b)) lcProof
+    foldlInPlaceImpl.loop start.toUSize (stop - start).toUSize (fun k _ => f k lcProof)
+      (fun a b => (⟨⟨a, start, stop, h, lcProof⟩⟩, b))
+      a.ensureExclusive 0 init
 
 /--
 Replaces each element of the slice while threading an accumulator, in place like `set`: for each
@@ -2719,8 +2624,10 @@ Replaces each element of the slice while threading an accumulator, in place like
 `f k hk x b`, whose second component is the next accumulator. Returns the new slice and the last
 accumulator.
 
-This is `USizeArray.foldInPlace` on the slice's range: the array is made exclusive once, before
-the loop, which then stores without checks.
+The array is made exclusive once, before the loop, which then stores without checks, where each
+`set` checks at every write. `f` only sees the elements, never the array, which is what makes
+skipping the checks safe. The proof `hk : k.toNat < s.size` lets `f` read other arrays with
+`uget`.
 -/
 @[implemented_by foldlInPlaceImpl, expose]
 public def foldlInPlace {β : Type v} (s : USizeArray.Slice) (init : β)
@@ -2830,14 +2737,15 @@ private unsafe def foldlInPlaceThenImpl {β : Type v} {γ : Type w} (s : USizeAr
     (g : USizeArray.Slice → β → γ) : γ :=
   match s with
   | ⟨⟨a, start, stop, h, _⟩⟩ =>
-    USizeArray.foldInPlaceThenImpl a start.toUSize (stop - start).toUSize init
-      (fun k _ => f k lcProof)
-      (fun a b => g ⟨⟨a, start, stop, h, lcProof⟩⟩ b) lcProof
+    foldlInPlaceImpl.loop start.toUSize (stop - start).toUSize (fun k _ => f k lcProof)
+      (fun a b => g ⟨⟨a, start, stop, h, lcProof⟩⟩ b)
+      a.ensureExclusive 0 init
 
 /--
 `foldlInPlace` followed by `g` on the new slice and the last accumulator, which the loop calls
-itself where `foldlInPlace` returns them as a pair, like `USizeArray.foldInPlaceThen`. When `g`
-consumes the accumulator, for example by writing it into the slice, no pair is allocated.
+itself where `foldlInPlace` returns them as a pair. The pair is a heap object, allocated once per
+call, which shows when the fold runs over short slices many times; when `g` consumes the
+accumulator, for example by writing it into the slice, no pair is allocated at all.
 `foldlInPlace` is the case `g := Prod.mk`.
 -/
 @[implemented_by foldlInPlaceThenImpl, expose]
