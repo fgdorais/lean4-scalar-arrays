@@ -927,6 +927,84 @@ example (s : Float32Array.Slice) : s.copy.size = s.size := by simp
   let xs := (Array.range n).map Nat.toFloat32
   (Float32Array.mk xs)[0...n].reverse.array.data == xs.reverse
 
+/-! In-place folds over a `USize` range -/
+
+-- The range folds with the bounds checked at run time, and the slice folds they are specified as.
+private def foldlRange? {β : Type} (a : Float32Array) (start len : USize) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Float32 → β → Float32 × β) :
+    Option (Float32Array × β) :=
+  if h : start.toNat + len.toNat ≤ a.size then some (a.foldlInPlaceRange start len h init f)
+  else none
+
+private def foldrRange? {β : Type} (a : Float32Array) (start len : USize) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → Float32 → β → Float32 × β) :
+    Option (Float32Array × β) :=
+  if h : start.toNat + len.toNat ≤ a.size then some (a.foldrInPlaceRange start len h init f)
+  else none
+
+private def foldlSlice {β : Type} (a : Float32Array) (start len : Nat) (init : β)
+    (f : USize → Float32 → β → Float32 × β) : Float32Array × β :=
+  let r := a[start...start + len].foldlInPlace init fun k _ => f k
+  (r.1.array, r.2)
+
+private def foldrSlice {β : Type} (a : Float32Array) (start len : Nat) (init : β)
+    (f : USize → Float32 → β → Float32 × β) : Float32Array × β :=
+  let r := a[start...start + len].foldrInPlace init fun k _ => f k
+  (r.1.array, r.2)
+
+-- Shifts the range by one, inserting the initial accumulator, and records the indices visited.
+private def shift (k : USize) (x : Float32) (b : Float32 × List Nat) :
+    Float32 × (Float32 × List Nat) :=
+  (b.1, (x, k.toNat :: b.2))
+
+#guard
+  let a := Float32Array.mk #[1, 2, 3, 4, 5, big]
+  [(0, 6), (1, 3), (2, 0), (0, 0), (6, 0), (5, 1), (0, 1)].all fun (start, len) =>
+    let l := (foldlRange? a start.toUSize len.toUSize (big, []) fun k _ => shift k).map
+      fun r => (r.1.data, r.2)
+    let r := (foldrRange? a start.toUSize len.toUSize (big, []) fun k _ => shift k).map
+      fun r => (r.1.data, r.2)
+    let l' := foldlSlice a start len (big, []) shift
+    let r' := foldrSlice a start len (big, []) shift
+    l == some (l'.1.data, l'.2) && r == some (r'.1.data, r'.2)
+
+#guard (foldlRange? (Float32Array.mk #[1, 2, 3, 4]) 1 2 (9 : Float32) fun _ _ x b => (b, x)).map
+  (fun r => (r.1.data, r.2)) == some (#[1, 9, 2, 4], 3)
+#guard (foldrRange? (Float32Array.mk #[1, 2, 3, 4]) 1 2 (9 : Float32) fun _ _ x b => (b, x)).map
+  (fun r => (r.1.data, r.2)) == some (#[1, 3, 9, 4], 2)
+#guard (foldlRange? (Float32Array.mk #[1, 2, 3, 4]) 4 0 (9 : Float32) fun _ _ x b => (b, x)).map
+  (fun r => (r.1.data, r.2)) == some (#[1, 2, 3, 4], 9)
+
+-- The `Then` versions hand the array and the last accumulator to `g`, here to store it.
+#guard
+  let a := Float32Array.mk #[1, 2, 3, 4]
+  if h : (0 : USize).toNat + (3 : USize).toNat ≤ a.size then
+    (a.foldlInPlaceRangeThen 0 3 h (9 : Float32) (fun _ _ x b => (b, x)) fun a b =>
+        (a.set! 3 b).data) == #[9, 1, 2, 3] &&
+      (a.foldrInPlaceRangeThen 0 3 h (9 : Float32) (fun _ _ x b => (b, x)) fun a b =>
+        (a.set! 3 b).data) == #[2, 3, 9, 1] && a.data == #[1, 2, 3, 4]
+  else false
+
+-- A shared array is left unchanged, and an exclusive one is written in place.
+#guard
+  let a := Float32Array.mk #[1, 2, 3, 4]
+  let r := foldlRange? a 0 4 (9 : Float32) fun _ _ x b => (b, x)
+  let r' := foldrRange? a 0 4 (9 : Float32) fun _ _ x b => (b, x)
+  r.map (·.1.data) == some #[9, 1, 2, 3] && r'.map (·.1.data) == some #[2, 3, 4, 9] &&
+    a.data == #[1, 2, 3, 4]
+
+@[noinline] def Float32Array.foldsRangeInPlace (x : Float32) : Bool :=
+  let a := (Float32Array.emptyWithCapacity 8).push x |>.push 2 |>.push 3 |>.push 4 |>.push x
+  let p := rawAddr a
+  match foldlRange? a 1 3 () (fun _ _ x b => (x + 1, b)) with
+  | some (a, _) =>
+    match foldrRange? a 1 3 () (fun _ _ x b => (x + 1, b)) with
+    | some (a, _) => rawAddr a == p && a.data == #[x, 4, 5, 6, x]
+    | none => false
+  | none => false
+
+#guard Float32Array.foldsRangeInPlace 1
+
 /-! Lemmas from another module -/
 
 example (a : Float32Array) (i : USize) (v : Float32) (h) (j : Nat) (hj) :
@@ -1002,4 +1080,14 @@ example (s : Float32Array.Slice) (f : (k : USize) → k.toNat < s.size → Float
   simp
 example (s : Float32Array.Slice) (f : (k : USize) → k.toNat < s.size → Float32 → Nat → Float32 × Nat) :
     (s.foldrInPlaceThen 0 f fun t _ => t).size = s.size := by
+  simp
+example (a : Float32Array) (start len : USize) (h : start.toNat + len.toNat ≤ a.size)
+    (f : (k : USize) → k.toNat < len.toNat → Float32 → Nat → Float32 × Nat) :
+    (a.foldlInPlaceRange start len h 0 f).2 =
+      ((a.toSlice start.toNat (start.toNat + len.toNat)).foldlInPlace 0
+        fun k hk => f k (by simp at hk; lia)).2 := by
+  simp
+example (a : Float32Array) (start len : USize) (h : start.toNat + len.toNat ≤ a.size)
+    (f : (k : USize) → k.toNat < len.toNat → Float32 → Nat → Float32 × Nat) :
+    a.foldrInPlaceRangeThen start len h 0 f Prod.mk = a.foldrInPlaceRange start len h 0 f := by
   simp
