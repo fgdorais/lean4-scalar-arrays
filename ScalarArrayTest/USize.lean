@@ -29,6 +29,24 @@ private abbrev elemSize : UInt32 := (System.Platform.numBits / 8).toUInt32
 #guard (USizeArray.mk (Array.range 1000 |>.map Nat.toUSize)).data ==
   (Array.range 1000).map Nat.toUSize
 
+/-! Case analysis -/
+
+-- `cases` splits an array as `mk data`, also in compiled code.
+private def headOrZero (a : USizeArray) : USize := by
+  cases a with | mk data => exact data[0]?.getD 0
+
+#guard headOrZero (USizeArray.mk #[7, 8]) == 7
+#guard headOrZero USizeArray.empty == 0
+
+-- There is no constructor to match on, which would run `Array` code on a scalar array.
+/--
+error: Invalid `⟨...⟩` notation: The expected type `Quot fun x x_1 => False` is not an inductive type
+
+Note: This notation can only be used when the expected type is an inductive type with a single constructor
+-/
+#guard_msgs in
+example (a : USizeArray) : USize := match a with | ⟨data⟩ => data[0]!
+
 /-! Size -/
 
 #guard (USizeArray.mk #[1, 2, 3, big]).size == 4
@@ -67,32 +85,6 @@ private abbrev elemSize : UInt32 := (System.Platform.numBits / 8).toUInt32
   let a := USizeArray.mk #[1, 2, 3]
   let b := a.set 2 big (by simp [a])
   b.data == #[1, 2, big] && a.data == #[1, 2, 3]
-
--- `foldInPlace` shifts a range right by one, inserting the initial accumulator.
-#guard
-  let r := (USizeArray.mk #[1, 2, 3, 4]).foldInPlace 1 2 9 (fun _ _ x b => (b, x)) (by simp)
-  r.1.data == #[1, 9, 2, 4] && r.2 == 3
-
--- `foldInPlace` on a shared array must leave the original unchanged, and `f` must see the
--- elements of the original even when it reads them from the array itself.
-#guard
-  let a := USizeArray.mk #[1, 2, 3, 4]
-  let r := a.foldInPlace 0 4 9 (fun _ _ x b => (b, x)) (by simp [a])
-  r.1.data == #[9, 1, 2, 3] && a.data == #[1, 2, 3, 4]
-#guard
-  let a := USizeArray.mk #[1, 2, 3, 4]
-  let r := a.foldInPlace 1 3 0 (fun k _ _ b => (a[k.toNat]!, b)) (by simp [a])
-  r.1.data == #[1, 1, 2, 3]
-
--- `foldInPlaceThen` hands the array and the last accumulator to `g`, here to store it.
-#guard
-  let r := (USizeArray.mk #[1, 2, 3, 4]).foldInPlaceThen 0 3 9 (fun _ _ x b => (b, x))
-    (fun a b => a.set! 3 b) (by simp)
-  r.data == #[9, 1, 2, 3]
-#guard
-  let a := USizeArray.mk #[1, 2, 3, 4]
-  let r := a.foldInPlaceThen 1 2 9 (fun _ _ x b => (b, x)) Prod.mk (by simp [a])
-  r.1.data == #[1, 9, 2, 4] && r.2 == 3 && a.data == #[1, 2, 3, 4]
 
 -- Repeated writes to an exclusive array.
 #guard Id.run do
@@ -204,6 +196,93 @@ private abbrev elemSize : UInt32 := (System.Platform.numBits / 8).toUInt32
 #guard rawCapacity (USizeArray.mk #[1, 2, 3]) ≥ 3
 -- Growth is geometric, so pushing is amortized constant time.
 #guard rawCapacity ((USizeArray.mk #[1, 2, 3, 4]).push 5) ≥ 8
+
+
+/-! Ensuring exclusivity and capacity -/
+
+#guard (USizeArray.mk #[1, 2, 3]).ensureExclusive.data == #[1, 2, 3]
+#guard ((USizeArray.mk #[1, 2, 3]).ensureCapacity 100).data == #[1, 2, 3]
+#guard ((USizeArray.mk #[1, 2, 3]).ensureCapacity 0).data == #[1, 2, 3]
+#guard ((USizeArray.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100).data == #[1, 2, 3]
+#guard ((USizeArray.mk #[1, 2, 3]).ensureExclusiveWithCapacity 0).data == #[1, 2, 3]
+
+#guard rawCapacity ((USizeArray.mk #[1, 2, 3]).ensureCapacity 100) ≥ 100
+#guard rawCapacity ((USizeArray.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100) ≥ 100
+-- A copy never has less room than the size.
+#guard rawCapacity ((USizeArray.mk #[1, 2, 3]).ensureExclusiveWithCapacity 0) ≥ 3
+#guard rawElemSize ((USizeArray.mk #[1, 2, 3]).ensureCapacity 100) == elemSize
+
+-- The array is built from a parameter so that it isn't extracted as a shared closed term.
+@[noinline] def USizeArray.ensuresInPlace (x : USize) : Bool :=
+  let a := (USizeArray.emptyWithCapacity 10).push x
+  let p := rawAddr a
+  let a := a.ensureExclusive.ensureCapacity 5 |>.ensureExclusiveWithCapacity 10
+  rawAddr a == p && a.data == #[x]
+
+-- Pushes after `ensureExclusiveWithCapacity` don't reallocate.
+@[noinline] def USizeArray.pushesInPlaceAfterEnsure (x : USize) : Bool :=
+  let a := (USizeArray.mk #[x]).ensureExclusiveWithCapacity 4
+  let p := rawAddr a
+  let a := a.push 2 |>.push 3 |>.push 4
+  rawAddr a == p && a.data == #[x, 2, 3, 4]
+
+-- `ensureCapacity` doesn't copy a shared array that has room.
+@[noinline] def USizeArray.ensureCapacityKeepsShared (x : USize) : Bool :=
+  let a := (USizeArray.emptyWithCapacity 10).push x
+  let b := a.ensureCapacity 5
+  rawAddr b == rawAddr a && b.data == #[x]
+
+-- `ensureExclusiveWithCapacity` copies a shared array once, even when it also needs room.
+@[noinline] def USizeArray.ensureExclusiveWithCapacityCopiesShared (x : USize) : Bool :=
+  let a := (USizeArray.emptyWithCapacity 2).push x
+  let b := a.ensureExclusiveWithCapacity 20
+  rawAddr b != rawAddr a && rawCapacity b ≥ 20 && b.data == #[x] && a.data == #[x]
+
+#guard USizeArray.ensuresInPlace 1
+#guard USizeArray.pushesInPlaceAfterEnsure 1
+#guard USizeArray.ensureCapacityKeepsShared 1
+#guard USizeArray.ensureExclusiveWithCapacityCopiesShared 1
+
+-- After any of them, a write to a shared array must leave the original unchanged. The results
+-- are checked first so that they are computed while the original is still live.
+#guard
+  let a := USizeArray.mk #[1, 2, 3]
+  let b := a.ensureExclusive.set! 0 big
+  b.data == #[big, 2, 3] && a.data == #[1, 2, 3]
+#guard
+  let a := USizeArray.mk #[1, 2, 3]
+  let b := (a.ensureCapacity 10).set! 0 big |>.push 4
+  b.data == #[big, 2, 3, 4] && a.data == #[1, 2, 3]
+#guard
+  let a := USizeArray.mk #[1, 2, 3]
+  let b := (a.ensureExclusiveWithCapacity 10).set! 0 big |>.push 4
+  b.data == #[big, 2, 3, 4] && a.data == #[1, 2, 3]
+
+-- On a closed array, they must not hand out a shared constant: a later call must not change an
+-- earlier result.
+@[noinline] def USizeArray.ensureExclusiveConstant (x : USize) : USizeArray :=
+  (USizeArray.mk #[0, 0]).ensureExclusive.uset 0 x
+
+@[noinline] def USizeArray.ensureCapacityConstant (x : USize) : USizeArray :=
+  ((USizeArray.mk #[0, 0]).ensureCapacity 10).uset 0 x |>.push x
+
+@[noinline] def USizeArray.ensureExclusiveWithCapacityConstant (x : USize) : USizeArray :=
+  ((USizeArray.mk #[0, 0]).ensureExclusiveWithCapacity 10).uset 0 x |>.push x
+
+#guard
+  let a := USizeArray.ensureExclusiveConstant 1
+  let b := USizeArray.ensureExclusiveConstant 2
+  b.data == #[2, 0] && a.data == #[1, 0]
+
+#guard
+  let a := USizeArray.ensureCapacityConstant 1
+  let b := USizeArray.ensureCapacityConstant 2
+  b.data == #[2, 0, 2] && a.data == #[1, 0, 1]
+
+#guard
+  let a := USizeArray.ensureExclusiveWithCapacityConstant 1
+  let b := USizeArray.ensureExclusiveWithCapacityConstant 2
+  b.data == #[2, 0, 2] && a.data == #[1, 0, 1]
 
 
 /-! Appending -/
@@ -465,7 +544,7 @@ example (p : USize → Bool) (a : USizeArray) : (a.popWhile p).data = a.data.pop
 
 example (a : USizeArray) (v : USize) : (a.push v).pop = a := by simp [USizeArray.ext_iff]
 example : (USizeArray.replicate 3 big)[1] = big := by simp
-example (a b : USizeArray) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
+example (a b : USizeArray) (h : 0 < a.size) : (a ++ b)[0]'(by simp; lia) = a[0] := by simp [h]
 example (a : USizeArray) (i : Nat) (v : USize) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
 example (a : USizeArray) : a.extract 0 a.size = a := by simp
@@ -811,6 +890,10 @@ example (s : USizeArray.Slice) : s.copy.size = s.size := by simp
     (s.foldrInPlaceThen 9 (fun _ _ x b => (b, x)) (fun s b => s.set! 3 b)).toList ==
       [2, 3, 4, 1]
 #guard
+  let r := (USizeArray.mk #[1, 2, 3, 4])[0...3].foldlInPlaceThen 9 (fun _ _ x b => (b, x))
+    (fun s b => s.array.set! 3 b)
+  r.data == #[9, 1, 2, 3]
+#guard
   let a := USizeArray.mk #[1, 2, 3, 4]
   let r := a[1...3].foldlInPlaceThen 9 (fun _ _ x b => (b, x)) Prod.mk
   let r' := a[1...3].foldrInPlaceThen 9 (fun _ _ x b => (b, x)) Prod.mk
@@ -840,6 +923,13 @@ example (s : USizeArray.Slice) : s.copy.size = s.size := by simp
   let a := USizeArray.mk #[1, 2, 3, 4]
   let r := a[0...4].foldrInPlace 9 (fun _ _ x b => (b, x))
   r.1.array.data == #[2, 3, 4, 9] && a.data == #[1, 2, 3, 4]
+
+-- `f` must see the elements of the original even when it reads them from the shared array itself.
+#guard
+  let a := USizeArray.mk #[1, 2, 3, 4]
+  let r := a[1...4].foldlInPlace 0 (fun k _ _ b => (a[k.toNat]!, b))
+  let r' := a[1...4].foldrInPlace 0 (fun k _ _ b => (a[k.toNat]!, b))
+  r.1.array.data == #[1, 1, 2, 3] && r'.1.array.data == #[1, 1, 2, 3] && a.data == #[1, 2, 3, 4]
 #guard
   let s := (USizeArray.mk #[1, 2, 3, 4])[0...4]
   let t := s.swap 0 3

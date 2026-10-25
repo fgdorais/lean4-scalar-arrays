@@ -29,6 +29,24 @@ private abbrev elemSize : UInt32 := 2
 #guard (Int16Array.mk (Array.range 1000 |>.map Nat.toInt16)).data ==
   (Array.range 1000).map Nat.toInt16
 
+/-! Case analysis -/
+
+-- `cases` splits an array as `mk data`, also in compiled code.
+private def headOrZero (a : Int16Array) : Int16 := by
+  cases a with | mk data => exact data[0]?.getD 0
+
+#guard headOrZero (Int16Array.mk #[7, 8]) == 7
+#guard headOrZero Int16Array.empty == 0
+
+-- There is no constructor to match on, which would run `Array` code on a scalar array.
+/--
+error: Invalid `⟨...⟩` notation: The expected type `Quot fun x x_1 => False` is not an inductive type
+
+Note: This notation can only be used when the expected type is an inductive type with a single constructor
+-/
+#guard_msgs in
+example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
+
 /-! Size -/
 
 #guard (Int16Array.mk #[1, 2, 3, big]).size == 4
@@ -67,32 +85,6 @@ private abbrev elemSize : UInt32 := 2
   let a := Int16Array.mk #[1, 2, 3]
   let b := a.set 2 big (by simp [a])
   b.data == #[1, 2, big] && a.data == #[1, 2, 3]
-
--- `foldInPlace` shifts a range right by one, inserting the initial accumulator.
-#guard
-  let r := (Int16Array.mk #[1, 2, 3, 4]).foldInPlace 1 2 9 (fun _ _ x b => (b, x)) (by simp)
-  r.1.data == #[1, 9, 2, 4] && r.2 == 3
-
--- `foldInPlace` on a shared array must leave the original unchanged, and `f` must see the
--- elements of the original even when it reads them from the array itself.
-#guard
-  let a := Int16Array.mk #[1, 2, 3, 4]
-  let r := a.foldInPlace 0 4 9 (fun _ _ x b => (b, x)) (by simp [a])
-  r.1.data == #[9, 1, 2, 3] && a.data == #[1, 2, 3, 4]
-#guard
-  let a := Int16Array.mk #[1, 2, 3, 4]
-  let r := a.foldInPlace 1 3 0 (fun k _ _ b => (a[k.toNat]!, b)) (by simp [a])
-  r.1.data == #[1, 1, 2, 3]
-
--- `foldInPlaceThen` hands the array and the last accumulator to `g`, here to store it.
-#guard
-  let r := (Int16Array.mk #[1, 2, 3, 4]).foldInPlaceThen 0 3 9 (fun _ _ x b => (b, x))
-    (fun a b => a.set! 3 b) (by simp)
-  r.data == #[9, 1, 2, 3]
-#guard
-  let a := Int16Array.mk #[1, 2, 3, 4]
-  let r := a.foldInPlaceThen 1 2 9 (fun _ _ x b => (b, x)) Prod.mk (by simp [a])
-  r.1.data == #[1, 9, 2, 4] && r.2 == 3 && a.data == #[1, 2, 3, 4]
 
 -- Repeated writes to an exclusive array.
 #guard Id.run do
@@ -204,6 +196,93 @@ private abbrev elemSize : UInt32 := 2
 #guard rawCapacity (Int16Array.mk #[1, 2, 3]) ≥ 3
 -- Growth is geometric, so pushing is amortized constant time.
 #guard rawCapacity ((Int16Array.mk #[1, 2, 3, 4]).push 5) ≥ 8
+
+
+/-! Ensuring exclusivity and capacity -/
+
+#guard (Int16Array.mk #[1, 2, 3]).ensureExclusive.data == #[1, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).ensureCapacity 100).data == #[1, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).ensureCapacity 0).data == #[1, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100).data == #[1, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 0).data == #[1, 2, 3]
+
+#guard rawCapacity ((Int16Array.mk #[1, 2, 3]).ensureCapacity 100) ≥ 100
+#guard rawCapacity ((Int16Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100) ≥ 100
+-- A copy never has less room than the size.
+#guard rawCapacity ((Int16Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 0) ≥ 3
+#guard rawElemSize ((Int16Array.mk #[1, 2, 3]).ensureCapacity 100) == elemSize
+
+-- The array is built from a parameter so that it isn't extracted as a shared closed term.
+@[noinline] def Int16Array.ensuresInPlace (x : Int16) : Bool :=
+  let a := (Int16Array.emptyWithCapacity 10).push x
+  let p := rawAddr a
+  let a := a.ensureExclusive.ensureCapacity 5 |>.ensureExclusiveWithCapacity 10
+  rawAddr a == p && a.data == #[x]
+
+-- Pushes after `ensureExclusiveWithCapacity` don't reallocate.
+@[noinline] def Int16Array.pushesInPlaceAfterEnsure (x : Int16) : Bool :=
+  let a := (Int16Array.mk #[x]).ensureExclusiveWithCapacity 4
+  let p := rawAddr a
+  let a := a.push 2 |>.push 3 |>.push 4
+  rawAddr a == p && a.data == #[x, 2, 3, 4]
+
+-- `ensureCapacity` doesn't copy a shared array that has room.
+@[noinline] def Int16Array.ensureCapacityKeepsShared (x : Int16) : Bool :=
+  let a := (Int16Array.emptyWithCapacity 10).push x
+  let b := a.ensureCapacity 5
+  rawAddr b == rawAddr a && b.data == #[x]
+
+-- `ensureExclusiveWithCapacity` copies a shared array once, even when it also needs room.
+@[noinline] def Int16Array.ensureExclusiveWithCapacityCopiesShared (x : Int16) : Bool :=
+  let a := (Int16Array.emptyWithCapacity 2).push x
+  let b := a.ensureExclusiveWithCapacity 20
+  rawAddr b != rawAddr a && rawCapacity b ≥ 20 && b.data == #[x] && a.data == #[x]
+
+#guard Int16Array.ensuresInPlace 1
+#guard Int16Array.pushesInPlaceAfterEnsure 1
+#guard Int16Array.ensureCapacityKeepsShared 1
+#guard Int16Array.ensureExclusiveWithCapacityCopiesShared 1
+
+-- After any of them, a write to a shared array must leave the original unchanged. The results
+-- are checked first so that they are computed while the original is still live.
+#guard
+  let a := Int16Array.mk #[1, 2, 3]
+  let b := a.ensureExclusive.set! 0 big
+  b.data == #[big, 2, 3] && a.data == #[1, 2, 3]
+#guard
+  let a := Int16Array.mk #[1, 2, 3]
+  let b := (a.ensureCapacity 10).set! 0 big |>.push 4
+  b.data == #[big, 2, 3, 4] && a.data == #[1, 2, 3]
+#guard
+  let a := Int16Array.mk #[1, 2, 3]
+  let b := (a.ensureExclusiveWithCapacity 10).set! 0 big |>.push 4
+  b.data == #[big, 2, 3, 4] && a.data == #[1, 2, 3]
+
+-- On a closed array, they must not hand out a shared constant: a later call must not change an
+-- earlier result.
+@[noinline] def Int16Array.ensureExclusiveConstant (x : Int16) : Int16Array :=
+  (Int16Array.mk #[0, 0]).ensureExclusive.uset 0 x
+
+@[noinline] def Int16Array.ensureCapacityConstant (x : Int16) : Int16Array :=
+  ((Int16Array.mk #[0, 0]).ensureCapacity 10).uset 0 x |>.push x
+
+@[noinline] def Int16Array.ensureExclusiveWithCapacityConstant (x : Int16) : Int16Array :=
+  ((Int16Array.mk #[0, 0]).ensureExclusiveWithCapacity 10).uset 0 x |>.push x
+
+#guard
+  let a := Int16Array.ensureExclusiveConstant 1
+  let b := Int16Array.ensureExclusiveConstant 2
+  b.data == #[2, 0] && a.data == #[1, 0]
+
+#guard
+  let a := Int16Array.ensureCapacityConstant 1
+  let b := Int16Array.ensureCapacityConstant 2
+  b.data == #[2, 0, 2] && a.data == #[1, 0, 1]
+
+#guard
+  let a := Int16Array.ensureExclusiveWithCapacityConstant 1
+  let b := Int16Array.ensureExclusiveWithCapacityConstant 2
+  b.data == #[2, 0, 2] && a.data == #[1, 0, 1]
 
 
 /-! Appending -/
@@ -474,7 +553,7 @@ example (p : Int16 → Bool) (a : Int16Array) : (a.popWhile p).data = a.data.pop
 
 example (a : Int16Array) (v : Int16) : (a.push v).pop = a := by simp [Int16Array.ext_iff]
 example : (Int16Array.replicate 3 big)[1] = big := by simp
-example (a b : Int16Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; omega) = a[0] := by simp [h]
+example (a b : Int16Array) (h : 0 < a.size) : (a ++ b)[0]'(by simp; lia) = a[0] := by simp [h]
 example (a : Int16Array) (i : Nat) (v : Int16) (h : i < a.size) :
     (a.set i v h)[i]'(by simpa) = v := by simp
 example (a : Int16Array) : a.extract 0 a.size = a := by simp
@@ -820,6 +899,10 @@ example (s : Int16Array.Slice) : s.copy.size = s.size := by simp
     (s.foldrInPlaceThen 9 (fun _ _ x b => (b, x)) (fun s b => s.set! 3 b)).toList ==
       [2, 3, 4, 1]
 #guard
+  let r := (Int16Array.mk #[1, 2, 3, 4])[0...3].foldlInPlaceThen 9 (fun _ _ x b => (b, x))
+    (fun s b => s.array.set! 3 b)
+  r.data == #[9, 1, 2, 3]
+#guard
   let a := Int16Array.mk #[1, 2, 3, 4]
   let r := a[1...3].foldlInPlaceThen 9 (fun _ _ x b => (b, x)) Prod.mk
   let r' := a[1...3].foldrInPlaceThen 9 (fun _ _ x b => (b, x)) Prod.mk
@@ -849,6 +932,13 @@ example (s : Int16Array.Slice) : s.copy.size = s.size := by simp
   let a := Int16Array.mk #[1, 2, 3, 4]
   let r := a[0...4].foldrInPlace 9 (fun _ _ x b => (b, x))
   r.1.array.data == #[2, 3, 4, 9] && a.data == #[1, 2, 3, 4]
+
+-- `f` must see the elements of the original even when it reads them from the shared array itself.
+#guard
+  let a := Int16Array.mk #[1, 2, 3, 4]
+  let r := a[1...4].foldlInPlace 0 (fun k _ _ b => (a[k.toNat]!, b))
+  let r' := a[1...4].foldrInPlace 0 (fun k _ _ b => (a[k.toNat]!, b))
+  r.1.array.data == #[1, 1, 2, 3] && r'.1.array.data == #[1, 1, 2, 3] && a.data == #[1, 2, 3, 4]
 #guard
   let s := (Int16Array.mk #[1, 2, 3, 4])[0...4]
   let t := s.swap 0 3
