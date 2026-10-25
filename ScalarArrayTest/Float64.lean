@@ -875,6 +875,19 @@ example (s : Float64Array.Slice) : s.copy.size = s.size := by simp
   (s.foldlInPlace [] (fun k _ x b => (x, k.toNat :: b))).2 == [2, 1, 0] &&
     (s.foldrInPlace [] (fun k _ x b => (x, k.toNat :: b))).2 == [0, 1, 2]
 
+-- The folds agree with the pure folds of `foldlInPlace_eq_foldl_finRange` and
+-- `foldrInPlace_eq_foldr_finRange`, and leave the array outside the slice unchanged.
+#guard
+  let s := (Float64Array.mk #[1, 2, 3, 4, 5])[1...4]
+  let r := s.foldlInPlace 7 (fun _ _ x b => (x * 2 + b, x))
+  let r' := s.foldrInPlace 7 (fun _ _ x b => (x * 2 + b, x))
+  (r.1.copy.toList, r.2) == (List.finRange s.size).foldl
+      (fun (acc : List Float × Float) i => (acc.1 ++ [s[i] * 2 + acc.2], s[i])) ([], 7) &&
+    (r'.1.copy.toList, r'.2) == (List.finRange s.size).foldr
+      (fun i (acc : List Float × Float) => ((s[i] * 2 + acc.2) :: acc.1, s[i])) ([], 7) &&
+    r.1.array[0]! == 1 && r.1.array[4]! == 5 && r'.1.array[0]! == 1 && r'.1.array[4]! == 5 &&
+    r.1.array.size == 5 && r'.1.array.size == 5
+
 -- Writing through a slice of a shared array must leave the original unchanged.
 #guard
   let a := Float64Array.mk #[1, 2, 3, 4]
@@ -1003,3 +1016,25 @@ example (s : Float64Array.Slice) (f : (k : USize) → k.toNat < s.size → Float
 example (s : Float64Array.Slice) (f : (k : USize) → k.toNat < s.size → Float → Nat → Float × Nat) :
     (s.foldrInPlaceThen 0 f fun t _ => t).size = s.size := by
   simp
+example (s : Float64Array.Slice) (f : (k : USize) → k.toNat < s.size → Float → Nat → Float × Nat) :
+    (s.foldlInPlace 0 f).1.array.size = s.array.size ∧
+      (s.foldrInPlace 0 f).1.array.size = s.array.size := by
+  simp
+example (s : Float64Array.Slice) (f : (k : USize) → k.toNat < s.size → Float → Nat → Float × Nat)
+    (h : 0 < s.start) : (s.foldlInPlace 0 f).1.array[0]? = s.array[0]? :=
+  s.getElem?_array_foldlInPlace 0 f 0 (.inl h)
+example (s : Float64Array.Slice) (f : (k : USize) → k.toNat < s.size → Float → Nat → Float × Nat) :
+    (s.foldrInPlace 0 f).1.array[s.stop]? = s.array[s.stop]? :=
+  s.getElem?_array_foldrInPlace 0 f _ (.inr (Nat.le_refl _))
+
+-- Mapping each element and counting, as a pure fold.
+example (s : Float64Array.Slice) :
+    (s.foldlInPlace 0 fun _ _ x b => (x + 1, b + 1)).2 =
+      ((List.finRange s.size).foldl (fun acc i => (acc.1 ++ [s[i] + 1], acc.2 + 1))
+        ([], 0)).2 :=
+  congrArg Prod.snd (s.foldlInPlace_eq_foldl_finRange _ _)
+example (s : Float64Array.Slice) :
+    (s.foldrInPlace 0 fun _ _ x b => (x + 1, b + 1)).1.copy.toList =
+      ((List.finRange s.size).foldr (fun i acc => ((s[i] + 1) :: acc.1, acc.2 + 1))
+        ([], 0)).1 :=
+  congrArg Prod.fst (s.foldrInPlace_eq_foldr_finRange _ _)
