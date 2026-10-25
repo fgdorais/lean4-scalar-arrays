@@ -86,32 +86,6 @@ example (a : UInt32Array) : UInt32 := match a with | ⟨data⟩ => data[0]!
   let b := a.set 2 big (by simp [a])
   b.data == #[1, 2, big] && a.data == #[1, 2, 3]
 
--- `foldInPlace` shifts a range right by one, inserting the initial accumulator.
-#guard
-  let r := (UInt32Array.mk #[1, 2, 3, 4]).foldInPlace 1 2 9 (fun _ _ x b => (b, x)) (by simp)
-  r.1.data == #[1, 9, 2, 4] && r.2 == 3
-
--- `foldInPlace` on a shared array must leave the original unchanged, and `f` must see the
--- elements of the original even when it reads them from the array itself.
-#guard
-  let a := UInt32Array.mk #[1, 2, 3, 4]
-  let r := a.foldInPlace 0 4 9 (fun _ _ x b => (b, x)) (by simp [a])
-  r.1.data == #[9, 1, 2, 3] && a.data == #[1, 2, 3, 4]
-#guard
-  let a := UInt32Array.mk #[1, 2, 3, 4]
-  let r := a.foldInPlace 1 3 0 (fun k _ _ b => (a[k.toNat]!, b)) (by simp [a])
-  r.1.data == #[1, 1, 2, 3]
-
--- `foldInPlaceThen` hands the array and the last accumulator to `g`, here to store it.
-#guard
-  let r := (UInt32Array.mk #[1, 2, 3, 4]).foldInPlaceThen 0 3 9 (fun _ _ x b => (b, x))
-    (fun a b => a.set! 3 b) (by simp)
-  r.data == #[9, 1, 2, 3]
-#guard
-  let a := UInt32Array.mk #[1, 2, 3, 4]
-  let r := a.foldInPlaceThen 1 2 9 (fun _ _ x b => (b, x)) Prod.mk (by simp [a])
-  r.1.data == #[1, 9, 2, 4] && r.2 == 3 && a.data == #[1, 2, 3, 4]
-
 -- Repeated writes to an exclusive array.
 #guard Id.run do
   let mut a := UInt32Array.mk (Array.replicate 1000 0)
@@ -925,6 +899,10 @@ example (s : UInt32Array.Slice) : s.copy.size = s.size := by simp
     (s.foldrInPlaceThen 9 (fun _ _ x b => (b, x)) (fun s b => s.set! 3 b)).toList ==
       [2, 3, 4, 1]
 #guard
+  let r := (UInt32Array.mk #[1, 2, 3, 4])[0...3].foldlInPlaceThen 9 (fun _ _ x b => (b, x))
+    (fun s b => s.array.set! 3 b)
+  r.data == #[9, 1, 2, 3]
+#guard
   let a := UInt32Array.mk #[1, 2, 3, 4]
   let r := a[1...3].foldlInPlaceThen 9 (fun _ _ x b => (b, x)) Prod.mk
   let r' := a[1...3].foldrInPlaceThen 9 (fun _ _ x b => (b, x)) Prod.mk
@@ -954,6 +932,13 @@ example (s : UInt32Array.Slice) : s.copy.size = s.size := by simp
   let a := UInt32Array.mk #[1, 2, 3, 4]
   let r := a[0...4].foldrInPlace 9 (fun _ _ x b => (b, x))
   r.1.array.data == #[2, 3, 4, 9] && a.data == #[1, 2, 3, 4]
+
+-- `f` must see the elements of the original even when it reads them from the shared array itself.
+#guard
+  let a := UInt32Array.mk #[1, 2, 3, 4]
+  let r := a[1...4].foldlInPlace 0 (fun k _ _ b => (a[k.toNat]!, b))
+  let r' := a[1...4].foldrInPlace 0 (fun k _ _ b => (a[k.toNat]!, b))
+  r.1.array.data == #[1, 1, 2, 3] && r'.1.array.data == #[1, 1, 2, 3] && a.data == #[1, 2, 3, 4]
 #guard
   let s := (UInt32Array.mk #[1, 2, 3, 4])[0...4]
   let t := s.swap 0 3
