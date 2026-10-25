@@ -29,6 +29,24 @@ private abbrev elemSize : UInt32 := 1
 #guard (Int8Array.mk (Array.range 1000 |>.map Nat.toInt8)).data ==
   (Array.range 1000).map Nat.toInt8
 
+/-! Case analysis -/
+
+-- `cases` splits an array as `mk data`, also in compiled code.
+private def headOrZero (a : Int8Array) : Int8 := by
+  cases a with | mk data => exact data[0]?.getD 0
+
+#guard headOrZero (Int8Array.mk #[7, 8]) == 7
+#guard headOrZero Int8Array.empty == 0
+
+-- There is no constructor to match on, which would run `Array` code on a scalar array.
+/--
+error: Invalid `⟨...⟩` notation: The expected type `Quot fun x x_1 => False` is not an inductive type
+
+Note: This notation can only be used when the expected type is an inductive type with a single constructor
+-/
+#guard_msgs in
+example (a : Int8Array) : Int8 := match a with | ⟨data⟩ => data[0]!
+
 /-! Size -/
 
 #guard (Int8Array.mk #[1, 2, 3, big]).size == 4
@@ -204,6 +222,93 @@ private abbrev elemSize : UInt32 := 1
 #guard rawCapacity (Int8Array.mk #[1, 2, 3]) ≥ 3
 -- Growth is geometric, so pushing is amortized constant time.
 #guard rawCapacity ((Int8Array.mk #[1, 2, 3, 4]).push 5) ≥ 8
+
+
+/-! Ensuring exclusivity and capacity -/
+
+#guard (Int8Array.mk #[1, 2, 3]).ensureExclusive.data == #[1, 2, 3]
+#guard ((Int8Array.mk #[1, 2, 3]).ensureCapacity 100).data == #[1, 2, 3]
+#guard ((Int8Array.mk #[1, 2, 3]).ensureCapacity 0).data == #[1, 2, 3]
+#guard ((Int8Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100).data == #[1, 2, 3]
+#guard ((Int8Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 0).data == #[1, 2, 3]
+
+#guard rawCapacity ((Int8Array.mk #[1, 2, 3]).ensureCapacity 100) ≥ 100
+#guard rawCapacity ((Int8Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100) ≥ 100
+-- A copy never has less room than the size.
+#guard rawCapacity ((Int8Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 0) ≥ 3
+#guard rawElemSize ((Int8Array.mk #[1, 2, 3]).ensureCapacity 100) == elemSize
+
+-- The array is built from a parameter so that it isn't extracted as a shared closed term.
+@[noinline] def Int8Array.ensuresInPlace (x : Int8) : Bool :=
+  let a := (Int8Array.emptyWithCapacity 10).push x
+  let p := rawAddr a
+  let a := a.ensureExclusive.ensureCapacity 5 |>.ensureExclusiveWithCapacity 10
+  rawAddr a == p && a.data == #[x]
+
+-- Pushes after `ensureExclusiveWithCapacity` don't reallocate.
+@[noinline] def Int8Array.pushesInPlaceAfterEnsure (x : Int8) : Bool :=
+  let a := (Int8Array.mk #[x]).ensureExclusiveWithCapacity 4
+  let p := rawAddr a
+  let a := a.push 2 |>.push 3 |>.push 4
+  rawAddr a == p && a.data == #[x, 2, 3, 4]
+
+-- `ensureCapacity` doesn't copy a shared array that has room.
+@[noinline] def Int8Array.ensureCapacityKeepsShared (x : Int8) : Bool :=
+  let a := (Int8Array.emptyWithCapacity 10).push x
+  let b := a.ensureCapacity 5
+  rawAddr b == rawAddr a && b.data == #[x]
+
+-- `ensureExclusiveWithCapacity` copies a shared array once, even when it also needs room.
+@[noinline] def Int8Array.ensureExclusiveWithCapacityCopiesShared (x : Int8) : Bool :=
+  let a := (Int8Array.emptyWithCapacity 2).push x
+  let b := a.ensureExclusiveWithCapacity 20
+  rawAddr b != rawAddr a && rawCapacity b ≥ 20 && b.data == #[x] && a.data == #[x]
+
+#guard Int8Array.ensuresInPlace 1
+#guard Int8Array.pushesInPlaceAfterEnsure 1
+#guard Int8Array.ensureCapacityKeepsShared 1
+#guard Int8Array.ensureExclusiveWithCapacityCopiesShared 1
+
+-- After any of them, a write to a shared array must leave the original unchanged. The results
+-- are checked first so that they are computed while the original is still live.
+#guard
+  let a := Int8Array.mk #[1, 2, 3]
+  let b := a.ensureExclusive.set! 0 big
+  b.data == #[big, 2, 3] && a.data == #[1, 2, 3]
+#guard
+  let a := Int8Array.mk #[1, 2, 3]
+  let b := (a.ensureCapacity 10).set! 0 big |>.push 4
+  b.data == #[big, 2, 3, 4] && a.data == #[1, 2, 3]
+#guard
+  let a := Int8Array.mk #[1, 2, 3]
+  let b := (a.ensureExclusiveWithCapacity 10).set! 0 big |>.push 4
+  b.data == #[big, 2, 3, 4] && a.data == #[1, 2, 3]
+
+-- On a closed array, they must not hand out a shared constant: a later call must not change an
+-- earlier result.
+@[noinline] def Int8Array.ensureExclusiveConstant (x : Int8) : Int8Array :=
+  (Int8Array.mk #[0, 0]).ensureExclusive.uset 0 x
+
+@[noinline] def Int8Array.ensureCapacityConstant (x : Int8) : Int8Array :=
+  ((Int8Array.mk #[0, 0]).ensureCapacity 10).uset 0 x |>.push x
+
+@[noinline] def Int8Array.ensureExclusiveWithCapacityConstant (x : Int8) : Int8Array :=
+  ((Int8Array.mk #[0, 0]).ensureExclusiveWithCapacity 10).uset 0 x |>.push x
+
+#guard
+  let a := Int8Array.ensureExclusiveConstant 1
+  let b := Int8Array.ensureExclusiveConstant 2
+  b.data == #[2, 0] && a.data == #[1, 0]
+
+#guard
+  let a := Int8Array.ensureCapacityConstant 1
+  let b := Int8Array.ensureCapacityConstant 2
+  b.data == #[2, 0, 2] && a.data == #[1, 0, 1]
+
+#guard
+  let a := Int8Array.ensureExclusiveWithCapacityConstant 1
+  let b := Int8Array.ensureExclusiveWithCapacityConstant 2
+  b.data == #[2, 0, 2] && a.data == #[1, 0, 1]
 
 
 /-! Appending -/
