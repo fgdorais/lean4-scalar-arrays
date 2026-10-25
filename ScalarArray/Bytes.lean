@@ -260,8 +260,8 @@ public def ofBytesBE! (b : ByteArray) : UInt16Array :=
     ofBytesBE? a.toBytesBE = some a := by
   simp [toBytesBE]
 
-private unsafe def byteSwapImpl (a : UInt16Array) : UInt16Array :=
-  a.foldInPlaceThen 0 a.usize () (fun _ _ x _ => (x.byteSwap, ())) (fun a _ => a) lcProof
+private def byteSwapImpl (a : UInt16Array) : UInt16Array :=
+  a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
@@ -484,8 +484,8 @@ public def ofBytesBE! (b : ByteArray) : UInt32Array :=
     ofBytesBE? a.toBytesBE = some a := by
   simp [toBytesBE]
 
-private unsafe def byteSwapImpl (a : UInt32Array) : UInt32Array :=
-  a.foldInPlaceThen 0 a.usize () (fun _ _ x _ => (x.byteSwap, ())) (fun a _ => a) lcProof
+private def byteSwapImpl (a : UInt32Array) : UInt32Array :=
+  a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
@@ -740,8 +740,8 @@ public def ofBytesBE! (b : ByteArray) : UInt64Array :=
     ofBytesBE? a.toBytesBE = some a := by
   simp [toBytesBE]
 
-private unsafe def byteSwapImpl (a : UInt64Array) : UInt64Array :=
-  a.foldInPlaceThen 0 a.usize () (fun _ _ x _ => (x.byteSwap, ())) (fun a _ => a) lcProof
+private def byteSwapImpl (a : UInt64Array) : UInt64Array :=
+  a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
@@ -952,8 +952,8 @@ public def ofBytesBE! (b : ByteArray) : Int16Array :=
     ofBytesBE? a.toBytesBE = some a := by
   simp [toBytesBE]
 
-private unsafe def byteSwapImpl (a : Int16Array) : Int16Array :=
-  a.foldInPlaceThen 0 a.usize () (fun _ _ x _ => (x.byteSwap, ())) (fun a _ => a) lcProof
+private def byteSwapImpl (a : Int16Array) : Int16Array :=
+  a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
@@ -1180,8 +1180,8 @@ public def ofBytesBE! (b : ByteArray) : Int32Array :=
     ofBytesBE? a.toBytesBE = some a := by
   simp [toBytesBE]
 
-private unsafe def byteSwapImpl (a : Int32Array) : Int32Array :=
-  a.foldInPlaceThen 0 a.usize () (fun _ _ x _ => (x.byteSwap, ())) (fun a _ => a) lcProof
+private def byteSwapImpl (a : Int32Array) : Int32Array :=
+  a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
@@ -1440,8 +1440,8 @@ public def ofBytesBE! (b : ByteArray) : Int64Array :=
     ofBytesBE? a.toBytesBE = some a := by
   simp [toBytesBE]
 
-private unsafe def byteSwapImpl (a : Int64Array) : Int64Array :=
-  a.foldInPlaceThen 0 a.usize () (fun _ _ x _ => (x.byteSwap, ())) (fun a _ => a) lcProof
+private def byteSwapImpl (a : Int64Array) : Int64Array :=
+  a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]

@@ -238,8 +238,8 @@ public def ofBytes{order}! (b : ByteArray) : {A} :=
 ''')
     if swap:
         out.append(f'''
-private unsafe def byteSwapImpl (a : {A}) : {A} :=
-  a.foldInPlaceThen 0 a.usize () (fun _ _ x _ => (x.byteSwap, ())) (fun a _ => a) lcProof
+private def byteSwapImpl (a : {A}) : {A} :=
+  a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
