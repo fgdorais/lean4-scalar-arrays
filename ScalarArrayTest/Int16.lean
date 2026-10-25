@@ -967,6 +967,95 @@ example (s : Int16Array.Slice) : s.copy.size = s.size := by simp
   let xs := (Array.range n).map Nat.toInt16
   (Int16Array.mk xs)[0...n].reverse.array.data == xs.reverse
 
+/-! Folding over windows of one array -/
+
+-- `foldlInPlace2` and `foldlInPlace2Then` with the bounds checked at run time.
+private def fold2 {β : Type} (a : Int16Array) (xs ys rs len : USize) (init : β)
+    (f : (j : USize) → j.toNat < len.toNat → Int16 → Int16 → β → Int16 × β) :
+    Option (Int16Array × β) :=
+  if h : xs.toNat + len.toNat ≤ a.size ∧ ys.toNat + len.toNat ≤ a.size ∧
+      rs.toNat + len.toNat ≤ a.size then
+    some (a.foldlInPlace2 xs ys rs len h.1 h.2.1 h.2.2 init f)
+  else
+    none
+
+private def fold2Then {β γ : Type} (a : Int16Array) (xs ys rs len : USize) (init : β)
+    (f : (j : USize) → j.toNat < len.toNat → Int16 → Int16 → β → Int16 × β)
+    (g : Int16Array → β → γ) : Option γ :=
+  if h : xs.toNat + len.toNat ≤ a.size ∧ ys.toNat + len.toNat ≤ a.size ∧
+      rs.toNat + len.toNat ≤ a.size then
+    some (a.foldlInPlace2Then xs ys rs len h.1 h.2.1 h.2.2 init f fun a' _ b => g a' b)
+  else
+    none
+
+-- Disjoint windows, and the accumulator.
+#guard (fold2 (Int16Array.mk #[1, 2, 3, 4, 5, 6, 0, 0, 0]) 0 3 6 3 0
+  (fun _ _ x y c => (x + y, c + 1))).map (fun r => (r.1.data, r.2)) ==
+    some (#[1, 2, 3, 4, 5, 6, 5, 7, 9], 3)
+
+-- Overlapping windows: each step reads what the earlier steps wrote.
+#guard (fold2 (Int16Array.mk #[1, 0, 0, 0, 0]) 0 0 1 4 () (fun _ _ x y c => (x + y, c))).map
+  (·.1.data) == some #[1, 2, 4, 8, 16]
+#guard (fold2 (Int16Array.mk #[0, 1, 2, 3, big]) 1 1 0 4 () (fun _ _ x _ c => (x, c))).map
+  (·.1.data) == some #[1, 2, 3, big, big]
+#guard (fold2 (Int16Array.mk #[1, 2, 3, 4]) 0 1 0 3 () (fun _ _ x y c => (x + y, c))).map
+  (·.1.data) == some #[3, 5, 7, 4]
+#guard (fold2 (Int16Array.mk #[1, 1, 1, 1, 1]) 0 1 1 4 () (fun _ _ x y c => (x + y, c))).map
+  (·.1.data) == some #[1, 2, 3, 4, 5]
+
+-- The indices passed to `f`, in the order of the visits, and the empty fold.
+#guard (fold2 (Int16Array.mk #[1, 2, 3]) 0 0 0 3 [] (fun j _ x _ c => (x, j.toNat :: c))).map
+  (·.2) == some [2, 1, 0]
+#guard (fold2 (Int16Array.mk #[1, 2, 3]) 3 0 1 0 big (fun _ _ x _ c => (x, c))).map
+  (fun r => (r.1.data, r.2)) == some (#[1, 2, 3], big)
+
+-- The `Then` form hands the array and the last accumulator to `g`, here to store it.
+#guard fold2Then (Int16Array.mk #[1, 2, 3, 0]) 0 1 0 2 (0 : Int16)
+  (fun _ _ x y c => (x + y, c + x)) (fun a c => (a.set! 3 c).data) == some #[3, 5, 3, 3]
+#guard (fold2Then (Int16Array.mk #[1, 2]) 0 0 0 2 () (fun _ _ x _ c => (x + 1, c))
+  Prod.mk).map (·.1.data) == some #[2, 3]
+
+-- The size proof that `g` receives bounds its reads.
+#guard
+  let a := Int16Array.mk #[1, 2, 3]
+  if h : (0 : USize).toNat + (2 : USize).toNat ≤ a.size ∧
+      (1 : USize).toNat + (2 : USize).toNat ≤ a.size ∧ 2 < a.size then
+    a.foldlInPlace2Then 0 1 0 2 h.1 h.2.1 h.1 () (fun _ _ x y c => (x + y, c))
+      (fun a' h' _ => a'[2]'(by rw [h']; exact h.2.2) + a'[0]'(by rw [h']; lia)) == 6
+  else false
+
+-- Folding over windows of a shared array must leave the original unchanged, and `f` must see the
+-- elements of the original when it reads them from the shared array itself.
+#guard
+  let a := Int16Array.mk #[1, 2, 3, 4]
+  let r := fold2 a 0 1 0 3 () (fun _ _ x y c => (x + y, c))
+  r.map (·.1.data) == some #[3, 5, 7, 4] && a.data == #[1, 2, 3, 4]
+#guard
+  let a := Int16Array.mk #[1, 2, 3, 4]
+  let r := fold2 a 0 0 1 3 () (fun j _ _ _ c => (a[j.toNat]!, c))
+  r.map (·.1.data) == some #[1, 1, 2, 3] && a.data == #[1, 2, 3, 4]
+
+-- An exclusive array is written in place, without copying it.
+@[noinline] def Int16Array.foldsWindowsInPlace (x : Int16) : Bool :=
+  let a := (Int16Array.emptyWithCapacity 6).push x |>.push 2 |>.push 3 |>.push 0 |>.push 0
+  let p := rawAddr a
+  match fold2 a 0 1 2 3 () (fun _ _ x y c => (x + y, c)) with
+  | some (a, _) => rawAddr a == p && a.data == #[x, 2, x + 2, x + 4, x + x + 6]
+  | none => false
+
+#guard Int16Array.foldsWindowsInPlace 1
+
+-- Prefix sums in place over a large array take linear time only when every write is in place.
+#guard
+  let n := 100000
+  let r := Id.run do
+    let mut r := Array.replicate n (1 : Int16)
+    for i in [1:n] do
+      r := r.set! i (r[i - 1]! + r[i]!)
+    return r
+  (fold2 (Int16Array.replicate n 1) 0 1 1 (n - 1).toUSize () (fun _ _ x y c => (x + y, c))).map
+    (·.1.data) == some r
+
 /-! Lemmas from another module -/
 
 example (a : Int16Array) (i : USize) (v : Int16) (h) (j : Nat) (hj) :
@@ -1042,4 +1131,8 @@ example (s : Int16Array.Slice) (f : (k : USize) → k.toNat < s.size → Int16 �
   simp
 example (s : Int16Array.Slice) (f : (k : USize) → k.toNat < s.size → Int16 → Nat → Int16 × Nat) :
     (s.foldrInPlaceThen 0 f fun t _ => t).size = s.size := by
+  simp
+example (a : Int16Array) (xs ys rs len : USize) (hx hy hr)
+    (f : (j : USize) → j.toNat < len.toNat → Int16 → Int16 → Nat → Int16 × Nat) :
+    (a.foldlInPlace2Then xs ys rs len hx hy hr 0 f fun a' _ _ => a').size = a.size := by
   simp

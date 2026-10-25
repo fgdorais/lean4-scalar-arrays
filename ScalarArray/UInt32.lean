@@ -2789,6 +2789,114 @@ public def foldrInPlaceThen {β : Type v} {γ : Type w} (s : UInt32Array.Slice) 
 
 end Slice
 
+/-! ### Folding over windows of one array -/
+
+/-- The loop of `foldlInPlace2`, over `Nat` offsets and indices. -/
+@[expose]
+public def foldlInPlace2.loop {β : Type v} (xs ys rs len : Nat)
+    (f : (j : USize) → j.toNat < len → UInt32 → UInt32 → β → UInt32 × β)
+    (a : UInt32Array) (hx : xs + len ≤ a.size) (hy : ys + len ≤ a.size)
+    (hr : rs + len ≤ a.size) (j : Nat) (b : β) : UInt32Array × β :=
+  if hj : j < len then
+    have hj' : j.toUSize.toNat < len := by
+      rw [Nat.toUSize_eq, USize.toNat_ofNat']
+      exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) hj
+    let p := f j.toUSize hj' (a[xs + j]'(by lia)) (a[ys + j]'(by lia)) b
+    foldlInPlace2.loop xs ys rs len f (a.set (rs + j) p.1) (by simpa using hx) (by simpa using hy)
+      (by simpa using hr) (j + 1) p.2
+  else
+    (a, b)
+termination_by len - j
+
+@[specialize]
+private unsafe def foldlInPlace2Impl.loop {β : Type v} {γ : Type w} (xs ys rs len : USize)
+    (f : (j : USize) → UInt32 → UInt32 → β → UInt32 × β) (g : UInt32Array → β → γ)
+    (a : UInt32Array) (j : USize) (b : β) : γ :=
+  if j < len then
+    let p := f j (a.uget (xs + j) lcProof) (a.uget (ys + j) lcProof) b
+    foldlInPlace2Impl.loop xs ys rs len f g (setUnsafe a (rs + j) p.1) (j + 1) p.2
+  else
+    g a b
+
+@[inline]
+private unsafe def foldlInPlace2Impl {β : Type v} (a : UInt32Array) (xs ys rs len : USize)
+    (_ : xs.toNat + len.toNat ≤ a.size) (_ : ys.toNat + len.toNat ≤ a.size)
+    (_ : rs.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β) :
+    UInt32Array × β :=
+  foldlInPlace2Impl.loop xs ys rs len (fun j => f j lcProof) Prod.mk a.ensureExclusive 0 init
+
+/--
+Writes the window of `len` elements at `rs` from the windows at `xs` and `ys` of the same array,
+in place, threading an accumulator: for each `j < len`, from `0` up, it reads `x := a[xs + j]` and
+`y := a[ys + j]` from the current array, then stores the first component of `f j hj x y b` at
+`rs + j`, and the second component is the next accumulator. Returns the new array and the last
+accumulator.
+
+Each step reads after the writes of the earlier steps, so overlapping windows are well defined: with
+`rs = xs + 1`, for example, step `j` reads what step `j - 1` wrote. Reading the windows through `f`
+rather than through another reference to `a` keeps `a` exclusive, which a second reference would
+not, and then the first write would copy the whole array.
+
+The array is made exclusive once, before the loop, which then reads and stores without checks.
+-/
+@[implemented_by foldlInPlace2Impl, expose]
+public def foldlInPlace2 {β : Type v} (a : UInt32Array) (xs ys rs len : USize)
+    (hx : xs.toNat + len.toNat ≤ a.size) (hy : ys.toNat + len.toNat ≤ a.size)
+    (hr : rs.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β) :
+    UInt32Array × β :=
+  foldlInPlace2.loop xs.toNat ys.toNat rs.toNat len.toNat f a hx hy hr 0 init
+
+private theorem size_foldlInPlace2_loop {β : Type v} (xs ys rs len : Nat)
+    (f : (j : USize) → j.toNat < len → UInt32 → UInt32 → β → UInt32 × β)
+    (a : UInt32Array) (hx : xs + len ≤ a.size) (hy : ys + len ≤ a.size)
+    (hr : rs + len ≤ a.size) (j : Nat) (b : β) : (foldlInPlace2.loop xs ys rs len f a hx hy hr j b).1.size = a.size := by
+  fun_induction foldlInPlace2.loop xs ys rs len f a hx hy hr j b with
+  | case1 a hx hy hr j b hj hj' p ih => rw [ih, size_set]
+  | case2 => rfl
+
+@[simp] public theorem size_foldlInPlace2 {β : Type v} (a : UInt32Array) (xs ys rs len : USize)
+    (hx : xs.toNat + len.toNat ≤ a.size) (hy : ys.toNat + len.toNat ≤ a.size)
+    (hr : rs.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β) :
+    (a.foldlInPlace2 xs ys rs len hx hy hr init f).1.size = a.size :=
+  size_foldlInPlace2_loop ..
+
+@[inline]
+private unsafe def foldlInPlace2ThenImpl {β : Type v} {γ : Type w} (a : UInt32Array)
+    (xs ys rs len : USize) (_ : xs.toNat + len.toNat ≤ a.size)
+    (_ : ys.toNat + len.toNat ≤ a.size) (_ : rs.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β)
+    (g : (a' : UInt32Array) → a'.size = a.size → β → γ) : γ :=
+  foldlInPlace2Impl.loop xs ys rs len (fun j => f j lcProof) (fun a' b => g a' lcProof b)
+    a.ensureExclusive 0 init
+
+/--
+`foldlInPlace2` followed by `g` on the new array and the last accumulator, which the loop calls
+itself where `foldlInPlace2` returns them as a pair. When `g` consumes the accumulator, no pair is
+allocated. `g` also receives a proof that the size is unchanged, so that it can go on with bounded
+reads and writes, such as another `foldlInPlace2Then`.
+-/
+@[implemented_by foldlInPlace2ThenImpl, expose]
+public def foldlInPlace2Then {β : Type v} {γ : Type w} (a : UInt32Array) (xs ys rs len : USize)
+    (hx : xs.toNat + len.toNat ≤ a.size) (hy : ys.toNat + len.toNat ≤ a.size)
+    (hr : rs.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β)
+    (g : (a' : UInt32Array) → a'.size = a.size → β → γ) : γ :=
+  g (a.foldlInPlace2 xs ys rs len hx hy hr init f).1 (size_foldlInPlace2 ..)
+    (a.foldlInPlace2 xs ys rs len hx hy hr init f).2
+
+@[simp] public theorem foldlInPlace2Then_eq {β : Type v} {γ : Type w} (a : UInt32Array)
+    (xs ys rs len : USize) (hx : xs.toNat + len.toNat ≤ a.size)
+    (hy : ys.toNat + len.toNat ≤ a.size) (hr : rs.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β)
+    (g : (a' : UInt32Array) → a'.size = a.size → β → γ) :
+    a.foldlInPlace2Then xs ys rs len hx hy hr init f g =
+      g (a.foldlInPlace2 xs ys rs len hx hy hr init f).1 (size_foldlInPlace2 ..)
+        (a.foldlInPlace2 xs ys rs len hx hy hr init f).2 :=
+  rfl
+
 /-! ### Decidable membership and slice hashing -/
 
 public theorem contains_iff_mem {a : UInt32Array} {x : UInt32} :
