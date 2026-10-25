@@ -989,7 +989,7 @@ public abbrev get! (s : ISizeArray.Slice) (i : Nat) : ISize :=
   getD s i default
 
 /-- Removes the first element of the slice, if any. -/
-@[expose]
+@[inline, expose]
 public def popFront (s : ISizeArray.Slice) : ISizeArray.Slice :=
   if h : s.start < s.stop then
     ⟨{ s.internalRepresentation with start := s.start + 1, start_le_stop := h }⟩
@@ -1026,7 +1026,7 @@ end Slice
 The slice of `a` from index `start` up to, but not including, `stop`. If `start` or `stop` are not
 valid bounds, they are clamped to the size of `a`, and `start` is clamped to `stop`.
 -/
-@[expose]
+@[inline, expose]
 public def toSlice (a : ISizeArray) (start : Nat := 0) (stop : Nat := a.size) :
     ISizeArray.Slice :=
   if h₂ : stop ≤ a.size then
@@ -1076,7 +1076,7 @@ public instance : Std.Rii.Sliceable ISizeArray Nat ISizeArray.Slice where
 namespace Slice
 
 /-- The slice of `s` from index `start` up to, but not including, `stop`, clamped like `toSlice`. -/
-@[expose]
+@[inline, expose]
 public def slice (s : ISizeArray.Slice) (start : Nat := 0) (stop : Nat := s.size) :
     ISizeArray.Slice :=
   s.array.toSlice (s.start + min start s.size) (s.start + min stop s.size)

@@ -1035,7 +1035,7 @@ public abbrev get! (s : Float64Array.Slice) (i : Nat) : Float :=
   getD s i default
 
 /-- Removes the first element of the slice, if any. -/
-@[expose]
+@[inline, expose]
 public def popFront (s : Float64Array.Slice) : Float64Array.Slice :=
   if h : s.start < s.stop then
     ⟨{ s.internalRepresentation with start := s.start + 1, start_le_stop := h }⟩
@@ -1072,7 +1072,7 @@ end Slice
 The slice of `a` from index `start` up to, but not including, `stop`. If `start` or `stop` are not
 valid bounds, they are clamped to the size of `a`, and `start` is clamped to `stop`.
 -/
-@[expose]
+@[inline, expose]
 public def toSlice (a : Float64Array) (start : Nat := 0) (stop : Nat := a.size) :
     Float64Array.Slice :=
   if h₂ : stop ≤ a.size then
@@ -1122,7 +1122,7 @@ public instance : Std.Rii.Sliceable Float64Array Nat Float64Array.Slice where
 namespace Slice
 
 /-- The slice of `s` from index `start` up to, but not including, `stop`, clamped like `toSlice`. -/
-@[expose]
+@[inline, expose]
 public def slice (s : Float64Array.Slice) (start : Nat := 0) (stop : Nat := s.size) :
     Float64Array.Slice :=
   s.array.toSlice (s.start + min start s.size) (s.start + min stop s.size)
