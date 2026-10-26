@@ -32,11 +32,11 @@ Arrays of `UInt8` values, stored unboxed in a scalar array, 1 byte per element.
 The logical model is an `Array UInt8`: `UInt8Array.mk` and `UInt8Array.toArray` convert between
 the two. `cases` and `induction` split a `UInt8Array` as `mk a`.
 -/
--- At runtime a `UInt8Array` is a `ScalarArray`, so every function that looks inside the quotient
--- must be `extern` or `implemented_by`. A quotient rather than a structure: the compiler represents
--- a one-field structure by its field, so code in any module could match on the constructor and run
--- `Array` code on a scalar array. A quotient has no constructor to match on and the compiler gives it
--- no layout; only `Quot.lift` and `Quot.rec` can see the `Array`.
+-- At runtime a `UInt8Array` is a `ScalarArray.Raw`, so every function that looks inside the
+-- quotient must be `extern` or `implemented_by`. A quotient rather than a structure: the compiler
+-- represents a one-field structure by its field, so code in any module could match on the
+-- constructor and run `Array` code on a scalar array. A quotient has no constructor to match on and
+-- the compiler gives it no layout; only `Quot.lift` and `Quot.rec` can see the `Array`.
 @[expose] public def UInt8Array : Type := Quot fun _ _ : Array UInt8 => False
 
 namespace UInt8Array
@@ -107,7 +107,7 @@ public unsafe def setUnsafe (a : UInt8Array) (i : USize) (v : UInt8) : UInt8Arra
 Returns `a` itself when it is not shared, and a copy otherwise. Logically this is the identity.
 It is useful before a run of in-place writes, so that only the first one can copy.
 -/
--- The same runtime function as the private `ScalarArray.ensureExclusive`, which code in other
+-- The same runtime function as the private `Raw.ensureExclusive`, which code in other
 -- modules can't reach. `never_extract`: once `uset` or `push` is inlined, `c.ensureExclusive` on a
 -- closed array `c` would otherwise be hoisted into a shared constant, which the following in-place
 -- write would then modify.
@@ -126,14 +126,14 @@ Public only so that those functions can be inlined into code in other modules.
 -- follow would copy it again.
 @[never_extract]
 public unsafe def ensureCapacityGrowUnsafe (a : UInt8Array) (n : Nat) : UInt8Array :=
-  let s : ScalarArray := unsafeCast a
+  let s : Raw := unsafeCast a
   unsafeCast (s.copyWithCapacity (toUSizeChecked (max n s.size.toNat)) lcProof)
 
 -- Inline, and made of public inline externs, so that the common path compiles to an inline capacity
 -- check in other modules.
 @[inline]
 public unsafe def ensureCapacityImpl (a : UInt8Array) (n : Nat) : UInt8Array :=
-  if n ≤ (unsafeCast a : ScalarArray).capacity.toNat then a else ensureCapacityGrowUnsafe a n
+  if n ≤ (unsafeCast a : Raw).capacity.toNat then a else ensureCapacityGrowUnsafe a n
 
 /--
 Returns `a` itself when it has room for `n` elements, and otherwise a copy with room for exactly
@@ -147,7 +147,7 @@ public def ensureCapacity (a : UInt8Array) (n : Nat) : UInt8Array := a
 -- when `a` lacks room is exclusive, so `a` is copied at most once.
 @[inline]
 public unsafe def ensureExclusiveWithCapacityImpl (a : UInt8Array) (n : Nat) : UInt8Array :=
-  if n ≤ (unsafeCast a : ScalarArray).capacity.toNat then a.ensureExclusive
+  if n ≤ (unsafeCast a : Raw).capacity.toNat then a.ensureExclusive
   else ensureCapacityGrowUnsafe a n
 
 /--
@@ -160,7 +160,7 @@ public def ensureExclusiveWithCapacity (a : UInt8Array) (n : Nat) : UInt8Array :
 
 /-- A new array of size `size` with room for `capacity` elements. Requires `size ≤ capacity`. -/
 private unsafe def allocUnsafe (size capacity : USize) : UInt8Array :=
-  unsafeCast <| ScalarArray.allocate 1 size capacity lcProof
+  unsafeCast <| Raw.allocate 1 size capacity lcProof
 
 private unsafe def mkWithCapacityImpl (a : Array UInt8) (capacity : Nat := a.size) :
     UInt8Array :=
@@ -310,7 +310,7 @@ line so that inlined `push` call sites stay small. Public only so that `push` ca
 code in other modules.
 -/
 public unsafe def pushGrowUnsafe (a : UInt8Array) (v : UInt8) : UInt8Array :=
-  let s : ScalarArray := unsafeCast a
+  let s : Raw := unsafeCast a
   let cap := s.capacity
   if cap < cap + cap + 1 then
     let s := s.copyWithCapacity (cap + cap + 1) lcProof
@@ -323,10 +323,10 @@ public unsafe def pushGrowUnsafe (a : UInt8Array) (v : UInt8) : UInt8Array :=
 -- modules: one capacity check, one exclusivity check, a size bump and one store.
 @[inline]
 public unsafe def pushImpl (a : UInt8Array) (v : UInt8) : UInt8Array :=
-  if a.usize < (unsafeCast a : ScalarArray).capacity then
+  if a.usize < (unsafeCast a : Raw).capacity then
     let a := a.ensureExclusive
     let i := a.usize
-    let s : ScalarArray := unsafeCast a
+    let s : Raw := unsafeCast a
     setUnsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
   else
     pushGrowUnsafe a v
@@ -344,14 +344,14 @@ exclusive, has capacity for `destOff + n` elements, and is not the same object a
 @[inline]
 private unsafe def copySliceUnsafe (dest : UInt8Array) (src : @& UInt8Array)
     (srcOff destOff n : USize) : UInt8Array :=
-  let src : ScalarArray := unsafeCast src
+  let src : Raw := unsafeCast src
   let esz := src.elemSize.toUSize
-  let d := (unsafeCast dest : ScalarArray).memcpyUnsafe src (srcOff * esz) (destOff * esz) (n * esz)
+  let d := (unsafeCast dest : Raw).memcpyUnsafe src (srcOff * esz) (destOff * esz) (n * esz)
   unsafeCast (d.resizeUnsafe (max d.size (destOff + n)) lcProof lcProof)
 
 private unsafe def appendImpl (a b : UInt8Array) : UInt8Array :=
-  let s : ScalarArray := unsafeCast a
-  let m := (unsafeCast b : ScalarArray).size
+  let s : Raw := unsafeCast a
+  let m := (unsafeCast b : Raw).size
   let n := s.size + m
   let cap := s.capacity
   if n < s.size then
@@ -377,7 +377,7 @@ private unsafe def copySliceImpl (src : @& UInt8Array) (srcOff : Nat) (dest : UI
   let n := min len (src.size - srcOff)
   let destOff := min destOff dest.size
   let newSize := max dest.size (destOff + n)
-  let s : ScalarArray := unsafeCast dest
+  let s : Raw := unsafeCast dest
   let cap := s.capacity.toNat
   let s :=
     if newSize ≤ cap then
@@ -406,7 +406,7 @@ private unsafe def popImpl (a : UInt8Array) : UInt8Array :=
   if a.size == 0 then
     a
   else
-    let s : ScalarArray := ScalarArray.ensureExclusive (unsafeCast a)
+    let s : Raw := Raw.ensureExclusive (unsafeCast a)
     unsafeCast (s.resizeUnsafe (s.size - 1) lcProof lcProof)
 
 /-- Removes the last element of `a`, if any, in place when `a` is not shared. -/
