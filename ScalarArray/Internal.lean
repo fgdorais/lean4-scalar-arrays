@@ -7,7 +7,7 @@ module
 /-!
 # Scalar arrays
 
-`ScalarArray` exposes the Lean runtime's scalar array objects (`lean_sarray_object`), the
+`ScalarArray.Raw` exposes the Lean runtime's scalar array objects (`lean_sarray_object`), the
 representation behind `ByteArray` and `FloatArray`. A scalar array is a header recording the
 element size, the size and the capacity, followed by the elements stored unboxed.
 
@@ -16,47 +16,51 @@ resizing, and copies of raw bytes. The typed array modules use it as their runti
 through `import all ScalarArray.Internal`, and reach it with `unsafeCast`. Only what their inlined
 code calls is public: the type, `capacity` and `resizeUnsafe`. Inlined code can only use
 declarations of publicly imported modules, so the typed modules also import this one publicly and
-these are visible wherever `ScalarArray` is imported. The rest is private.
+these are visible wherever `ScalarArray` is imported. They are all in `ScalarArray.Raw`, out of the
+way of the typed arrays. The rest is private.
 -/
-
-public inductive ScalarArray : Type
-  | allocate (elemSize : UInt32) (size capacity : USize) (h : size ≤ capacity)
-
-attribute [extern "lean_alloc_sarray"] ScalarArray.allocate
 
 namespace ScalarArray
 
+/-- A Lean runtime scalar array, whatever its element type. -/
+public inductive Raw : Type
+  | allocate (elemSize : UInt32) (size capacity : USize) (h : size ≤ capacity)
+
+attribute [extern "lean_alloc_sarray"] Raw.allocate
+
+namespace Raw
+
 @[extern "lean_sarray_elem_size"]
-private def elemSize : @& ScalarArray → UInt32
+private def elemSize : @& Raw → UInt32
   | allocate elemSize _ _ _ => elemSize
 
 @[extern "lean_sarray_size"]
-private def size : @& ScalarArray → USize
+private def size : @& Raw → USize
   | allocate _ size _ _ => size
 
 @[extern "lean_sarray_capacity"]
-public def capacity : @& ScalarArray → USize
+public def capacity : @& Raw → USize
   | allocate _ _ capacity _ => capacity
 
-private theorem size_le_capacity : (a : ScalarArray) → a.size ≤ a.capacity
+private theorem size_le_capacity : (a : Raw) → a.size ≤ a.capacity
   | allocate _ _ _ h => h
 
 @[extern "lean_copy_sarray"]
-private def copyWithCapacity (a : ScalarArray) (capacity : USize) (h : a.size ≤ capacity) :
-    ScalarArray :=
+private def copyWithCapacity (a : Raw) (capacity : USize) (h : a.size ≤ capacity) :
+    Raw :=
   allocate a.elemSize a.size capacity h
 
 @[inline]
-private def copy (a : ScalarArray) : ScalarArray :=
+private def copy (a : Raw) : Raw :=
   a.copyWithCapacity a.capacity a.size_le_capacity
 
 @[extern c inline "#1;\nlean_sarray_set_size(#1, #2)"]
-public unsafe def resizeUnsafe (a : ScalarArray) (size : USize) (h : size ≤ a.capacity)
-    (_exclusive : isExclusiveUnsafe a := by rfl) : ScalarArray :=
+public unsafe def resizeUnsafe (a : Raw) (size : USize) (h : size ≤ a.capacity)
+    (_exclusive : isExclusiveUnsafe a := by rfl) : Raw :=
   allocate a.elemSize size a.capacity h
 
 @[extern "lean_sarray_ensure_exclusive"]
-private def ensureExclusive (a : ScalarArray) : ScalarArray := a.copy
+private def ensureExclusive (a : Raw) : Raw := a.copy
 
 /--
 Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting
@@ -66,8 +70,10 @@ at byte `destOff`. Only valid when `dest` is exclusive and both ranges are withi
 -- `lean_byte_array_copy_slice` only works for bytes. Replace this once core has one.
 @[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + #4, lean_sarray_cptr(#2) + #3, #5)"]
 private unsafe def memcpyUnsafe :
-    ScalarArray → @& ScalarArray → (srcOff destOff n : USize) → ScalarArray
+    Raw → @& Raw → (srcOff destOff n : USize) → Raw
   | dest, _, _, _, _ => dest
+
+end Raw
 
 /-! ## Loop indices -/
 
