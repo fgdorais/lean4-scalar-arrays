@@ -19,21 +19,21 @@ private abbrev elemSize : UInt32 := (System.Platform.numBits / 8).toUInt32
 
 /-! Construction and conversion -/
 
-#guard (ISizeArray.mk #[1, 2, 3, big]).data == #[1, 2, 3, big]
+#guard (ISizeArray.mk #[1, 2, 3, big]).toArray == #[1, 2, 3, big]
 #guard (ISizeArray.mk #[1, 2, 3, big]).toList == [1, 2, 3, big]
-#guard (ISizeArray.mk #[]).data == #[]
-#guard ISizeArray.empty.data == #[]
-#guard (∅ : ISizeArray).data == #[]
-#guard (default : ISizeArray).data == #[]
-#guard (ISizeArray.emptyWithCapacity 100).data == #[]
-#guard (ISizeArray.mk (Array.range 1000 |>.map Nat.toISize)).data ==
+#guard (ISizeArray.mk #[]).toArray == #[]
+#guard ISizeArray.empty.toArray == #[]
+#guard (∅ : ISizeArray).toArray == #[]
+#guard (default : ISizeArray).toArray == #[]
+#guard (ISizeArray.emptyWithCapacity 100).toArray == #[]
+#guard (ISizeArray.mk (Array.range 1000 |>.map Nat.toISize)).toArray ==
   (Array.range 1000).map Nat.toISize
 
 /-! Case analysis -/
 
--- `cases` splits an array as `mk data`, also in compiled code.
+-- `cases` splits an array as `mk a`, also in compiled code.
 private def headOrZero (a : ISizeArray) : ISize := by
-  cases a with | mk data => exact data[0]?.getD 0
+  cases a with | mk a => exact a[0]?.getD 0
 
 #guard headOrZero (ISizeArray.mk #[7, 8]) == 7
 #guard headOrZero ISizeArray.empty == 0
@@ -45,7 +45,7 @@ error: Invalid `⟨...⟩` notation: The expected type `Quot fun x x_1 => False`
 Note: This notation can only be used when the expected type is an inductive type with a single constructor
 -/
 #guard_msgs in
-example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
+example (a : ISizeArray) : ISize := match a with | ⟨a⟩ => a[0]!
 
 /-! Size -/
 
@@ -67,44 +67,44 @@ example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
 
 /-! Writing -/
 
-#guard ((ISizeArray.mk #[1, 2, 3]).set 1 42 (by decide)).data == #[1, 42, 3]
-#guard ((ISizeArray.mk #[1, 2, 3]).uset 2 42 (by simp)).data == #[1, 2, 42]
-#guard ((ISizeArray.mk #[1, 2, 3]).set! 0 big).data == #[big, 2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).set 1 42 (by decide)).toArray == #[1, 42, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).uset 2 42 (by simp)).toArray == #[1, 2, 42]
+#guard ((ISizeArray.mk #[1, 2, 3]).set! 0 big).toArray == #[big, 2, 3]
 
 -- Writing to a shared array must leave the original unchanged. The result is checked first so
 -- that it is computed while the original is still live.
 #guard
   let a := ISizeArray.mk #[1, 2, 3]
   let b := a.set! 1 42
-  b.data == #[1, 42, 3] && a.data == #[1, 2, 3]
+  b.toArray == #[1, 42, 3] && a.toArray == #[1, 2, 3]
 #guard
   let a := ISizeArray.mk #[1, 2, 3]
   let b := a.uset 0 big (by simp [a])
-  b.data == #[big, 2, 3] && a.data == #[1, 2, 3]
+  b.toArray == #[big, 2, 3] && a.toArray == #[1, 2, 3]
 #guard
   let a := ISizeArray.mk #[1, 2, 3]
   let b := a.set 2 big (by simp [a])
-  b.data == #[1, 2, big] && a.data == #[1, 2, 3]
+  b.toArray == #[1, 2, big] && a.toArray == #[1, 2, 3]
 
 -- Repeated writes to an exclusive array.
 #guard Id.run do
   let mut a := ISizeArray.mk (Array.replicate 1000 0)
   for i in [0:1000] do
     a := a.set! i (i * 3).toISize
-  return a.data == (Array.range 1000).map fun i => (i * 3).toISize
+  return a.toArray == (Array.range 1000).map fun i => (i * 3).toISize
 
 /-! Pushing -/
 
-#guard (ISizeArray.empty.push 5 |>.push 6).data == #[5, 6]
-#guard ((ISizeArray.emptyWithCapacity 1).push 5 |>.push 6 |>.push 7).data == #[5, 6, 7]
-#guard ((ISizeArray.mk #[1, 2]).push 3).data == #[1, 2, 3]
+#guard (ISizeArray.empty.push 5 |>.push 6).toArray == #[5, 6]
+#guard ((ISizeArray.emptyWithCapacity 1).push 5 |>.push 6 |>.push 7).toArray == #[5, 6, 7]
+#guard ((ISizeArray.mk #[1, 2]).push 3).toArray == #[1, 2, 3]
 
 -- Pushing past the capacity many times.
 #guard Id.run do
   let mut a := ISizeArray.empty
   for i in [0:10000] do
     a := a.push i.toISize
-  return a.size == 10000 && a.data == (Array.range 10000).map Nat.toISize
+  return a.size == 10000 && a.toArray == (Array.range 10000).map Nat.toISize
 
 -- Pushing to a shared array must leave the original unchanged. The results are checked first so
 -- that they are computed while the original is still live.
@@ -112,7 +112,7 @@ example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
   let a := (ISizeArray.emptyWithCapacity 10).push 1
   let b := a.push 2
   let c := a.push 3
-  c.data == #[1, 3] && b.data == #[1, 2] && a.data == #[1]
+  c.toArray == #[1, 3] && b.toArray == #[1, 2] && a.toArray == #[1]
 
 -- Inlined `push` and `uset` on a closed array must copy it on every call, not write into a shared
 -- constant: a later call must not change an earlier result.
@@ -125,12 +125,12 @@ example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
 #guard
   let a := ISizeArray.pushOntoConstant 1
   let b := ISizeArray.pushOntoConstant 2
-  b.data == #[2] && a.data == #[1]
+  b.toArray == #[2] && a.toArray == #[1]
 
 #guard
   let a := ISizeArray.usetConstant 1
   let b := ISizeArray.usetConstant 2
-  b.data == #[2, 0] && a.data == #[1, 0]
+  b.toArray == #[2, 0] && a.toArray == #[1, 0]
 
 /-! Printing -/
 
@@ -147,16 +147,16 @@ example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
 
 /-! Writes don't touch neighbouring elements -/
 
-#guard ((ISizeArray.mk #[0, 0, 0]).set! 1 big).data == #[0, big, 0]
-#guard ((ISizeArray.mk #[big, big, big]).set! 1 0).data == #[big, 0, big]
-#guard ((ISizeArray.mk #[0, 0, 0]).push big |>.push 0).data == #[0, 0, 0, big, 0]
+#guard ((ISizeArray.mk #[0, 0, 0]).set! 1 big).toArray == #[0, big, 0]
+#guard ((ISizeArray.mk #[big, big, big]).set! 1 0).toArray == #[big, 0, big]
+#guard ((ISizeArray.mk #[0, 0, 0]).push big |>.push 0).toArray == #[0, 0, 0, big, 0]
 
 /-! Indices beyond 16 bits, and huge `Nat` indices -/
 
 #guard
   let a := (ISizeArray.mk (Array.replicate 100000 0)).set! 99999 big |>.set! 70000 1
   a.size == 100000 && a[99999]! == big && a[70000]! == 1 && a[99998]! == 0 &&
-    a[70000 % 65536]! == 0 && a.data[99999]! == big && a.data[70000]! == 1 &&
+    a[70000 % 65536]! == 0 && a.toArray[99999]! == big && a.toArray[70000]! == 1 &&
     (if h : (70000 : USize).toNat < a.size then a[(70000 : USize)] == 1 else false)
 
 #guard (ISizeArray.mk #[1, 2, 3])[2 ^ 70]? == none
@@ -167,24 +167,24 @@ example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
 #guard
   let a := ISizeArray.mk #[1]
   let b := a.push 2
-  b.data == #[1, 2] && a.data == #[1]
+  b.toArray == #[1, 2] && a.toArray == #[1]
 
 #guard
   let a := ISizeArray.mk #[]
   let b := a.push 2
-  b.data == #[2] && a.data == #[]
+  b.toArray == #[2] && a.toArray == #[]
 
 /-! Conversions don't alias -/
 
 #guard
   let a := #[(1 : ISize), 2, 3]
   let b := (ISizeArray.mk a).set! 0 big
-  b.data == #[big, 2, 3] && a == #[1, 2, 3]
+  b.toArray == #[big, 2, 3] && a == #[1, 2, 3]
 
 #guard
   let a := ISizeArray.mk #[1, 2, 3]
-  let d := a.data.set! 0 big
-  d == #[big, 2, 3] && a.data == #[1, 2, 3]
+  let d := a.toArray.set! 0 big
+  d == #[big, 2, 3] && a.toArray == #[1, 2, 3]
 
 /-! Runtime representation -/
 
@@ -200,11 +200,11 @@ example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
 
 /-! Ensuring exclusivity and capacity -/
 
-#guard (ISizeArray.mk #[1, 2, 3]).ensureExclusive.data == #[1, 2, 3]
-#guard ((ISizeArray.mk #[1, 2, 3]).ensureCapacity 100).data == #[1, 2, 3]
-#guard ((ISizeArray.mk #[1, 2, 3]).ensureCapacity 0).data == #[1, 2, 3]
-#guard ((ISizeArray.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100).data == #[1, 2, 3]
-#guard ((ISizeArray.mk #[1, 2, 3]).ensureExclusiveWithCapacity 0).data == #[1, 2, 3]
+#guard (ISizeArray.mk #[1, 2, 3]).ensureExclusive.toArray == #[1, 2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).ensureCapacity 100).toArray == #[1, 2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).ensureCapacity 0).toArray == #[1, 2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100).toArray == #[1, 2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).ensureExclusiveWithCapacity 0).toArray == #[1, 2, 3]
 
 #guard rawCapacity ((ISizeArray.mk #[1, 2, 3]).ensureCapacity 100) ≥ 100
 #guard rawCapacity ((ISizeArray.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100) ≥ 100
@@ -217,26 +217,26 @@ example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
   let a := (ISizeArray.emptyWithCapacity 10).push x
   let p := rawAddr a
   let a := a.ensureExclusive.ensureCapacity 5 |>.ensureExclusiveWithCapacity 10
-  rawAddr a == p && a.data == #[x]
+  rawAddr a == p && a.toArray == #[x]
 
 -- Pushes after `ensureExclusiveWithCapacity` don't reallocate.
 @[noinline] def ISizeArray.pushesInPlaceAfterEnsure (x : ISize) : Bool :=
   let a := (ISizeArray.mk #[x]).ensureExclusiveWithCapacity 4
   let p := rawAddr a
   let a := a.push 2 |>.push 3 |>.push 4
-  rawAddr a == p && a.data == #[x, 2, 3, 4]
+  rawAddr a == p && a.toArray == #[x, 2, 3, 4]
 
 -- `ensureCapacity` doesn't copy a shared array that has room.
 @[noinline] def ISizeArray.ensureCapacityKeepsShared (x : ISize) : Bool :=
   let a := (ISizeArray.emptyWithCapacity 10).push x
   let b := a.ensureCapacity 5
-  rawAddr b == rawAddr a && b.data == #[x]
+  rawAddr b == rawAddr a && b.toArray == #[x]
 
 -- `ensureExclusiveWithCapacity` copies a shared array once, even when it also needs room.
 @[noinline] def ISizeArray.ensureExclusiveWithCapacityCopiesShared (x : ISize) : Bool :=
   let a := (ISizeArray.emptyWithCapacity 2).push x
   let b := a.ensureExclusiveWithCapacity 20
-  rawAddr b != rawAddr a && rawCapacity b ≥ 20 && b.data == #[x] && a.data == #[x]
+  rawAddr b != rawAddr a && rawCapacity b ≥ 20 && b.toArray == #[x] && a.toArray == #[x]
 
 #guard ISizeArray.ensuresInPlace 1
 #guard ISizeArray.pushesInPlaceAfterEnsure 1
@@ -248,15 +248,15 @@ example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
 #guard
   let a := ISizeArray.mk #[1, 2, 3]
   let b := a.ensureExclusive.set! 0 big
-  b.data == #[big, 2, 3] && a.data == #[1, 2, 3]
+  b.toArray == #[big, 2, 3] && a.toArray == #[1, 2, 3]
 #guard
   let a := ISizeArray.mk #[1, 2, 3]
   let b := (a.ensureCapacity 10).set! 0 big |>.push 4
-  b.data == #[big, 2, 3, 4] && a.data == #[1, 2, 3]
+  b.toArray == #[big, 2, 3, 4] && a.toArray == #[1, 2, 3]
 #guard
   let a := ISizeArray.mk #[1, 2, 3]
   let b := (a.ensureExclusiveWithCapacity 10).set! 0 big |>.push 4
-  b.data == #[big, 2, 3, 4] && a.data == #[1, 2, 3]
+  b.toArray == #[big, 2, 3, 4] && a.toArray == #[1, 2, 3]
 
 -- On a closed array, they must not hand out a shared constant: a later call must not change an
 -- earlier result.
@@ -272,37 +272,37 @@ example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
 #guard
   let a := ISizeArray.ensureExclusiveConstant 1
   let b := ISizeArray.ensureExclusiveConstant 2
-  b.data == #[2, 0] && a.data == #[1, 0]
+  b.toArray == #[2, 0] && a.toArray == #[1, 0]
 
 #guard
   let a := ISizeArray.ensureCapacityConstant 1
   let b := ISizeArray.ensureCapacityConstant 2
-  b.data == #[2, 0, 2] && a.data == #[1, 0, 1]
+  b.toArray == #[2, 0, 2] && a.toArray == #[1, 0, 1]
 
 #guard
   let a := ISizeArray.ensureExclusiveWithCapacityConstant 1
   let b := ISizeArray.ensureExclusiveWithCapacityConstant 2
-  b.data == #[2, 0, 2] && a.data == #[1, 0, 1]
+  b.toArray == #[2, 0, 2] && a.toArray == #[1, 0, 1]
 
 
 /-! Appending -/
 
-#guard (ISizeArray.mk #[1, 2] ++ ISizeArray.mk #[3, big]).data == #[1, 2, 3, big]
-#guard ((ISizeArray.mk #[1, 2]).append (ISizeArray.mk #[3])).data == #[1, 2, 3]
-#guard (ISizeArray.mk #[1, 2] ++ ISizeArray.empty).data == #[1, 2]
-#guard (ISizeArray.empty ++ ISizeArray.mk #[1, 2]).data == #[1, 2]
-#guard (ISizeArray.empty ++ ISizeArray.empty).data == #[]
-#guard (ISizeArray.mk #[0, 0] ++ ISizeArray.mk #[big] ++ ISizeArray.mk #[0]).data ==
+#guard (ISizeArray.mk #[1, 2] ++ ISizeArray.mk #[3, big]).toArray == #[1, 2, 3, big]
+#guard ((ISizeArray.mk #[1, 2]).append (ISizeArray.mk #[3])).toArray == #[1, 2, 3]
+#guard (ISizeArray.mk #[1, 2] ++ ISizeArray.empty).toArray == #[1, 2]
+#guard (ISizeArray.empty ++ ISizeArray.mk #[1, 2]).toArray == #[1, 2]
+#guard (ISizeArray.empty ++ ISizeArray.empty).toArray == #[]
+#guard (ISizeArray.mk #[0, 0] ++ ISizeArray.mk #[big] ++ ISizeArray.mk #[0]).toArray ==
   #[0, 0, big, 0]
 
 -- Appending an array to itself, with and without room.
 #guard
   let a := ISizeArray.mk #[1, 2, 3]
-  (a ++ a).data == #[1, 2, 3, 1, 2, 3]
+  (a ++ a).toArray == #[1, 2, 3, 1, 2, 3]
 
 #guard
   let a := (ISizeArray.emptyWithCapacity 10).push 1 |>.push 2
-  (a ++ a).data == #[1, 2, 1, 2]
+  (a ++ a).toArray == #[1, 2, 1, 2]
 
 -- Appending to a shared array must leave the original unchanged, with and without room. The
 -- results are checked first so that they are computed while the original is still live.
@@ -310,18 +310,18 @@ example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
   let a := (ISizeArray.emptyWithCapacity 10).push 1
   let b := a ++ ISizeArray.mk #[2, 3]
   let c := a ++ ISizeArray.mk #[4]
-  c.data == #[1, 4] && b.data == #[1, 2, 3] && a.data == #[1]
+  c.toArray == #[1, 4] && b.toArray == #[1, 2, 3] && a.toArray == #[1]
 
 #guard
   let a := ISizeArray.mk #[1]
   let b := a ++ ISizeArray.mk #[2, 3]
-  b.data == #[1, 2, 3] && a.data == #[1]
+  b.toArray == #[1, 2, 3] && a.toArray == #[1]
 
 -- The right operand is never modified.
 #guard
   let b := ISizeArray.mk #[2, 3]
   let c := ISizeArray.mk #[1] ++ b
-  c.data == #[1, 2, 3] && b.data == #[2, 3]
+  c.toArray == #[1, 2, 3] && b.toArray == #[2, 3]
 
 -- Many appends to an exclusive array.
 #guard Id.run do
@@ -330,13 +330,13 @@ example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
   for i in [0:1000] do
     a := a ++ ISizeArray.mk #[i.toISize, (i * 7).toISize, big]
     r := r ++ #[i.toISize, (i * 7).toISize, big]
-  return a.data == r
+  return a.toArray == r
 
 -- Large arrays on both sides.
 #guard
   let xs := (Array.range 50000).map Nat.toISize
   let ys := (Array.range 50000).map fun i => (i * 3).toISize
-  (ISizeArray.mk xs ++ ISizeArray.mk ys).data == xs ++ ys
+  (ISizeArray.mk xs ++ ISizeArray.mk ys).toArray == xs ++ ys
 
 -- An exclusive array with room is appended to in place, and growth is geometric.
 -- The array is built from a parameter so that it isn't extracted as a shared closed term.
@@ -344,13 +344,13 @@ example (a : ISizeArray) : ISize := match a with | ⟨data⟩ => data[0]!
   let a := (ISizeArray.emptyWithCapacity 10).push x
   let p := rawAddr a
   let a := a ++ ISizeArray.mk #[2, 3]
-  rawAddr a == p && a.data == #[x, 2, 3]
+  rawAddr a == p && a.toArray == #[x, 2, 3]
 
 @[noinline] def ISizeArray.appendsToCopyWhenShared (x : ISize) : Bool :=
   let a := (ISizeArray.emptyWithCapacity 10).push x
   let p := rawAddr a
   let b := a ++ ISizeArray.mk #[2, 3]
-  rawAddr b != p && b.data == #[x, 2, 3] && a.data == #[x]
+  rawAddr b != p && b.toArray == #[x, 2, 3] && a.toArray == #[x]
 
 #guard ISizeArray.appendsInPlace 1
 #guard ISizeArray.appendsToCopyWhenShared 1
@@ -473,9 +473,9 @@ example (s t : ISizeArray.Slice) (h : s == t) : hash s = hash t :=
 
 #guard ISizeArray.empty.isEmpty && !(ISizeArray.mk #[1]).isEmpty
 #guard (ISizeArray.mk #[1]).pop.isEmpty
-#guard (ISizeArray.mk #[1, 2, big]).pop.data == #[1, 2]
-#guard ISizeArray.empty.pop.data == #[]
-#guard ((ISizeArray.mk #[1, 2, 3]).pop.push big).data == #[1, 2, big]
+#guard (ISizeArray.mk #[1, 2, big]).pop.toArray == #[1, 2]
+#guard ISizeArray.empty.pop.toArray == #[]
+#guard ((ISizeArray.mk #[1, 2, 3]).pop.push big).toArray == #[1, 2, big]
 #guard (ISizeArray.mk #[1, 2, big]).back? == some big
 #guard ISizeArray.empty.back? == none
 #guard (ISizeArray.mk #[1, 2, big]).back! == big
@@ -485,14 +485,14 @@ example (s t : ISizeArray.Slice) (h : s == t) : hash s = hash t :=
 #guard
   let a := ISizeArray.mk #[1, 2, 3]
   let b := a.pop
-  b.data == #[1, 2] && a.data == #[1, 2, 3]
+  b.toArray == #[1, 2] && a.toArray == #[1, 2, 3]
 
 -- The array is built from a parameter so that it isn't extracted as a shared closed term.
 @[noinline] def ISizeArray.popsInPlace (x : ISize) : Bool :=
   let a := (ISizeArray.mk #[x]).push x
   let p := rawAddr a
   let a := a.pop
-  rawAddr a == p && a.data == #[x]
+  rawAddr a == p && a.toArray == #[x]
 
 #guard ISizeArray.popsInPlace 1
 
@@ -506,37 +506,38 @@ example (s t : ISizeArray.Slice) (h : s == t) : hash s = hash t :=
   let a := (ISizeArray.mk #[x]).push 0 |>.push 0
   let p := rawAddr a
   let a := a.popWhile (· == 0)
-  rawAddr a == p && a.data == #[x]
+  rawAddr a == p && a.toArray == #[x]
 
 #guard ISizeArray.popsWhileInPlace 1
 
-example (p : ISize → Bool) (a : ISizeArray) : (a.popWhile p).data = a.data.popWhile p := by simp
+example (p : ISize → Bool) (a : ISizeArray) :
+    (a.popWhile p).toArray = a.toArray.popWhile p := by simp
 
-#guard ((ISizeArray.mk #[1, 2, 3, big]).extract 1 3).data == #[2, 3]
-#guard ((ISizeArray.mk #[1, 2, 3, big]).extract 2 100).data == #[3, big]
-#guard ((ISizeArray.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
-#guard ((ISizeArray.mk #[1, 2, 3]).extract 2 1).data == #[]
-#guard ((ISizeArray.mk #[1, 2, 3]).extract 5 9).data == #[]
-#guard ((ISizeArray.mk #[1, 2, 3]).extract (2 ^ 70) (2 ^ 71)).data == #[]
-#guard ((ISizeArray.mk #[1, 2, 3]).extract 1 (2 ^ 70)).data == #[2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3, big]).extract 1 3).toArray == #[2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3, big]).extract 2 100).toArray == #[3, big]
+#guard ((ISizeArray.mk #[1, 2, 3]).extract 0 3).toArray == #[1, 2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).extract 2 1).toArray == #[]
+#guard ((ISizeArray.mk #[1, 2, 3]).extract 5 9).toArray == #[]
+#guard ((ISizeArray.mk #[1, 2, 3]).extract (2 ^ 70) (2 ^ 71)).toArray == #[]
+#guard ((ISizeArray.mk #[1, 2, 3]).extract 1 (2 ^ 70)).toArray == #[2, 3]
 #guard
   let xs := (Array.range 100000).map Nat.toISize
-  ((ISizeArray.mk xs).extract 70000 70010).data == xs.extract 70000 70010
+  ((ISizeArray.mk xs).extract 70000 70010).toArray == xs.extract 70000 70010
 #guard rawElemSize ((ISizeArray.mk #[1, 2, 3]).extract 1 2) == elemSize
 
 -- The extracted array is independent of the original.
 #guard
   let a := ISizeArray.mk #[1, 2, 3]
   let b := (a.extract 0 2).set! 0 big
-  b.data == #[big, 2] && a.data == #[1, 2, 3]
+  b.toArray == #[big, 2] && a.toArray == #[1, 2, 3]
 
 /-! Building arrays -/
 
-#guard (ISizeArray.replicate 3 big).data == #[big, big, big]
-#guard (ISizeArray.replicate 0 1).data == #[]
-#guard (ISizeArray.replicate 100000 big).data == Array.replicate 100000 big
-#guard (ISizeArray.ofFn (n := 4) fun i => i.val.toISize).data == #[0, 1, 2, 3]
-#guard (ISizeArray.ofFn (n := 0) fun i => i.val.toISize).data == #[]
+#guard (ISizeArray.replicate 3 big).toArray == #[big, big, big]
+#guard (ISizeArray.replicate 0 1).toArray == #[]
+#guard (ISizeArray.replicate 100000 big).toArray == Array.replicate 100000 big
+#guard (ISizeArray.ofFn (n := 4) fun i => i.val.toISize).toArray == #[0, 1, 2, 3]
+#guard (ISizeArray.ofFn (n := 0) fun i => i.val.toISize).toArray == #[]
 #guard rawElemSize (ISizeArray.replicate 2 1) == elemSize
 #guard rawElemSize (ISizeArray.ofFn (n := 2) fun _ => 1) == elemSize
 
@@ -550,18 +551,30 @@ example (a : ISizeArray) (i : Nat) (v : ISize) (h : i < a.size) :
 example (a : ISizeArray) : a.extract 0 a.size = a := by simp
 example (a : ISizeArray) (v : ISize) : (a.push v).pop = a :=
   ISizeArray.ext_getElem (by simp) (by simp_all)
+example (a : ISizeArray) (v : ISize) : (a.push v).pop = a :=
+  ISizeArray.ext_getElem? fun i => by
+    by_cases h : i < a.size <;> simp [h, getElem?_pos, getElem?_neg]
+example (a b : ISizeArray) (h : a.toArray = b.toArray) : a = b := by simpa using h
+example (s t : ISizeArray.Slice) (h : s.array = t.array) (h' : s.start = t.start)
+    (h'' : s.stop = t.stop) : s = t := by
+  ext1 <;> assumption
+example (s t : ISizeArray.Slice) (h : s.array.toArray = t.array.toArray) (h' : s.start = t.start)
+    (h'' : s.stop = t.stop) : s = t := by
+  ext <;> simp_all
+example (s t : ISizeArray.Slice) (h : s = t) : s.start = t.start :=
+  (ISizeArray.Slice.ext_iff.1 h).2.1
 
 /-! Default bounds proofs -/
 
 #guard (ISizeArray.mk #[1, 2, big]).get 2 == big
 #guard (ISizeArray.mk #[1, 2, big]).uget 2 == big
-#guard ((ISizeArray.mk #[1, 2, 3]).set 1 big).data == #[1, big, 3]
-#guard ((ISizeArray.mk #[1, 2, 3]).uset 1 big).data == #[1, big, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).set 1 big).toArray == #[1, big, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).uset 1 big).toArray == #[1, big, 3]
 
 /-! `set!` leaves the array unchanged when the index is out of bounds, like `ByteArray.set!`. -/
 
-#guard ((ISizeArray.mk #[1, 2, 3]).set! 3 big).data == #[1, 2, 3]
-#guard ((ISizeArray.mk #[1, 2, 3]).set! (2 ^ 70) big).data == #[1, 2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).set! 3 big).toArray == #[1, 2, 3]
+#guard ((ISizeArray.mk #[1, 2, 3]).set! (2 ^ 70) big).toArray == #[1, 2, 3]
 
 /-! Folds over part of an array -/
 
@@ -578,24 +591,24 @@ example (a : ISizeArray) (v : ISize) : (a.push v).pop = a :=
 #guard
   let src := ISizeArray.mk #[10, 11, 12, big]
   let dest := ISizeArray.mk #[1, 2, 3, 4, 5]
-  (src.copySlice 1 dest 2 2).data == #[1, 2, 11, 12, 5] &&
-  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, big] &&
-  (src.copySlice 0 dest 9 2).data == #[1, 2, 3, 4, 5, 10, 11] &&
-  (src.copySlice 9 dest 1 2).data == #[1, 2, 3, 4, 5] &&
-  (src.copySlice 2 dest 0 10).data == #[12, big, 3, 4, 5] &&
-  (src.copySlice 0 dest 0 0).data == #[1, 2, 3, 4, 5] &&
-  (src.copySlice 0 ISizeArray.empty 0 4).data == #[10, 11, 12, big] &&
-  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, big]
+  (src.copySlice 1 dest 2 2).toArray == #[1, 2, 11, 12, 5] &&
+  (src.copySlice 1 dest 4 3).toArray == #[1, 2, 3, 4, 11, 12, big] &&
+  (src.copySlice 0 dest 9 2).toArray == #[1, 2, 3, 4, 5, 10, 11] &&
+  (src.copySlice 9 dest 1 2).toArray == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 2 dest 0 10).toArray == #[12, big, 3, 4, 5] &&
+  (src.copySlice 0 dest 0 0).toArray == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 0 ISizeArray.empty 0 4).toArray == #[10, 11, 12, big] &&
+  dest.toArray == #[1, 2, 3, 4, 5] && src.toArray == #[10, 11, 12, big]
 
 -- Copying from an array into itself.
 #guard
   let a := ISizeArray.mk #[1, 2, 3, big]
-  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, big]
+  (a.copySlice 0 a 2 4).toArray == #[1, 2, 1, 2, 3, big]
 
 #guard
   let xs := (Array.range 100000).map Nat.toISize
   let a := ISizeArray.mk xs
-  (a.copySlice 70000 (ISizeArray.replicate 10 0) 5 10).data ==
+  (a.copySlice 70000 (ISizeArray.replicate 10 0) 5 10).toArray ==
     Array.replicate 5 0 ++ xs.extract 70000 70010
 
 #guard rawElemSize ((ISizeArray.mk #[1]).copySlice 0 ISizeArray.empty 0 1) == elemSize
@@ -604,7 +617,7 @@ example (a : ISizeArray) (v : ISize) : (a.push v).pop = a :=
   let dest := (ISizeArray.emptyWithCapacity 10).push x |>.push x |>.push x
   let p := rawAddr dest
   let dest := (ISizeArray.mk #[big, big]).copySlice 0 dest 1 2
-  rawAddr dest == p && dest.data == #[x, big, big]
+  rawAddr dest == p && dest.toArray == #[x, big, big]
 
 @[noinline] def ISizeArray.copySliceGrowth (x : ISize) : Bool :=
   let dest := (ISizeArray.mk #[x, x, x, x])
@@ -616,8 +629,8 @@ example (a : ISizeArray) (v : ISize) : (a.push v).pop = a :=
 
 /-! Linearity markers -/
 
-#guard ((ISizeArray.mk #[1, 2]).markLinear.push big).data == #[1, 2, big]
-#guard ((ISizeArray.mk #[1]).propagateMark (ISizeArray.mk #[2, big])).data == #[2, big]
+#guard ((ISizeArray.mk #[1, 2]).markLinear.push big).toArray == #[1, 2, big]
+#guard ((ISizeArray.mk #[1]).propagateMark (ISizeArray.mk #[2, big])).toArray == #[2, big]
 
 /-! Search -/
 
@@ -629,10 +642,10 @@ example (a : ISizeArray) (v : ISize) : (a.push v).pop = a :=
 
 /-! Lists -/
 
-#guard (ISizeArray.ofList [1, 2, big]).data == #[1, 2, big]
-#guard (ISizeArray.ofList []).data == #[]
+#guard (ISizeArray.ofList [1, 2, big]).toArray == #[1, 2, big]
+#guard (ISizeArray.ofList []).toArray == #[]
 #guard [1, 2, big].toISizeArray == ISizeArray.mk #[1, 2, big]
-#guard (ISizeArray.ofList ((List.range 100000).map Nat.toISize)).data ==
+#guard (ISizeArray.ofList ((List.range 100000).map Nat.toISize)).toArray ==
   (Array.range 100000).map Nat.toISize
 #guard rawElemSize (ISizeArray.ofList [1, 2]) == elemSize
 
@@ -696,7 +709,7 @@ example (s : ISizeArray.Slice) : ISizeArray := s.copy
 #guard
   let xs := (Array.range 100000).map Nat.toISize
   let s := (ISizeArray.mk xs)[70000...70010]
-  s.toArray == xs.extract 70000 70010 && s.copy.data == xs.extract 70000 70010
+  s.toArray == xs.extract 70000 70010 && s.copy.toArray == xs.extract 70000 70010
 
 #guard toString (ISizeArray.mk #[1, 2, 3])[1...*] == toString (ISizeArray.mk #[2, 3])
 
@@ -821,7 +834,7 @@ example (s : ISizeArray.Slice) : s.copy.size = s.size := by simp
 #guard ISizeArray.empty.iter.toISizeArray == ISizeArray.empty
 #guard
   let xs := (Array.range 100000).map Nat.toISize
-  ((ISizeArray.mk xs).iter.map (· + 1)).toISizeArray.data == xs.map (· + 1)
+  ((ISizeArray.mk xs).iter.map (· + 1)).toISizeArray.toArray == xs.map (· + 1)
 #guard rawElemSize ((ISizeArray.mk #[1]).iter.toISizeArray) == elemSize
 #guard (ISizeArray.mk #[1, 2, 3]).iter.toISizeArrayWithCapacity 100 ==
   ISizeArray.mk #[1, 2, 3]
@@ -855,33 +868,33 @@ example (s : ISizeArray.Slice) : s.copy.size = s.size := by simp
 
 /-! Writing through slices -/
 
-#guard ((ISizeArray.mk #[1, 2, 3, 4])[1...3].set 1 big).array.data == #[1, 2, big, 4]
+#guard ((ISizeArray.mk #[1, 2, 3, 4])[1...3].set 1 big).array.toArray == #[1, 2, big, 4]
 #guard ((ISizeArray.mk #[1, 2, 3, 4])[1...3].set! 1 big).toList == [2, big]
-#guard ((ISizeArray.mk #[1, 2, 3, 4])[1...3].set! 2 big).array.data == #[1, 2, 3, 4]
-#guard ((ISizeArray.mk #[1, 2, 3, 4])[1...3].modify 0 (· * 10)).array.data == #[1, 20, 3, 4]
-#guard ((ISizeArray.mk #[1, 2, 3, 4])[1...3].modify 2 (· * 10)).array.data == #[1, 2, 3, 4]
-#guard ((ISizeArray.mk #[1, 2, 3, big])[1...4].swap 0 2).array.data == #[1, big, 3, 2]
-#guard ((ISizeArray.mk #[1, 2, 3, big])[1...4].swap 1 1).array.data == #[1, 2, 3, big]
-#guard ((ISizeArray.mk #[0, 1, 2, 3, 4, 0])[1...5].reverse).array.data == #[0, 4, 3, 2, 1, 0]
-#guard ((ISizeArray.mk #[0, 1, 2, 3, 0])[1...4].reverse).array.data == #[0, 3, 2, 1, 0]
-#guard ((ISizeArray.mk #[1, 2])[1...1].reverse).array.data == #[1, 2]
+#guard ((ISizeArray.mk #[1, 2, 3, 4])[1...3].set! 2 big).array.toArray == #[1, 2, 3, 4]
+#guard ((ISizeArray.mk #[1, 2, 3, 4])[1...3].modify 0 (· * 10)).array.toArray == #[1, 20, 3, 4]
+#guard ((ISizeArray.mk #[1, 2, 3, 4])[1...3].modify 2 (· * 10)).array.toArray == #[1, 2, 3, 4]
+#guard ((ISizeArray.mk #[1, 2, 3, big])[1...4].swap 0 2).array.toArray == #[1, big, 3, 2]
+#guard ((ISizeArray.mk #[1, 2, 3, big])[1...4].swap 1 1).array.toArray == #[1, 2, 3, big]
+#guard ((ISizeArray.mk #[0, 1, 2, 3, 4, 0])[1...5].reverse).array.toArray == #[0, 4, 3, 2, 1, 0]
+#guard ((ISizeArray.mk #[0, 1, 2, 3, 0])[1...4].reverse).array.toArray == #[0, 3, 2, 1, 0]
+#guard ((ISizeArray.mk #[1, 2])[1...1].reverse).array.toArray == #[1, 2]
 #guard (∅ : ISizeArray.Slice).reverse.toList == []
 
 -- `foldlInPlace` on a slice shifts its range right by one, inserting the initial accumulator.
 #guard
   let r := (ISizeArray.mk #[1, 2, 3, 4])[1...3].foldlInPlace 9 (fun _ _ x b => (b, x))
-  r.1.array.data == #[1, 9, 2, 4] && r.2 == 3 && r.1.start == 1 && r.1.stop == 3
+  r.1.array.toArray == #[1, 9, 2, 4] && r.2 == 3 && r.1.start == 1 && r.1.stop == 3
 #guard
   let r := (ISizeArray.mk #[1, 2, 3, 4])[2...2].foldlInPlace 9 (fun _ _ x b => (b, x))
-  r.1.array.data == #[1, 2, 3, 4] && r.2 == 9
+  r.1.array.toArray == #[1, 2, 3, 4] && r.2 == 9
 
 -- `foldrInPlace` shifts the range left by one, from the last element to the first.
 #guard
   let r := (ISizeArray.mk #[1, 2, 3, 4])[1...3].foldrInPlace 9 (fun _ _ x b => (b, x))
-  r.1.array.data == #[1, 3, 9, 4] && r.2 == 2 && r.1.start == 1 && r.1.stop == 3
+  r.1.array.toArray == #[1, 3, 9, 4] && r.2 == 2 && r.1.start == 1 && r.1.stop == 3
 #guard
   let r := (ISizeArray.mk #[1, 2, 3, 4])[2...2].foldrInPlace 9 (fun _ _ x b => (b, x))
-  r.1.array.data == #[1, 2, 3, 4] && r.2 == 9
+  r.1.array.toArray == #[1, 2, 3, 4] && r.2 == 9
 
 -- The `Then` versions hand the slice and the last accumulator to `g`, here to store it.
 #guard
@@ -892,13 +905,13 @@ example (s : ISizeArray.Slice) : s.copy.size = s.size := by simp
 #guard
   let r := (ISizeArray.mk #[1, 2, 3, 4])[0...3].foldlInPlaceThen 9 (fun _ _ x b => (b, x))
     (fun s b => s.array.set! 3 b)
-  r.data == #[9, 1, 2, 3]
+  r.toArray == #[9, 1, 2, 3]
 #guard
   let a := ISizeArray.mk #[1, 2, 3, 4]
   let r := a[1...3].foldlInPlaceThen 9 (fun _ _ x b => (b, x)) Prod.mk
   let r' := a[1...3].foldrInPlaceThen 9 (fun _ _ x b => (b, x)) Prod.mk
-  r.1.array.data == #[1, 9, 2, 4] && r.2 == 3 && r'.1.array.data == #[1, 3, 9, 4] && r'.2 == 2 &&
-    a.data == #[1, 2, 3, 4]
+  r.1.array.toArray == #[1, 9, 2, 4] && r.2 == 3 &&
+    r'.1.array.toArray == #[1, 3, 9, 4] && r'.2 == 2 && a.toArray == #[1, 2, 3, 4]
 
 -- The indices passed to `f`, counted from the start of the slice, in the order of the visits.
 #guard
@@ -906,30 +919,44 @@ example (s : ISizeArray.Slice) : s.copy.size = s.size := by simp
   (s.foldlInPlace [] (fun k _ x b => (x, k.toNat :: b))).2 == [2, 1, 0] &&
     (s.foldrInPlace [] (fun k _ x b => (x, k.toNat :: b))).2 == [0, 1, 2]
 
+-- The folds agree with the pure folds of `foldlInPlace_eq_foldl_finRange` and
+-- `foldrInPlace_eq_foldr_finRange`, and leave the array outside the slice unchanged.
+#guard
+  let s := (ISizeArray.mk #[1, 2, 3, 4, 5])[1...4]
+  let r := s.foldlInPlace 7 (fun _ _ x b => (x * 2 + b, x))
+  let r' := s.foldrInPlace 7 (fun _ _ x b => (x * 2 + b, x))
+  (r.1.copy.toList, r.2) == (List.finRange s.size).foldl
+      (fun (acc : List ISize × ISize) i => (acc.1 ++ [s[i] * 2 + acc.2], s[i])) ([], 7) &&
+    (r'.1.copy.toList, r'.2) == (List.finRange s.size).foldr
+      (fun i (acc : List ISize × ISize) => ((s[i] * 2 + acc.2) :: acc.1, s[i])) ([], 7) &&
+    r.1.array[0]! == 1 && r.1.array[4]! == 5 && r'.1.array[0]! == 1 && r'.1.array[4]! == 5 &&
+    r.1.array.size == 5 && r'.1.array.size == 5
+
 -- Writing through a slice of a shared array must leave the original unchanged.
 #guard
   let a := ISizeArray.mk #[1, 2, 3, 4]
   let s := a[1...4].set 0 big
-  s.array.data == #[1, big, 3, 4] && a.data == #[1, 2, 3, 4]
+  s.array.toArray == #[1, big, 3, 4] && a.toArray == #[1, 2, 3, 4]
 #guard
   let a := ISizeArray.mk #[1, 2, 3, 4]
   let s := a[0...4].reverse
-  s.array.data == #[4, 3, 2, 1] && a.data == #[1, 2, 3, 4]
+  s.array.toArray == #[4, 3, 2, 1] && a.toArray == #[1, 2, 3, 4]
 #guard
   let a := ISizeArray.mk #[1, 2, 3, 4]
   let r := a[0...4].foldlInPlace 9 (fun _ _ x b => (b, x))
-  r.1.array.data == #[9, 1, 2, 3] && a.data == #[1, 2, 3, 4]
+  r.1.array.toArray == #[9, 1, 2, 3] && a.toArray == #[1, 2, 3, 4]
 #guard
   let a := ISizeArray.mk #[1, 2, 3, 4]
   let r := a[0...4].foldrInPlace 9 (fun _ _ x b => (b, x))
-  r.1.array.data == #[2, 3, 4, 9] && a.data == #[1, 2, 3, 4]
+  r.1.array.toArray == #[2, 3, 4, 9] && a.toArray == #[1, 2, 3, 4]
 
 -- `f` must see the elements of the original even when it reads them from the shared array itself.
 #guard
   let a := ISizeArray.mk #[1, 2, 3, 4]
   let r := a[1...4].foldlInPlace 0 (fun k _ _ b => (a[k.toNat]!, b))
   let r' := a[1...4].foldrInPlace 0 (fun k _ _ b => (a[k.toNat]!, b))
-  r.1.array.data == #[1, 1, 2, 3] && r'.1.array.data == #[1, 1, 2, 3] && a.data == #[1, 2, 3, 4]
+  r.1.array.toArray == #[1, 1, 2, 3] && r'.1.array.toArray == #[1, 1, 2, 3] &&
+    a.toArray == #[1, 2, 3, 4]
 #guard
   let s := (ISizeArray.mk #[1, 2, 3, 4])[0...4]
   let t := s.swap 0 3
@@ -948,7 +975,7 @@ example (s : ISizeArray.Slice) : s.copy.size = s.size := by simp
   let (s, _) := s.foldrInPlace () (fun _ _ x b => (x + 1, b))
   let s := s.foldlInPlaceThen () (fun _ _ x b => (x + 1, b)) (fun s _ => s)
   let s := s.foldrInPlaceThen () (fun _ _ x b => (x + 1, b)) (fun s _ => s)
-  rawAddr s.array == p && s.array.data == #[x, big + 4, 8, 8, x]
+  rawAddr s.array == p && s.array.toArray == #[x, big + 4, 8, 8, x]
 
 #guard ISizeArray.writesThroughSliceInPlace 1
 
@@ -956,7 +983,184 @@ example (s : ISizeArray.Slice) : s.copy.size = s.size := by simp
 #guard
   let n := 1000000
   let xs := (Array.range n).map Nat.toISize
-  (ISizeArray.mk xs)[0...n].reverse.array.data == xs.reverse
+  (ISizeArray.mk xs)[0...n].reverse.array.toArray == xs.reverse
+
+/-! Folding over windows of one array -/
+
+-- `foldlInPlace2` and `foldlInPlace2Then` with the bounds checked at run time.
+private def fold2 {β : Type} (a : ISizeArray) (xs ys rs len : USize) (init : β)
+    (f : (j : USize) → j.toNat < len.toNat → ISize → ISize → β → ISize × β) :
+    Option (ISizeArray × β) :=
+  if h : xs.toNat + len.toNat ≤ a.size ∧ ys.toNat + len.toNat ≤ a.size ∧
+      rs.toNat + len.toNat ≤ a.size then
+    some (a.foldlInPlace2 xs ys rs len h.1 h.2.1 h.2.2 init f)
+  else
+    none
+
+private def fold2Then {β γ : Type} (a : ISizeArray) (xs ys rs len : USize) (init : β)
+    (f : (j : USize) → j.toNat < len.toNat → ISize → ISize → β → ISize × β)
+    (g : ISizeArray → β → γ) : Option γ :=
+  if h : xs.toNat + len.toNat ≤ a.size ∧ ys.toNat + len.toNat ≤ a.size ∧
+      rs.toNat + len.toNat ≤ a.size then
+    some (a.foldlInPlace2Then xs ys rs len h.1 h.2.1 h.2.2 init f fun a' _ b => g a' b)
+  else
+    none
+
+-- Disjoint windows, and the accumulator.
+#guard (fold2 (ISizeArray.mk #[1, 2, 3, 4, 5, 6, 0, 0, 0]) 0 3 6 3 0
+  (fun _ _ x y c => (x + y, c + 1))).map (fun r => (r.1.toArray, r.2)) ==
+    some (#[1, 2, 3, 4, 5, 6, 5, 7, 9], 3)
+
+-- Overlapping windows: each step reads what the earlier steps wrote.
+#guard (fold2 (ISizeArray.mk #[1, 0, 0, 0, 0]) 0 0 1 4 () (fun _ _ x y c => (x + y, c))).map
+  (·.1.toArray) == some #[1, 2, 4, 8, 16]
+#guard (fold2 (ISizeArray.mk #[0, 1, 2, 3, big]) 1 1 0 4 () (fun _ _ x _ c => (x, c))).map
+  (·.1.toArray) == some #[1, 2, 3, big, big]
+#guard (fold2 (ISizeArray.mk #[1, 2, 3, 4]) 0 1 0 3 () (fun _ _ x y c => (x + y, c))).map
+  (·.1.toArray) == some #[3, 5, 7, 4]
+#guard (fold2 (ISizeArray.mk #[1, 1, 1, 1, 1]) 0 1 1 4 () (fun _ _ x y c => (x + y, c))).map
+  (·.1.toArray) == some #[1, 2, 3, 4, 5]
+
+-- The indices passed to `f`, in the order of the visits, and the empty fold.
+#guard (fold2 (ISizeArray.mk #[1, 2, 3]) 0 0 0 3 [] (fun j _ x _ c => (x, j.toNat :: c))).map
+  (·.2) == some [2, 1, 0]
+#guard (fold2 (ISizeArray.mk #[1, 2, 3]) 3 0 1 0 big (fun _ _ x _ c => (x, c))).map
+  (fun r => (r.1.toArray, r.2)) == some (#[1, 2, 3], big)
+
+-- The `Then` form hands the array and the last accumulator to `g`, here to store it.
+#guard fold2Then (ISizeArray.mk #[1, 2, 3, 0]) 0 1 0 2 (0 : ISize)
+  (fun _ _ x y c => (x + y, c + x)) (fun a c => (a.set! 3 c).toArray) == some #[3, 5, 3, 3]
+#guard (fold2Then (ISizeArray.mk #[1, 2]) 0 0 0 2 () (fun _ _ x _ c => (x + 1, c))
+  Prod.mk).map (·.1.toArray) == some #[2, 3]
+
+-- The size proof that `g` receives bounds its reads.
+#guard
+  let a := ISizeArray.mk #[1, 2, 3]
+  if h : (0 : USize).toNat + (2 : USize).toNat ≤ a.size ∧
+      (1 : USize).toNat + (2 : USize).toNat ≤ a.size ∧ 2 < a.size then
+    a.foldlInPlace2Then 0 1 0 2 h.1 h.2.1 h.1 () (fun _ _ x y c => (x + y, c))
+      (fun a' h' _ => a'[2]'(by rw [h']; exact h.2.2) + a'[0]'(by rw [h']; lia)) == 6
+  else false
+
+-- Folding over windows of a shared array must leave the original unchanged, and `f` must see the
+-- elements of the original when it reads them from the shared array itself.
+#guard
+  let a := ISizeArray.mk #[1, 2, 3, 4]
+  let r := fold2 a 0 1 0 3 () (fun _ _ x y c => (x + y, c))
+  r.map (·.1.toArray) == some #[3, 5, 7, 4] && a.toArray == #[1, 2, 3, 4]
+#guard
+  let a := ISizeArray.mk #[1, 2, 3, 4]
+  let r := fold2 a 0 0 1 3 () (fun j _ _ _ c => (a[j.toNat]!, c))
+  r.map (·.1.toArray) == some #[1, 1, 2, 3] && a.toArray == #[1, 2, 3, 4]
+
+-- An exclusive array is written in place, without copying it.
+@[noinline] def ISizeArray.foldsWindowsInPlace (x : ISize) : Bool :=
+  let a := (ISizeArray.emptyWithCapacity 6).push x |>.push 2 |>.push 3 |>.push 0 |>.push 0
+  let p := rawAddr a
+  match fold2 a 0 1 2 3 () (fun _ _ x y c => (x + y, c)) with
+  | some (a, _) => rawAddr a == p && a.toArray == #[x, 2, x + 2, x + 4, x + x + 6]
+  | none => false
+
+#guard ISizeArray.foldsWindowsInPlace 1
+
+-- Prefix sums in place over a large array take linear time only when every write is in place.
+#guard
+  let n := 100000
+  let r := Id.run do
+    let mut r := Array.replicate n (1 : ISize)
+    for i in [1:n] do
+      r := r.set! i (r[i - 1]! + r[i]!)
+    return r
+  (fold2 (ISizeArray.replicate n 1) 0 1 1 (n - 1).toUSize () (fun _ _ x y c => (x + y, c))).map
+    (·.1.toArray) == some r
+
+/-! In-place folds over a `USize` range -/
+
+-- The range folds with the bounds checked at run time, and the slice folds they are specified as.
+private def foldlRange? {β : Type} (a : ISizeArray) (start len : USize) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → ISize → β → ISize × β) :
+    Option (ISizeArray × β) :=
+  if h : start.toNat + len.toNat ≤ a.size then some (a.foldlInPlaceRange start len h init f)
+  else none
+
+private def foldrRange? {β : Type} (a : ISizeArray) (start len : USize) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → ISize → β → ISize × β) :
+    Option (ISizeArray × β) :=
+  if h : start.toNat + len.toNat ≤ a.size then some (a.foldrInPlaceRange start len h init f)
+  else none
+
+private def foldlSlice {β : Type} (a : ISizeArray) (start len : Nat) (init : β)
+    (f : USize → ISize → β → ISize × β) : ISizeArray × β :=
+  let r := a[start...start + len].foldlInPlace init fun k _ => f k
+  (r.1.array, r.2)
+
+private def foldrSlice {β : Type} (a : ISizeArray) (start len : Nat) (init : β)
+    (f : USize → ISize → β → ISize × β) : ISizeArray × β :=
+  let r := a[start...start + len].foldrInPlace init fun k _ => f k
+  (r.1.array, r.2)
+
+-- Shifts the range by one, inserting the initial accumulator, and records the indices visited.
+private def shift (k : USize) (x : ISize) (b : ISize × List Nat) :
+    ISize × (ISize × List Nat) :=
+  (b.1, (x, k.toNat :: b.2))
+
+#guard
+  let a := ISizeArray.mk #[1, 2, 3, 4, 5, big]
+  [(0, 6), (1, 3), (2, 0), (0, 0), (6, 0), (5, 1), (0, 1)].all fun (start, len) =>
+    let l := (foldlRange? a start.toUSize len.toUSize (big, []) fun k _ => shift k).map
+      fun r => (r.1.toArray, r.2)
+    let r := (foldrRange? a start.toUSize len.toUSize (big, []) fun k _ => shift k).map
+      fun r => (r.1.toArray, r.2)
+    let l' := foldlSlice a start len (big, []) shift
+    let r' := foldrSlice a start len (big, []) shift
+    l == some (l'.1.toArray, l'.2) && r == some (r'.1.toArray, r'.2)
+
+#guard (foldlRange? (ISizeArray.mk #[1, 2, 3, 4]) 1 2 (9 : ISize) fun _ _ x b => (b, x)).map
+  (fun r => (r.1.toArray, r.2)) == some (#[1, 9, 2, 4], 3)
+#guard (foldrRange? (ISizeArray.mk #[1, 2, 3, 4]) 1 2 (9 : ISize) fun _ _ x b => (b, x)).map
+  (fun r => (r.1.toArray, r.2)) == some (#[1, 3, 9, 4], 2)
+#guard (foldlRange? (ISizeArray.mk #[1, 2, 3, 4]) 4 0 (9 : ISize) fun _ _ x b => (b, x)).map
+  (fun r => (r.1.toArray, r.2)) == some (#[1, 2, 3, 4], 9)
+
+-- The `Then` versions hand the array and the last accumulator to `g`, here to store it.
+#guard
+  let a := ISizeArray.mk #[1, 2, 3, 4]
+  if h : (0 : USize).toNat + (3 : USize).toNat ≤ a.size then
+    (a.foldlInPlaceRangeThen 0 3 h (9 : ISize) (fun _ _ x b => (b, x)) fun a _ b =>
+        (a.set! 3 b).toArray) == #[9, 1, 2, 3] &&
+      (a.foldrInPlaceRangeThen 0 3 h (9 : ISize) (fun _ _ x b => (b, x)) fun a _ b =>
+        (a.set! 3 b).toArray) == #[2, 3, 9, 1] && a.toArray == #[1, 2, 3, 4]
+  else false
+
+-- `g` gets the size of the new array, for a bounded write without a check.
+#guard
+  let a := ISizeArray.mk #[1, 2, 3, 4]
+  if h : (0 : USize).toNat + (3 : USize).toNat ≤ a.size then
+    (a.foldlInPlaceRangeThen 0 3 h (9 : ISize) (fun _ _ x b => (b, x)) fun a' ha b =>
+        (a'.set 2 b (by rw [ha]; simp at h; lia)).toArray) == #[9, 1, 3, 4] &&
+      (a.foldrInPlaceRangeThen 0 3 h (9 : ISize) (fun _ _ x b => (b, x)) fun a' ha b =>
+        (a'.set 2 b (by rw [ha]; simp at h; lia)).toArray) == #[2, 3, 1, 4]
+  else false
+
+-- A shared array is left unchanged, and an exclusive one is written in place.
+#guard
+  let a := ISizeArray.mk #[1, 2, 3, 4]
+  let r := foldlRange? a 0 4 (9 : ISize) fun _ _ x b => (b, x)
+  let r' := foldrRange? a 0 4 (9 : ISize) fun _ _ x b => (b, x)
+  r.map (·.1.toArray) == some #[9, 1, 2, 3] && r'.map (·.1.toArray) == some #[2, 3, 4, 9] &&
+    a.toArray == #[1, 2, 3, 4]
+
+@[noinline] def ISizeArray.foldsRangeInPlace (x : ISize) : Bool :=
+  let a := (ISizeArray.emptyWithCapacity 8).push x |>.push 2 |>.push 3 |>.push 4 |>.push x
+  let p := rawAddr a
+  match foldlRange? a 1 3 () (fun _ _ x b => (x + 1, b)) with
+  | some (a, _) =>
+    match foldrRange? a 1 3 () (fun _ _ x b => (x + 1, b)) with
+    | some (a, _) => rawAddr a == p && a.toArray == #[x, 4, 5, 6, x]
+    | none => false
+  | none => false
+
+#guard ISizeArray.foldsRangeInPlace 1
 
 /-! Lemmas from another module -/
 
@@ -1033,4 +1237,46 @@ example (s : ISizeArray.Slice) (f : (k : USize) → k.toNat < s.size → ISize �
   simp
 example (s : ISizeArray.Slice) (f : (k : USize) → k.toNat < s.size → ISize → Nat → ISize × Nat) :
     (s.foldrInPlaceThen 0 f fun t _ => t).size = s.size := by
+  simp
+example (s : ISizeArray.Slice) (f : (k : USize) → k.toNat < s.size → ISize → Nat → ISize × Nat) :
+    (s.foldlInPlace 0 f).1.array.size = s.array.size ∧
+      (s.foldrInPlace 0 f).1.array.size = s.array.size := by
+  simp
+example (s : ISizeArray.Slice) (f : (k : USize) → k.toNat < s.size → ISize → Nat → ISize × Nat)
+    (h : 0 < s.start) : (s.foldlInPlace 0 f).1.array[0]? = s.array[0]? :=
+  s.getElem?_array_foldlInPlace 0 f 0 (.inl h)
+example (s : ISizeArray.Slice) (f : (k : USize) → k.toNat < s.size → ISize → Nat → ISize × Nat) :
+    (s.foldrInPlace 0 f).1.array[s.stop]? = s.array[s.stop]? :=
+  s.getElem?_array_foldrInPlace 0 f _ (.inr (Nat.le_refl _))
+
+-- Mapping each element and counting, as a pure fold.
+example (s : ISizeArray.Slice) :
+    (s.foldlInPlace 0 fun _ _ x b => (x + 1, b + 1)).2 =
+      ((List.finRange s.size).foldl (fun acc i => (acc.1 ++ [s[i] + 1], acc.2 + 1))
+        ([], 0)).2 :=
+  congrArg Prod.snd (s.foldlInPlace_eq_foldl_finRange _ _)
+example (s : ISizeArray.Slice) :
+    (s.foldrInPlace 0 fun _ _ x b => (x + 1, b + 1)).1.copy.toList =
+      ((List.finRange s.size).foldr (fun i acc => ((s[i] + 1) :: acc.1, acc.2 + 1))
+        ([], 0)).1 :=
+  congrArg Prod.fst (s.foldrInPlace_eq_foldr_finRange _ _)
+example (a : ISizeArray) (xs ys rs len : USize) (hx hy hr)
+    (f : (j : USize) → j.toNat < len.toNat → ISize → ISize → Nat → ISize × Nat) :
+    (a.foldlInPlace2Then xs ys rs len hx hy hr 0 f fun a' _ _ => a').size = a.size := by
+  simp
+example (a : ISizeArray) (start len : USize) (h : start.toNat + len.toNat ≤ a.size)
+    (f : (k : USize) → k.toNat < len.toNat → ISize → Nat → ISize × Nat) :
+    (a.foldlInPlaceRange start len h 0 f).2 =
+      ((a.toSlice start.toNat (start.toNat + len.toNat)).foldlInPlace 0
+        fun k hk => f k (by simp at hk; lia)).2 := by
+  simp
+example (a : ISizeArray) (start len : USize) (h : start.toNat + len.toNat ≤ a.size)
+    (f : (k : USize) → k.toNat < len.toNat → ISize → Nat → ISize × Nat) :
+    a.foldrInPlaceRangeThen start len h 0 f (fun a' _ b => (a', b)) =
+      a.foldrInPlaceRange start len h 0 f := by
+  simp
+example (a : ISizeArray) (start len : USize) (h : start.toNat + len.toNat ≤ a.size)
+    (f : (k : USize) → k.toNat < len.toNat → ISize → Nat → ISize × Nat) :
+    (a.foldlInPlaceRange start len h 0 f).1.size = a.size ∧
+      (a.foldrInPlaceRange start len h 0 f).1.size = a.size := by
   simp
