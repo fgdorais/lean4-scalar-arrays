@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 module
 
+public import ScalarArray.Internal
 import all ScalarArray.Internal
 public import Std.Data.Iterators
 import Init.Data.Iterators.Lemmas.Basic
@@ -120,13 +121,6 @@ private def toUSizeChecked (n : Nat) : USize :=
   if n < USize.size >>> 1 then n.toUSize else panic! "out of memory"
 
 /--
-The number of elements `a` has room for before it must be reallocated. Public only so that `push`,
-`ensureCapacity` and `ensureExclusiveWithCapacity` can be inlined into code in other modules.
--/
-@[extern "lean_sarray_capacity"]
-public unsafe def capacityUnsafe (a : @& Float64Array) : USize := a.usize
-
-/--
 `ensureCapacity` and `ensureExclusiveWithCapacity` when `a` lacks room for `n` elements: copies `a`
 with room for exactly `max n a.size` elements. Out of line so that inlined call sites stay small.
 Public only so that those functions can be inlined into code in other modules.
@@ -142,7 +136,7 @@ public unsafe def ensureCapacityGrowUnsafe (a : Float64Array) (n : Nat) : Float6
 -- check in other modules.
 @[inline]
 public unsafe def ensureCapacityImpl (a : Float64Array) (n : Nat) : Float64Array :=
-  if n ≤ (capacityUnsafe a).toNat then a else ensureCapacityGrowUnsafe a n
+  if n ≤ (unsafeCast a : ScalarArray).capacity.toNat then a else ensureCapacityGrowUnsafe a n
 
 /--
 Returns `a` itself when it has room for `n` elements, and otherwise a copy with room for exactly
@@ -156,7 +150,8 @@ public def ensureCapacity (a : Float64Array) (n : Nat) : Float64Array := a
 -- when `a` lacks room is exclusive, so `a` is copied at most once.
 @[inline]
 public unsafe def ensureExclusiveWithCapacityImpl (a : Float64Array) (n : Nat) : Float64Array :=
-  if n ≤ (capacityUnsafe a).toNat then a.ensureExclusive else ensureCapacityGrowUnsafe a n
+  if n ≤ (unsafeCast a : ScalarArray).capacity.toNat then a.ensureExclusive
+  else ensureCapacityGrowUnsafe a n
 
 /--
 Returns `a` itself when it is not shared and has room for `n` elements, and otherwise a single copy
@@ -313,15 +308,6 @@ public instance : GetElem Float64Array USize Float fun a i => i.toNat < a.size w
   getElem a i h := a.uget i h
 
 /--
-Sets the size of `a` to `_n`. Only valid when `a` is exclusive and `_n` is at most its capacity;
-the elements past the old size are uninitialized until stored. Public only so that `push` can be
-inlined into code in other modules.
--/
--- The same C as the private `ScalarArray.resizeUnsafe`, which code in other modules can't reach.
-@[never_extract, extern c inline "#1;\nlean_sarray_set_size(#1, #2)"]
-public unsafe def setSizeUnsafe (a : Float64Array) (_n : USize) : Float64Array := a
-
-/--
 `push` when `a` is full: copies `a` with capacity `2 * capacity + 1`, then appends `v`. Out of
 line so that inlined `push` call sites stay small. Public only so that `push` can be inlined into
 code in other modules.
@@ -330,9 +316,9 @@ public unsafe def pushGrowUnsafe (a : Float64Array) (v : Float) : Float64Array :
   let s : ScalarArray := unsafeCast a
   let cap := s.capacity
   if cap < cap + cap + 1 then
-    let a : Float64Array := unsafeCast (s.copyWithCapacity (cap + cap + 1) lcProof)
-    let i := a.usize
-    setUnsafe (setSizeUnsafe a (i + 1)) i v
+    let s := s.copyWithCapacity (cap + cap + 1) lcProof
+    let i := s.size
+    setUnsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
   else
     panic! "out of memory"
 
@@ -340,27 +326,17 @@ public unsafe def pushGrowUnsafe (a : Float64Array) (v : Float) : Float64Array :
 -- modules: one capacity check, one exclusivity check, a size bump and one store.
 @[inline]
 public unsafe def pushImpl (a : Float64Array) (v : Float) : Float64Array :=
-  if a.usize < capacityUnsafe a then
+  if a.usize < (unsafeCast a : ScalarArray).capacity then
     let a := a.ensureExclusive
     let i := a.usize
-    setUnsafe (setSizeUnsafe a (i + 1)) i v
+    let s : ScalarArray := unsafeCast a
+    setUnsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
   else
     pushGrowUnsafe a v
 
 @[implemented_by pushImpl, expose]
 public def push (a : Float64Array) (v : Float) : Float64Array :=
   mk (a.toArray.push v)
-
-/--
-Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting
-at byte `destOff`. Only valid when `dest` is exclusive and both ranges are within the capacities.
--/
--- TODO: core has no runtime function that copies a slice of a scalar array with any element size;
--- `lean_byte_array_copy_slice` only works for bytes. Replace this once core has one.
-@[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + #4, lean_sarray_cptr(#2) + #3, #5)"]
-private unsafe def memcpyUnsafe :
-    Float64Array → @& Float64Array → (srcOff destOff n : USize) → Float64Array
-  | dest, _, _, _, _ => dest
 
 /--
 Copies the `n` elements of `src` starting at index `srcOff` into `dest` starting at index `destOff`,
@@ -371,8 +347,9 @@ exclusive, has capacity for `destOff + n` elements, and is not the same object a
 @[inline]
 private unsafe def copySliceUnsafe (dest : Float64Array) (src : @& Float64Array)
     (srcOff destOff n : USize) : Float64Array :=
-  let esz := (unsafeCast src : ScalarArray).elemSize.toUSize
-  let d : ScalarArray := unsafeCast (memcpyUnsafe dest src (srcOff * esz) (destOff * esz) (n * esz))
+  let src : ScalarArray := unsafeCast src
+  let esz := src.elemSize.toUSize
+  let d := (unsafeCast dest : ScalarArray).memcpyUnsafe src (srcOff * esz) (destOff * esz) (n * esz)
   unsafeCast (d.resizeUnsafe (max d.size (destOff + n)) lcProof lcProof)
 
 private unsafe def appendImpl (a b : Float64Array) : Float64Array :=
