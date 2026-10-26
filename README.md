@@ -74,7 +74,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Group        | Declarations                                                                |
 |--------------|-----------------------------------------------------------------------------|
 | Construction | `mk : Array X → XArray`, `empty`, `emptyWithCapacity`, `{}`, `replicate`, `ofFn`, `ofList`, `List.toXArray` |
-| Conversion   | `data : XArray → Array X`, `toList`                                         |
+| Conversion   | `toArray : XArray → Array X`, `toList`                                         |
 | Size         | `size : XArray → Nat`, `usize : XArray → USize`, `isEmpty`                  |
 | Reading      | `get`, `uget`, `get!`, `getD`, `back`, `back?`, `back!`, and `a[i]`, `a[i]?`, `a[i]!` with `Nat` or `USize` indices |
 | Writing      | `set`, `uset`, `set!`, `push`, `pop`                                        |
@@ -88,7 +88,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Linearity    | `markLinear`, `propagateMark`                                               |
 | Memory       | `ensureExclusive`, `ensureCapacity`, `ensureExclusiveWithCapacity`, which are logically the identity |
 | Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
-| Lemmas       | `ext`, `ext_getElem`; `data_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!` |
+| Lemmas       | `ext`, `ext_getElem`, `ext_getElem?`, `toArray_inj` and `Slice.ext`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!` |
 
 As with `Array`:
 
@@ -139,7 +139,7 @@ a.iter.length                                -- size
 bounded, for example `(a.iter.map f).toUInt32ArrayWithCapacity a.size`.
 
 Equality on the integer types compares the arrays' memory with `memcmp`, and their hash agrees
-with the hash of `data`. `Float32Array` and `Float64Array` compare elements with floating-point
+with the hash of `toArray`. `Float32Array` and `Float64Array` compare elements with floating-point
 `==`, like `Array Float`, so they have no `DecidableEq` or `Hashable` instance: `NaN` is not equal
 to itself and `0.0 == -0.0`.
 

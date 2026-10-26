@@ -14,7 +14,7 @@ import Init.Data.Slice.InternalLemmas
 
 `ScalarArray.UInt32Array` stores `UInt32` values unboxed in a Lean runtime scalar array,
 4 bytes per element. Its logical model is `Array UInt32`: `UInt32Array.mk` and
-`UInt32Array.data` convert between the two, and every operation is specified by its effect on
+`UInt32Array.toArray` convert between the two, and every operation is specified by its effect on
 the model.
 
 Reads and in-place writes are inline C. `uset`, `set` and `push` update the array in place when it
@@ -28,8 +28,8 @@ universe u
 /--
 Arrays of `UInt32` values, stored unboxed in a scalar array, 4 bytes per element.
 
-The logical model is an `Array UInt32`: `UInt32Array.mk` and `UInt32Array.data` convert between the
-two. `cases` and `induction` split a `UInt32Array` as `mk data`.
+The logical model is an `Array UInt32`: `UInt32Array.mk` and `UInt32Array.toArray` convert between
+the two. `cases` and `induction` split a `UInt32Array` as `mk a`.
 -/
 -- At runtime a `UInt32Array` is a `ScalarArray`, so every function that looks inside the quotient
 -- must be `extern` or `implemented_by`. A quotient rather than a structure: the compiler represents
@@ -40,28 +40,28 @@ two. `cases` and `induction` split a `UInt32Array` as `mk data`.
 
 namespace UInt32Array
 
--- `noinline` on `mk` and `data`: the `implemented_by` attribute of `mk` and the `csimp` theorem of
--- `data` come later, and the compiler would otherwise inline their bodies, which treat the scalar
--- array as an `Array`.
+-- `noinline` on `mk` and `toArray`: the `implemented_by` attribute of `mk` and the `csimp` theorem
+-- of `toArray` come later, and the compiler would otherwise inline their bodies, which treat the
+-- scalar array as an `Array`.
 
-/-- The `UInt32Array` whose elements are `data`. -/
+/-- The `UInt32Array` whose elements are `a`. -/
 @[noinline, expose]
-public def mk (data : Array UInt32) : UInt32Array := Quot.mk _ data
+public def mk (a : Array UInt32) : UInt32Array := Quot.mk _ a
 
 /-- The elements of `a` as an `Array UInt32`. -/
 @[noinline, expose]
-public def data (a : @& UInt32Array) : Array UInt32 :=
+public def toArray (a : @& UInt32Array) : Array UInt32 :=
   Quot.lift id (fun _ _ h => h.elim) a
 
-@[simp] public theorem data_mk (a : Array UInt32) : (mk a).data = a := rfl
+@[simp] public theorem toArray_mk (a : Array UInt32) : (mk a).toArray = a := rfl
 
-@[simp] public theorem mk_data (a : UInt32Array) : mk a.data = a :=
-  Quot.ind (β := fun a : UInt32Array => mk a.data = a) (fun _ => rfl) a
+@[simp] public theorem mk_toArray (a : UInt32Array) : mk a.toArray = a :=
+  Quot.ind (β := fun a : UInt32Array => mk a.toArray = a) (fun _ => rfl) a
 
 -- `lean_byte_array_size` reads the size of any scalar array, whatever its element size.
 @[extern "lean_byte_array_size", tagged_return, expose]
 public def size (a : @& UInt32Array) : Nat :=
-  a.data.size
+  a.toArray.size
 
 /--
 The size of `a` as a `USize`. Since `USize` can address all memory, no array has more elements than
@@ -78,16 +78,16 @@ public theorem toNat_usize_le (a : UInt32Array) : a.usize.toNat ≤ a.size := by
 @[extern c inline "((uint32_t*)lean_sarray_cptr(#1))[#2]", expose]
 public def uget (a : @& UInt32Array) (i : USize) (h : i.toNat < a.size := by get_elem_tactic) :
     UInt32 :=
-  a.data.uget i h
+  a.toArray.uget i h
 
 @[expose]
 public def get (a : @& UInt32Array) (i : @& Nat) (h : i < a.size := by get_elem_tactic) :
     UInt32 :=
-  a.data[i]
+  a.toArray[i]
 
 -- Public, like `mkImpl`, `usetImpl`, `setImpl` and `pushImpl` below: a private
 -- `implemented_by` target attached with a separate `attribute` command is not visible to other
--- modules, so code there that uses `get`, `mk`, `data`, `uset` or `set` would fail to compile.
+-- modules, so code there that uses `get`, `mk`, `toArray`, `uset` or `set` would fail to compile.
 @[inline]
 public unsafe def getImpl : type_of% @get :=
   fun a i _ => a.uget i.toUSize lcProof
@@ -100,7 +100,7 @@ so that `uset` can be inlined into code in other modules.
 -/
 @[never_extract, extern c inline "#1;\n((uint32_t*)lean_sarray_cptr(#1))[#2] = #3"]
 public unsafe def setUnsafe (a : UInt32Array) (i : USize) (v : UInt32) : UInt32Array :=
-  mk <| a.data.uset i v lcProof
+  mk <| a.toArray.uset i v lcProof
 
 /--
 Returns `a` itself when it is not shared, and a copy otherwise. Logically this is the identity.
@@ -182,7 +182,7 @@ public unsafe def mkImpl (a : Array UInt32) : UInt32Array :=
 
 attribute [implemented_by mkImpl] UInt32Array.mk
 
-private theorem size_data' (a : UInt32Array) : a.data.size = a.size := rfl
+private theorem size_toArray' (a : UInt32Array) : a.toArray.size = a.size := rfl
 
 /-- `n.toUSize` is `n` for every `n` up to the size of an array with fewer than `USize.size`
 elements. -/
@@ -191,14 +191,15 @@ private theorem toNat_toUSize_of_le {a : UInt32Array} (hsize : a.size < USize.si
   simp only [Nat.toUSize_eq, USize.toNat_ofNat']
   exact Nat.mod_eq_of_lt (by lia)
 
--- `dataImpl` and the other `Impl` functions below are proved equal to their specifications by
+-- `toArrayImpl` and the other `Impl` functions below are proved equal to their specifications by
 -- `csimp` theorems, which make the compiler call them instead. A `csimp` theorem must be public,
 -- and so must the functions it names. The loops index with `USize`, so the proofs need
 -- `a.size < USize.size`: the `else` branches are never taken, since no array in memory has
 -- `USize.size` elements. Elsewhere they call a `Slow` function that is neither inlined nor
--- specialized, so that the dead branch stays a single call; here the compiled body of `data` would
--- treat the scalar array as an `Array`, so the `else` branch reads the elements with `get` instead.
-public def dataImpl (a : @& UInt32Array) : Array UInt32 :=
+-- specialized, so that the dead branch stays a single call; here the compiled body of `toArray`
+-- would treat the scalar array as an `Array`, so the `else` branch reads the elements with `get`
+-- instead.
+public def toArrayImpl (a : @& UInt32Array) : Array UInt32 :=
   if a.size < USize.size then
     loop a.usize a.toNat_usize_le 0 (Array.replicate a.size default) Array.size_replicate
   else Array.ofFn fun i : Fin a.size => a.get i i.2
@@ -212,12 +213,12 @@ where
   termination_by sz.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
 
-private theorem dataImpl_loop (a : UInt32Array) (sz : USize) (hsz : sz.toNat ≤ a.size)
+private theorem toArrayImpl_loop (a : UInt32Array) (sz : USize) (hsz : sz.toNat ≤ a.size)
     (hsz' : a.size ≤ sz.toNat) (i : USize) (r : Array UInt32) (hr : r.size = a.size)
-    (hi : i.toNat ≤ sz.toNat) (h : ∀ (k : Nat) (hk : k < i.toNat), r[k]'(by lia) = a.data[k]'(by
-      rw [size_data']; lia)) :
-    dataImpl.loop a sz hsz i r hr = a.data := by
-  fun_induction dataImpl.loop a sz hsz i r hr with
+    (hi : i.toNat ≤ sz.toNat)
+    (h : ∀ (k : Nat) (hk : k < i.toNat), r[k]'(by lia) = a.toArray[k]'(by rw [size_toArray']; lia)) :
+    toArrayImpl.loop a sz hsz i r hr = a.toArray := by
+  fun_induction toArrayImpl.loop a sz hsz i r hr with
   | case1 i r hr hi' _ ih =>
     have := USize.lt_iff_toNat_lt.1 hi'
     apply ih (by rw [toNat_add_one_of_lt hi']; lia)
@@ -231,22 +232,22 @@ private theorem dataImpl_loop (a : UInt32Array) (sz : USize) (hsz : sz.toNat ≤
     have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hi')
     exact Array.ext (by rw [hr]; rfl) fun k hk _ => h k (by lia)
 
-@[csimp] public theorem data_eq_dataImpl : @data = @dataImpl := by
+@[csimp] public theorem toArray_eq_toArrayImpl : @toArray = @toArrayImpl := by
   funext a
-  simp only [dataImpl]
+  simp only [toArrayImpl]
   split
   · rename_i hsize
     have := toNat_toUSize_of_le hsize (Nat.le_refl _)
-    exact (dataImpl_loop a _ _ (by simp only [usize]; lia) 0 _ _ (by simp) (by simp)).symm
-  · exact (Array.ofFn_getElem (xs := a.data)).symm
+    exact (toArrayImpl_loop a _ _ (by simp only [usize]; lia) 0 _ _ (by simp) (by simp)).symm
+  · exact (Array.ofFn_getElem (xs := a.toArray)).symm
 
--- After the `implemented_by` attribute of `mk` and the `csimp` theorem of `data`, so that the
+-- After the `implemented_by` attribute of `mk` and the `csimp` theorem of `toArray`, so that the
 -- compiled code uses them.
-/-- Case analysis on a `UInt32Array` as `mk data`. It is the default for `cases` and `induction`. -/
+/-- Case analysis on a `UInt32Array` as `mk a`. It is the default for `cases` and `induction`. -/
 @[elab_as_elim, cases_eliminator, induction_eliminator]
-public def casesMk {motive : UInt32Array → Sort u} (mk : (data : Array UInt32) → motive (mk data))
+public def casesMk {motive : UInt32Array → Sort u} (mk : (a : Array UInt32) → motive (mk a))
     (a : UInt32Array) : motive a :=
-  mk_data a ▸ mk a.data
+  mk_toArray a ▸ mk a.toArray
 
 private unsafe def emptyWithCapacityImpl (capacity : Nat) : UInt32Array :=
   mkWithCapacityImpl #[] capacity
@@ -269,7 +270,7 @@ check that `a` is exclusive, copying it if not, and one store.
 @[expose]
 public def uset (a : UInt32Array) (i : USize) (v : UInt32)
     (h : i.toNat < a.size := by get_elem_tactic) : UInt32Array :=
-  mk (a.data.uset i v h)
+  mk (a.toArray.uset i v h)
 
 -- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
 @[inline]
@@ -281,7 +282,7 @@ attribute [implemented_by usetImpl] uset
 @[expose]
 public def set (a : UInt32Array) (i : Nat) (v : UInt32) (h : i < a.size := by get_elem_tactic) :
     UInt32Array :=
-  mk (a.data.set i v h)
+  mk (a.toArray.set i v h)
 
 @[inline]
 public unsafe def setImpl : type_of% @set :=
@@ -345,7 +346,7 @@ public unsafe def pushImpl (a : UInt32Array) (v : UInt32) : UInt32Array :=
 
 @[implemented_by pushImpl, expose]
 public def push (a : UInt32Array) (v : UInt32) : UInt32Array :=
-  mk (a.data.push v)
+  mk (a.toArray.push v)
 
 /--
 Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting
@@ -389,7 +390,7 @@ private unsafe def appendImpl (a b : UInt32Array) : UInt32Array :=
 /-- Appends the elements of `b` to `a`, in place when `a` is not shared and has room. -/
 @[implemented_by appendImpl, expose]
 public def append (a b : UInt32Array) : UInt32Array :=
-  mk (a.data ++ b.data)
+  mk (a.toArray ++ b.toArray)
 
 public instance : Append UInt32Array := ⟨append⟩
 
@@ -417,8 +418,8 @@ is not shared and has room. If `exact` is `false`, the capacity is doubled when 
 @[implemented_by copySliceImpl, expose]
 public def copySlice (src : @& UInt32Array) (srcOff : Nat) (dest : UInt32Array)
     (destOff len : Nat) (exact : Bool := true) : UInt32Array :=
-  mk (dest.data.extract 0 destOff ++ src.data.extract srcOff (srcOff + len) ++
-    dest.data.extract (destOff + min len (src.data.size - srcOff)) dest.data.size)
+  mk (dest.toArray.extract 0 destOff ++ src.toArray.extract srcOff (srcOff + len) ++
+    dest.toArray.extract (destOff + min len (src.toArray.size - srcOff)) dest.toArray.size)
 
 /-! ## Removing elements -/
 
@@ -434,7 +435,7 @@ private unsafe def popImpl (a : UInt32Array) : UInt32Array :=
 /-- Removes the last element of `a`, if any, in place when `a` is not shared. -/
 @[implemented_by popImpl, expose]
 public def pop (a : UInt32Array) : UInt32Array :=
-  mk a.data.pop
+  mk a.toArray.pop
 
 public def back? (a : @& UInt32Array) : Option UInt32 := a[a.size - 1]?
 
@@ -459,7 +460,7 @@ shared.
 -/
 @[implemented_by popWhileImpl, expose]
 public def popWhile (p : UInt32 → Bool) (a : UInt32Array) : UInt32Array :=
-  mk (a.data.popWhile p)
+  mk (a.toArray.popWhile p)
 
 private unsafe def extractImpl (a : @& UInt32Array) (start stop : Nat) : UInt32Array :=
   let stop := min stop a.size
@@ -475,7 +476,7 @@ new array.
 -/
 @[implemented_by extractImpl, expose]
 public def extract (a : @& UInt32Array) (start stop : Nat) : UInt32Array :=
-  mk (a.data.extract start stop)
+  mk (a.toArray.extract start stop)
 
 /-! ## Linearity -/
 
@@ -556,7 +557,7 @@ where
     | x :: xs, r => loop xs (r.push x)
 
 private theorem ofListImpl_loop (l : List UInt32) (r : UInt32Array) :
-    ofListImpl.loop l r = mk (r.data ++ l.toArray) := by
+    ofListImpl.loop l r = mk (r.toArray ++ l.toArray) := by
   induction l generalizing r with
   | nil => simp [ofListImpl.loop]
   | cons x xs ih => simp [ofListImpl.loop, ih, push]
@@ -574,7 +575,7 @@ Folds a monadic function over the elements of `a` from index `start` up to, but 
 @[expose]
 public def foldlM {β : Type v} {m : Type v → Type w} [Monad m] (f : β → UInt32 → m β) (init : β)
     (a : @& UInt32Array) (start := 0) (stop := a.size) : m β :=
-  a.data.foldlM f init start stop
+  a.toArray.foldlM f init start stop
 
 @[noinline, nospecialize]
 private def foldlMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : β → UInt32 → m β)
@@ -599,9 +600,10 @@ where
 
 private theorem foldlMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
     (f : β → UInt32 → m β) (a : UInt32Array) (stop : USize) (hstop : stop.toNat ≤ a.size)
-    (h : stop.toNat ≤ a.data.size) (i : USize) (b : β) (k : Nat)
+    (h : stop.toNat ≤ a.toArray.size) (i : USize) (b : β) (k : Nat)
     (hk : stop.toNat - i.toNat ≤ k) :
-    foldlMImpl.loop f a stop hstop i b = Array.foldlM.loop f a.data stop.toNat h k i.toNat b := by
+    foldlMImpl.loop f a stop hstop i b =
+      Array.foldlM.loop f a.toArray stop.toNat h k i.toNat b := by
   fun_induction foldlMImpl.loop f a stop hstop i b generalizing k with
   | case1 i b hi ih =>
     have := USize.lt_iff_toNat_lt.1 hi
@@ -616,10 +618,11 @@ private theorem foldlMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
 
 private theorem foldlMImpl_eq {β : Type v} {m : Type v → Type w} [Monad m]
     (f : β → UInt32 → m β) (init : β) (a : UInt32Array) (start stop : Nat)
-    (hsize : a.size < USize.size) (h : stop ≤ a.data.size) (hstop : stop.toUSize.toNat ≤ a.size) :
+    (hsize : a.size < USize.size) (h : stop ≤ a.toArray.size)
+    (hstop : stop.toUSize.toNat ≤ a.size) :
     (if start < stop then foldlMImpl.loop f a stop.toUSize hstop start.toUSize init
-      else pure init) = Array.foldlM.loop f a.data stop h (stop - start) start init := by
-  have := size_data' a
+      else pure init) = Array.foldlM.loop f a.toArray stop h (stop - start) start init := by
+  have := size_toArray' a
   split <;> rename_i hlt
   · rw [foldlMImpl_loop (h := by rwa [toNat_toUSize_of_le hsize (by lia)]) (k := stop - start)
       (hk := by
@@ -634,7 +637,7 @@ private theorem foldlMImpl_eq {β : Type v} {m : Type v → Type w} [Monad m]
   simp only [foldlMImpl]
   split
   · rename_i hsize
-    have := size_data' a
+    have := size_toArray' a
     simp only [foldlM, Array.foldlM]
     split <;> rename_i h
     · simp only [Nat.min_eq_left (show stop ≤ a.size by lia)]
@@ -647,7 +650,7 @@ private theorem foldlMImpl_eq {β : Type v} {m : Type v → Type w} [Monad m]
 @[expose]
 public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : UInt32 → β → m β) (init : β)
     (a : @& UInt32Array) : m β :=
-  a.data.foldrM f init
+  a.toArray.foldrM f init
 
 @[noinline, nospecialize]
 private def foldrMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : UInt32 → β → m β)
@@ -670,8 +673,8 @@ where
 
 private theorem foldrMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
     (f : UInt32 → β → m β) (a : UInt32Array) (i : USize) (hi : i.toNat ≤ a.size)
-    (h : i.toNat ≤ a.data.size) (b : β) :
-    foldrMImpl.loop f a i hi b = Array.foldrM.fold f a.data 0 i.toNat h b := by
+    (h : i.toNat ≤ a.toArray.size) (b : β) :
+    foldrMImpl.loop f a i hi b = Array.foldrM.fold f a.toArray 0 i.toNat h b := by
   fun_induction foldrMImpl.loop f a i hi b with
   | case1 i hi b hpos _ _ ih =>
     have := USize.lt_iff_toNat_lt.1 hpos
@@ -696,7 +699,7 @@ private theorem foldrMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
     simp only [foldrM, Array.foldrM, Nat.le_refl, dite_true, h]
     split
     · rfl
-    · have : a.size = 0 := by rw [← size_data']; lia
+    · have : a.size = 0 := by rw [← size_toArray']; lia
       simp only [this, Array.foldrM.fold.eq_1, beq_self_eq_true, ite_true]
   · rfl
 
@@ -717,7 +720,7 @@ public def forM {m : Type v → Type w} [Monad m] (f : UInt32 → m PUnit) (a : 
 @[expose]
 public def forIn {β : Type v} {m : Type v → Type w} [Monad m] (a : @& UInt32Array) (init : β)
     (f : UInt32 → β → m (ForInStep β)) : m β :=
-  ForIn.forIn a.data init f
+  ForIn.forIn a.toArray init f
 
 @[noinline, nospecialize]
 private def forInSlow {β : Type v} {m : Type v → Type w} [Monad m] (a : @& UInt32Array)
@@ -740,17 +743,18 @@ where
 
 private theorem forInImpl_loop {β : Type v} {m : Type v → Type w} [Monad m] (a : UInt32Array)
     (f : UInt32 → β → m (ForInStep β)) (stop : USize) (hstop : stop.toNat ≤ a.size)
-    (hsize : a.size ≤ stop.toNat) (i : USize) (b : β) (hi : i.toNat ≤ a.data.size)
-    (h : a.data.size - i.toNat ≤ a.data.size) :
+    (hsize : a.size ≤ stop.toNat) (i : USize) (b : β) (hi : i.toNat ≤ a.toArray.size)
+    (h : a.toArray.size - i.toNat ≤ a.toArray.size) :
     forInImpl.loop a f stop hstop i b =
-      Array.forIn'.loop a.data (fun x _ b => f x b) (a.data.size - i.toNat) h b := by
+      Array.forIn'.loop a.toArray (fun x _ b => f x b) (a.toArray.size - i.toNat) h b := by
   fun_induction forInImpl.loop a f stop hstop i b with
   | case1 i b hi' ih =>
     have := USize.lt_iff_toNat_lt.1 hi'
-    have := size_data' a
-    obtain ⟨k, hk⟩ : ∃ k, a.data.size - i.toNat = k + 1 := ⟨a.data.size - i.toNat - 1, by lia⟩
+    have := size_toArray' a
+    obtain ⟨k, hk⟩ : ∃ k, a.toArray.size - i.toNat = k + 1 :=
+      ⟨a.toArray.size - i.toNat - 1, by lia⟩
     simp only [hk, Array.forIn'.loop.eq_2, uget, Array.uget]
-    have : a.data.size - 1 - k = i.toNat := by lia
+    have : a.toArray.size - 1 - k = i.toNat := by lia
     simp only [this]
     congr 1; funext r
     split
@@ -760,7 +764,7 @@ private theorem forInImpl_loop {β : Type v} {m : Type v → Type w} [Monad m] (
       congr 1; lia
   | case2 i b hi' =>
     have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hi')
-    have : a.data.size - i.toNat = 0 := by rw [size_data']; lia
+    have : a.toArray.size - i.toNat = 0 := by rw [size_toArray']; lia
     simp only [this, Array.forIn'.loop.eq_1]
 
 @[csimp] public theorem forIn_eq_forInImpl : @forIn = @forInImpl := by
@@ -782,7 +786,7 @@ public instance [Monad m] : ForM m UInt32Array UInt32 where
 /-- Whether some element of `a` satisfies `p`. -/
 @[expose]
 public def any (a : @& UInt32Array) (p : UInt32 → Bool) : Bool :=
-  a.data.any p
+  a.toArray.any p
 
 @[noinline, nospecialize]
 private def anySlow (a : @& UInt32Array) (p : UInt32 → Bool) : Bool :=
@@ -799,15 +803,15 @@ where
   decreasing_by exact sub_toNat_add_one_lt h
 
 private theorem anyImpl_loop (a : UInt32Array) (p : UInt32 → Bool) (stop : USize)
-    (hstop : stop.toNat ≤ a.size) (h : stop.toNat ≤ a.data.size) (i : USize) :
+    (hstop : stop.toNat ≤ a.size) (h : stop.toNat ≤ a.toArray.size) (i : USize) :
     anyImpl.loop a p stop hstop i =
-      Array.anyM.loop (m := Id) (pure <| p ·) a.data stop.toNat h i.toNat := by
+      Array.anyM.loop (m := Id) (pure <| p ·) a.toArray stop.toNat h i.toNat := by
   fun_induction anyImpl.loop a p stop hstop i with
   | case1 i hi ih =>
     have := USize.lt_iff_toNat_lt.1 hi
     rw [Array.anyM.loop.eq_1, dite_eq_left this, ih, toNat_add_one_of_lt hi]
     simp only [uget, Array.uget]
-    cases p a.data[i.toNat] <;> rfl
+    cases p a.toArray[i.toNat] <;> rfl
   | case2 i hi =>
     have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hi)
     rw [Array.anyM.loop.eq_1, dite_eq_right (by lia)]
@@ -827,7 +831,7 @@ private theorem anyImpl_loop (a : UInt32Array) (p : UInt32 → Bool) (stop : USi
 /-- Whether every element of `a` satisfies `p`. -/
 @[expose]
 public def all (a : @& UInt32Array) (p : UInt32 → Bool) : Bool :=
-  a.data.all p
+  a.toArray.all p
 
 @[noinline, nospecialize]
 private def allSlow (a : @& UInt32Array) (p : UInt32 → Bool) : Bool :=
@@ -863,7 +867,7 @@ private theorem allImpl_loop (a : UInt32Array) (p : UInt32 → Bool) (stop : USi
 /-- Whether some element of `a` is `==` to `v`. -/
 @[expose]
 public def contains (a : @& UInt32Array) (v : UInt32) : Bool :=
-  a.data.contains v
+  a.toArray.contains v
 
 public def containsImpl (a : @& UInt32Array) (v : UInt32) : Bool :=
   a.any (v == ·)
@@ -872,27 +876,28 @@ public def containsImpl (a : @& UInt32Array) (v : UInt32) : Bool :=
 
 /-- `x ∈ a` when `x` is an element of `a`. -/
 public instance : Membership UInt32 UInt32Array where
-  mem a x := x ∈ a.data
+  mem a x := x ∈ a.toArray
 
 /-! ## Equality and hashing -/
 
-private theorem data_injective {a b : UInt32Array} (h : a.data = b.data) : a = b := by
-  rw [← mk_data a, h, mk_data]
+private theorem toArray_injective {a b : UInt32Array} (h : a.toArray = b.toArray) : a = b := by
+  rw [← mk_toArray a, h, mk_toArray]
 
 /-- Decides equality by comparing the two arrays' memory. -/
 @[extern "lean_sarray_dec_eq", expose]
 public def decEq (a b : @& UInt32Array) : Decidable (a = b) :=
-  decidable_of_iff (a.data = b.data) ⟨fun h => by rw [← mk_data a, h, mk_data], fun h => h ▸ rfl⟩
+  decidable_of_iff (a.toArray = b.toArray)
+    ⟨fun h => by rw [← mk_toArray a, h, mk_toArray], fun h => h ▸ rfl⟩
 
 public instance : DecidableEq UInt32Array := decEq
 
-private theorem beq_eq_beq_data (a b : UInt32Array) : (a == b) = (a.data == b.data) := by
+private theorem beq_eq_beq_toArray (a b : UInt32Array) : (a == b) = (a.toArray == b.toArray) := by
   rw [Bool.eq_iff_iff, beq_iff_eq, beq_iff_eq]
-  exact ⟨congrArg data, data_injective⟩
+  exact ⟨congrArg toArray, toArray_injective⟩
 
-/-- The same hash as `a.data`. -/
+/-- The same hash as `a.toArray`. -/
 public def hash (a : @& UInt32Array) : UInt64 :=
-  Hashable.hash a.data
+  Hashable.hash a.toArray
 
 public def hashImpl (a : @& UInt32Array) : UInt64 :=
   a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
@@ -901,18 +906,19 @@ public def hashImpl (a : @& UInt32Array) : UInt64 :=
 
 public instance : Hashable UInt32Array := ⟨hash⟩
 
-public theorem hash_eq_hash_data (a : UInt32Array) : Hashable.hash a = Hashable.hash a.data := by
+public theorem hash_eq_hash_toArray (a : UInt32Array) :
+    Hashable.hash a = Hashable.hash a.toArray := by
   rfl
 
 /-! ## Conversion and printing -/
 
-@[expose] public def toList (a : UInt32Array) : List UInt32 := a.data.toList
+@[expose] public def toList (a : UInt32Array) : List UInt32 := a.toArray.toList
 
 public instance : Repr UInt32Array where
-  reprPrec a _ := "UInt32Array.mk " ++ repr a.data
+  reprPrec a _ := "UInt32Array.mk " ++ repr a.toArray
 
 public instance : ToString UInt32Array where
-  toString a := "UInt32Array.mk " ++ toString a.data
+  toString a := "UInt32Array.mk " ++ toString a.toArray
 
 /-! ## Slices -/
 
@@ -956,6 +962,15 @@ public theorem start_le_stop (s : UInt32Array.Slice) : s.start ≤ s.stop :=
 @[inherit_doc SliceData.stop_le_array_size]
 public theorem stop_le_array_size (s : UInt32Array.Slice) : s.stop ≤ s.array.size :=
   s.internalRepresentation.stop_le_array_size
+
+/-- Two slices are equal when they have the same array, start and stop. -/
+@[ext] public theorem ext {s t : UInt32Array.Slice} (h₁ : s.array = t.array)
+    (h₂ : s.start = t.start) (h₃ : s.stop = t.stop) : s = t := by
+  obtain ⟨⟨a, i, j, _, _⟩⟩ := s
+  obtain ⟨⟨b, k, l, _, _⟩⟩ := t
+  simp only [array, start, stop] at h₁ h₂ h₃
+  subst h₁ h₂ h₃
+  rfl
 
 /-- `s.stop.toUSize` bounds the indices of loops over the slice. -/
 private theorem toNat_toUSize_stop_le (s : UInt32Array.Slice) :
@@ -1440,8 +1455,8 @@ where
 private theorem beqImpl_loop (a b : UInt32Array) (hb : b.size < USize.size) (stop : USize)
     (hstop : stop.toNat ≤ a.size) (i j : USize) (hj : stop.toNat - i.toNat + j.toNat ≤ b.size) :
     beqImpl.loop a b stop hstop i j hj = true ↔ ∀ (k : Nat) (hk : k < stop.toNat - i.toNat),
-      (a.data[i.toNat + k]'(by rw [size_data']; lia) ==
-        b.data[j.toNat + k]'(by rw [size_data']; lia)) = true := by
+      (a.toArray[i.toNat + k]'(by rw [size_toArray']; lia) ==
+        b.toArray[j.toNat + k]'(by rw [size_toArray']; lia)) = true := by
   fun_induction beqImpl.loop a b stop hstop i j hj with
   | case1 i j hj hi _ _ _ ih =>
     have := USize.lt_iff_toNat_lt.1 hi
@@ -1470,15 +1485,15 @@ private theorem beqImpl_loop (a b : UInt32Array) (hb : b.size < USize.size) (sto
 
 private theorem beq_iff (s t : UInt32Array.Slice) :
     beq s t = true ↔ s.size = t.size ∧ ∀ (k : Nat) (hk : k < s.size) (hk' : k < t.size),
-      (s.array.data[s.start + k]'(by
-        have := s.stop_le_array_size; rw [size_data']; rw [size_eq] at hk; lia) ==
-      t.array.data[t.start + k]'(by
-        have := t.stop_le_array_size; rw [size_data']; rw [size_eq] at hk'; lia)) = true := by
-  have hc (u : UInt32Array.Slice) : u.copy.data = u.array.data.extract u.start u.stop := rfl
-  have hs (u : UInt32Array.Slice) : min u.stop u.array.data.size - u.start = u.size := by
+      (s.array.toArray[s.start + k]'(by
+        have := s.stop_le_array_size; rw [size_toArray']; rw [size_eq] at hk; lia) ==
+      t.array.toArray[t.start + k]'(by
+        have := t.stop_le_array_size; rw [size_toArray']; rw [size_eq] at hk'; lia)) = true := by
+  have hc (u : UInt32Array.Slice) : u.copy.toArray = u.array.toArray.extract u.start u.stop := rfl
+  have hs (u : UInt32Array.Slice) : min u.stop u.array.toArray.size - u.start = u.size := by
     have := u.stop_le_array_size
-    rw [size_eq, size_data']; lia
-  rw [beq, beq_eq_beq_data, hc, hc, Array.beq_eq_decide]
+    rw [size_eq, size_toArray']; lia
+  rw [beq, beq_eq_beq_toArray, hc, hc, Array.beq_eq_decide]
   split
   · rename_i h
     simp only [Array.size_extract, hs] at h
@@ -1542,10 +1557,10 @@ public def _root_.Std.Iter.toUInt32ArrayWithCapacity {α : Type} [Std.Iterator �
 
 @[simp] public theorem size_mk (a : Array UInt32) : (mk a).size = a.size := rfl
 
-public theorem size_eq_data_size (a : UInt32Array) : a.size = a.data.size := by cases a; rfl
+public theorem size_eq_toArray_size (a : UInt32Array) : a.size = a.toArray.size := by cases a; rfl
 
-@[simp] public theorem size_data (a : UInt32Array) : a.data.size = a.size :=
-  (size_eq_data_size a).symm
+@[simp] public theorem size_toArray (a : UInt32Array) : a.toArray.size = a.size :=
+  (size_eq_toArray_size a).symm
 
 @[simp] public theorem size_uset (a : UInt32Array) (i : USize) (v : UInt32) (h) :
     (a.uset i v h).size = a.size :=
@@ -1559,23 +1574,28 @@ public theorem size_eq_data_size (a : UInt32Array) : a.size = a.data.size := by 
     (a.push v).size = a.size + 1 := by
   cases a; simp [push, size]
 
-@[simp] public theorem data_append (a b : UInt32Array) : (a ++ b).data = a.data ++ b.data := by
+@[simp] public theorem toArray_append (a b : UInt32Array) :
+    (a ++ b).toArray = a.toArray ++ b.toArray := by
   cases a; cases b; rfl
 
 @[simp] public theorem size_append (a b : UInt32Array) : (a ++ b).size = a.size + b.size := by
-  simp [-size_data, size_eq_data_size]
+  simp [-size_toArray, size_eq_toArray_size]
 
-@[ext] public theorem ext {a b : UInt32Array} (h : a.data = b.data) : a = b := data_injective h
+@[ext] public theorem ext {a b : UInt32Array} (h : a.toArray = b.toArray) : a = b :=
+  toArray_injective h
+
+@[simp] public theorem toArray_inj {a b : UInt32Array} : a.toArray = b.toArray ↔ a = b :=
+  ⟨toArray_injective, fun h => h ▸ rfl⟩
 
 @[simp] public theorem getElem_mk (a : Array UInt32) (i : Nat) (h : i < (mk a).size) :
     (mk a)[i] = a[i] := rfl
 
-public theorem getElem_eq_getElem_data (a : UInt32Array) (i : Nat) (h : i < a.size) :
-    a[i] = a.data[i]'(size_eq_data_size a ▸ h) := by
+public theorem getElem_eq_getElem_toArray (a : UInt32Array) (i : Nat) (h : i < a.size) :
+    a[i] = a.toArray[i]'(size_eq_toArray_size a ▸ h) := by
   cases a; rfl
 
-@[simp] public theorem getElem_data (a : UInt32Array) (i : Nat) (h : i < a.data.size) :
-    a.data[i] = a[i]'(by simpa using h) := by
+@[simp] public theorem getElem_toArray (a : UInt32Array) (i : Nat) (h : i < a.toArray.size) :
+    a.toArray[i] = a[i]'(by simpa using h) := by
   cases a; rfl
 
 public theorem ext_getElem {a b : UInt32Array} (h₁ : a.size = b.size)
@@ -1588,91 +1608,93 @@ public theorem ext_getElem {a b : UInt32Array} (h₁ : a.size = b.size)
     a[i] = a[i.toNat] := by
   cases a; rfl
 
-@[simp] public theorem data_uset (a : UInt32Array) (i : USize) (v : UInt32) (h) :
-    (a.uset i v h).data = a.data.set i.toNat v (size_eq_data_size a ▸ h) := by
+@[simp] public theorem toArray_uset (a : UInt32Array) (i : USize) (v : UInt32) (h) :
+    (a.uset i v h).toArray = a.toArray.set i.toNat v (size_eq_toArray_size a ▸ h) := by
   cases a; rfl
 
-@[simp] public theorem data_set (a : UInt32Array) (i : Nat) (v : UInt32) (h) :
-    (a.set i v h).data = a.data.set i v (size_eq_data_size a ▸ h) := by
+@[simp] public theorem toArray_set (a : UInt32Array) (i : Nat) (v : UInt32) (h) :
+    (a.set i v h).toArray = a.toArray.set i v (size_eq_toArray_size a ▸ h) := by
   cases a; rfl
 
-@[simp] public theorem data_push (a : UInt32Array) (v : UInt32) :
-    (a.push v).data = a.data.push v := by
+@[simp] public theorem toArray_push (a : UInt32Array) (v : UInt32) :
+    (a.push v).toArray = a.toArray.push v := by
   cases a; rfl
 
-@[simp] public theorem data_pop (a : UInt32Array) : a.pop.data = a.data.pop := by
+@[simp] public theorem toArray_pop (a : UInt32Array) : a.pop.toArray = a.toArray.pop := by
   cases a; rfl
 
-@[simp] public theorem data_extract (a : UInt32Array) (start stop : Nat) :
-    (a.extract start stop).data = a.data.extract start stop := by
+@[simp] public theorem toArray_extract (a : UInt32Array) (start stop : Nat) :
+    (a.extract start stop).toArray = a.toArray.extract start stop := by
   cases a; rfl
 
-@[simp] public theorem data_replicate (n : Nat) (v : UInt32) :
-    (replicate n v).data = Array.replicate n v := rfl
+@[simp] public theorem toArray_replicate (n : Nat) (v : UInt32) :
+    (replicate n v).toArray = Array.replicate n v := rfl
 
-@[simp] public theorem data_ofFn {n : Nat} (f : Fin n → UInt32) :
-    (ofFn f).data = Array.ofFn f := rfl
+@[simp] public theorem toArray_ofFn {n : Nat} (f : Fin n → UInt32) :
+    (ofFn f).toArray = Array.ofFn f := rfl
 
-@[simp] public theorem data_empty : (empty : UInt32Array).data = #[] := rfl
+@[simp] public theorem toArray_empty : (empty : UInt32Array).toArray = #[] := rfl
 
 @[simp] public theorem size_pop (a : UInt32Array) : a.pop.size = a.size - 1 := by
-  simp [-size_data, size_eq_data_size]
+  simp [-size_toArray, size_eq_toArray_size]
 
 @[simp] public theorem size_extract (a : UInt32Array) (start stop : Nat) :
     (a.extract start stop).size = min stop a.size - start := by
-  simp [-size_data, size_eq_data_size]
+  simp [-size_toArray, size_eq_toArray_size]
 
 @[simp] public theorem size_replicate (n : Nat) (v : UInt32) : (replicate n v).size = n := by
-  simp [-size_data, size_eq_data_size]
+  simp [-size_toArray, size_eq_toArray_size]
 
 @[simp] public theorem size_ofFn {n : Nat} (f : Fin n → UInt32) : (ofFn f).size = n := by
-  simp [-size_data, size_eq_data_size]
+  simp [-size_toArray, size_eq_toArray_size]
 
 @[simp] public theorem size_empty : (empty : UInt32Array).size = 0 := rfl
 
 @[simp] public theorem getElem_set (a : UInt32Array) (i : Nat) (v : UInt32) (h) (j : Nat) (hj) :
     (a.set i v h)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
-  simp [-getElem_data, getElem_eq_getElem_data, Array.getElem_set]
+  simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_set]
 
 @[simp] public theorem getElem_push (a : UInt32Array) (v : UInt32) (i : Nat) (h) :
     (a.push v)[i]'h = if h' : i < a.size then a[i] else v := by
-  simp [-getElem_data, getElem_eq_getElem_data, Array.getElem_push, -size_data, size_eq_data_size]
+  simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_push, -size_toArray,
+    size_eq_toArray_size]
 
 @[simp] public theorem getElem_pop (a : UInt32Array) (i : Nat) (h) :
     a.pop[i]'h = a[i]'(by simp at h; lia) := by
-  simp [-getElem_data, getElem_eq_getElem_data]
+  simp [-getElem_toArray, getElem_eq_getElem_toArray]
 
-@[simp] public theorem data_popWhile (p : UInt32 → Bool) (a : UInt32Array) :
-    (a.popWhile p).data = a.data.popWhile p := by
+@[simp] public theorem toArray_popWhile (p : UInt32 → Bool) (a : UInt32Array) :
+    (a.popWhile p).toArray = a.toArray.popWhile p := by
   cases a; rfl
 
 @[simp] public theorem getElem_append (a b : UInt32Array) (i : Nat) (h) :
     (a ++ b)[i]'h = if h' : i < a.size then a[i] else b[i - a.size]'(by simp at h; lia) := by
-  simp [-getElem_data, getElem_eq_getElem_data, Array.getElem_append, -size_data, size_eq_data_size]
+  simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_append, -size_toArray,
+    size_eq_toArray_size]
 
 @[simp] public theorem getElem_extract (a : UInt32Array) (start stop i : Nat) (h) :
     (a.extract start stop)[i]'h = a[start + i]'(by simp at h; lia) := by
-  simp [-getElem_data, getElem_eq_getElem_data]
+  simp [-getElem_toArray, getElem_eq_getElem_toArray]
 
 @[simp] public theorem getElem_replicate (n : Nat) (v : UInt32) (i : Nat) (h) :
     (replicate n v)[i]'h = v := by
-  simp [-getElem_data, getElem_eq_getElem_data]
+  simp [-getElem_toArray, getElem_eq_getElem_toArray]
 
 @[simp] public theorem getElem_ofFn {n : Nat} (f : Fin n → UInt32) (i : Nat) (h) :
     (ofFn f)[i]'h = f ⟨i, by simpa using h⟩ := by
-  simp [-getElem_data, getElem_eq_getElem_data]
+  simp [-getElem_toArray, getElem_eq_getElem_toArray]
 
-public theorem foldl_eq_foldl_data {β : Type v} (f : β → UInt32 → β) (init : β)
+public theorem foldl_eq_foldl_toArray {β : Type v} (f : β → UInt32 → β) (init : β)
     (a : UInt32Array) :
-    a.foldl f init = a.data.foldl f init := by
+    a.foldl f init = a.toArray.foldl f init := by
   rfl
 
-public theorem foldr_eq_foldr_data {β : Type v} (f : UInt32 → β → β) (init : β)
+public theorem foldr_eq_foldr_toArray {β : Type v} (f : UInt32 → β → β) (init : β)
     (a : UInt32Array) :
-    a.foldr f init = a.data.foldr f init := by
+    a.foldr f init = a.toArray.foldr f init := by
   rfl
 
-@[simp] public theorem toList_data (a : UInt32Array) : a.data.toList = a.toList := rfl
+@[simp] public theorem toList_toArray (a : UInt32Array) : a.toArray.toList = a.toList := rfl
 
 @[simp] public theorem emptyc_eq_empty : (∅ : UInt32Array) = empty := rfl
 
@@ -1681,19 +1703,20 @@ public theorem foldr_eq_foldr_data {β : Type v} (f : UInt32 → β → β) (ini
 public theorem size_eq_zero_iff {a : UInt32Array} : a.size = 0 ↔ a = empty := by
   simp [UInt32Array.ext_iff, ← Array.size_eq_zero_iff]
 
-@[simp] public theorem data_set! (a : UInt32Array) (i : Nat) (v : UInt32) :
-    (a.set! i v).data = a.data.set! i v := by
-  simp only [set!, Array.set!_eq_setIfInBounds, Array.setIfInBounds, size_eq_data_size]
+@[simp] public theorem toArray_set! (a : UInt32Array) (i : Nat) (v : UInt32) :
+    (a.set! i v).toArray = a.toArray.set! i v := by
+  simp only [set!, Array.set!_eq_setIfInBounds, Array.setIfInBounds, size_eq_toArray_size]
   split <;> rfl
 
 @[simp] public theorem size_set! (a : UInt32Array) (i : Nat) (v : UInt32) :
     (a.set! i v).size = a.size := by
-  simp [-size_data, size_eq_data_size]
+  simp [-size_toArray, size_eq_toArray_size]
 
-public theorem getElem!_eq_getElem!_data (a : UInt32Array) (i : Nat) : a[i]! = a.data[i]! := by
+public theorem getElem!_eq_getElem!_toArray (a : UInt32Array) (i : Nat) :
+    a[i]! = a.toArray[i]! := by
   by_cases h : i < a.size <;> simp [h] <;> rfl
 
-@[simp] public theorem data_ofList (l : List UInt32) : (ofList l).data = l.toArray := rfl
+@[simp] public theorem toArray_ofList (l : List UInt32) : (ofList l).toArray = l.toArray := rfl
 
 @[simp] public theorem size_ofList (l : List UInt32) : (ofList l).size = l.length := rfl
 
@@ -1703,7 +1726,7 @@ public theorem getElem!_eq_getElem!_data (a : UInt32Array) (i : Nat) : a[i]! = a
 @[simp] public theorem toList_ofList (l : List UInt32) : (ofList l).toList = l := rfl
 
 @[simp] public theorem ofList_toList (a : UInt32Array) : ofList a.toList = a := by
-  simp [UInt32Array.ext_iff, ← toList_data]
+  simp [UInt32Array.ext_iff, ← toList_toArray]
 
 @[simp] public theorem ensureExclusive_eq (a : UInt32Array) : a.ensureExclusive = a := rfl
 
@@ -1728,15 +1751,15 @@ public theorem append_assoc (a b c : UInt32Array) : a ++ b ++ c = a ++ (b ++ c) 
 
 @[simp] public theorem append_eq_empty_iff {a b : UInt32Array} :
     a ++ b = empty ↔ a = empty ∧ b = empty := by
-  simp only [UInt32Array.ext_iff, data_append, data_empty, Array.append_eq_empty_iff]
+  simp only [UInt32Array.ext_iff, toArray_append, toArray_empty, Array.append_eq_empty_iff]
 
 @[simp] public theorem append_right_inj (a : UInt32Array) {b c : UInt32Array} :
     a ++ b = a ++ c ↔ b = c := by
-  simp only [UInt32Array.ext_iff, data_append, Array.append_right_inj]
+  simp only [UInt32Array.ext_iff, toArray_append, Array.append_right_inj]
 
 @[simp] public theorem append_left_inj {a b : UInt32Array} (c : UInt32Array) :
     a ++ c = b ++ c ↔ a = b := by
-  simp only [UInt32Array.ext_iff, data_append, Array.append_left_inj]
+  simp only [UInt32Array.ext_iff, toArray_append, Array.append_left_inj]
 
 public theorem getElem_append_left {a b : UInt32Array} {i : Nat} (h : i < a.size) :
     (a ++ b)[i]'(by simp; lia) = a[i] := by
@@ -1770,13 +1793,13 @@ public theorem extract_append_extract (a : UInt32Array) (i j k : Nat) :
 
 @[simp] public theorem extract_append_eq_right (a b : UInt32Array) :
     (a ++ b).extract a.size (a.size + b.size) = b := by
-  simp [UInt32Array.ext_iff, -size_data, size_eq_data_size]
+  simp [UInt32Array.ext_iff, -size_toArray, size_eq_toArray_size]
 
-@[simp] public theorem data_copySlice (src : UInt32Array) (srcOff : Nat) (dest : UInt32Array)
+@[simp] public theorem toArray_copySlice (src : UInt32Array) (srcOff : Nat) (dest : UInt32Array)
     (destOff len : Nat) (exact : Bool) :
-    (src.copySlice srcOff dest destOff len exact).data =
-      dest.data.extract 0 destOff ++ src.data.extract srcOff (srcOff + len) ++
-        dest.data.extract (destOff + min len (src.size - srcOff)) dest.size := by
+    (src.copySlice srcOff dest destOff len exact).toArray =
+      dest.toArray.extract 0 destOff ++ src.toArray.extract srcOff (srcOff + len) ++
+        dest.toArray.extract (destOff + min len (src.size - srcOff)) dest.size := by
   simp [copySlice]
 
 public theorem copySlice_eq_append (src : UInt32Array) (srcOff : Nat) (dest : UInt32Array)
@@ -1796,54 +1819,57 @@ public theorem copySlice_eq_append (src : UInt32Array) (srcOff : Nat) (dest : UI
 @[simp] public theorem toList_mk (a : Array UInt32) : (mk a).toList = a.toList := rfl
 
 @[simp] public theorem length_toList (a : UInt32Array) : a.toList.length = a.size := by
-  simp [← toList_data]
+  simp [← toList_toArray]
 
 @[simp] public theorem getElem_toList (a : UInt32Array) (i : Nat) (h : i < a.toList.length) :
     a.toList[i] = a[i]'(by simpa using h) := by
-  simp [← toList_data]
+  simp [← toList_toArray]
 
 @[simp] public theorem getElem?_toList (a : UInt32Array) (i : Nat) : a.toList[i]? = a[i]? := by
-  by_cases h : i < a.size <;> simp [h, ← toList_data]
+  by_cases h : i < a.size <;> simp [h, ← toList_toArray]
 
 @[simp] public theorem toList_inj {a b : UInt32Array} : a.toList = b.toList ↔ a = b :=
   ⟨fun h => by rw [← ofList_toList a, h, ofList_toList], fun h => h ▸ rfl⟩
+
+public theorem ext_getElem? {a b : UInt32Array} (h : ∀ i : Nat, a[i]? = b[i]?) : a = b :=
+  toList_inj.1 (List.ext_getElem? fun i => by simp [h])
 
 @[simp] public theorem toList_empty : (empty : UInt32Array).toList = [] := rfl
 
 @[simp] public theorem toList_push (a : UInt32Array) (v : UInt32) :
     (a.push v).toList = a.toList ++ [v] := by
-  simp [← toList_data]
+  simp [← toList_toArray]
 
 @[simp] public theorem toList_pop (a : UInt32Array) : a.pop.toList = a.toList.dropLast := by
-  simp [← toList_data]
+  simp [← toList_toArray]
 
 @[simp] public theorem toList_append (a b : UInt32Array) :
     (a ++ b).toList = a.toList ++ b.toList := by
-  simp [← toList_data]
+  simp [← toList_toArray]
 
 @[simp] public theorem toList_set (a : UInt32Array) (i : Nat) (v : UInt32) (h) :
     (a.set i v h).toList = a.toList.set i v := by
-  simp [← toList_data]
+  simp [← toList_toArray]
 
 @[simp] public theorem toList_set! (a : UInt32Array) (i : Nat) (v : UInt32) :
     (a.set! i v).toList = a.toList.set i v := by
-  simp [← toList_data]
+  simp [← toList_toArray]
 
 @[simp] public theorem toList_extract (a : UInt32Array) (start stop : Nat) :
     (a.extract start stop).toList = a.toList.extract start stop := by
-  simp [← toList_data]
+  simp [← toList_toArray]
 
 @[simp] public theorem toList_replicate (n : Nat) (v : UInt32) :
     (replicate n v).toList = List.replicate n v := by
-  simp [← toList_data]
+  simp [← toList_toArray]
 
 @[simp] public theorem toList_ofFn {n : Nat} (f : Fin n → UInt32) :
     (ofFn f).toList = List.ofFn f := by
-  simp [← toList_data]
+  simp [← toList_toArray]
 
 @[simp] public theorem toList_popWhile (p : UInt32 → Bool) (a : UInt32Array) :
     (a.popWhile p).toList = (a.toList.reverse.dropWhile p).reverse := by
-  rw [← toList_data, data_popWhile, ← Array.toArray_toList (xs := a.data),
+  rw [← toList_toArray, toArray_popWhile, ← Array.toArray_toList (xs := a.toArray),
     List.popWhile_toArray]
   simp
 
@@ -1894,7 +1920,7 @@ public theorem back_eq_getElem (a : UInt32Array) (h : 0 < a.size) :
 
 @[simp] public theorem toList_uset (a : UInt32Array) (i : USize) (v : UInt32) (h) :
     (a.uset i v h).toList = a.toList.set i.toNat v := by
-  simp [← toList_data]
+  simp [← toList_toArray]
 
 @[simp] public theorem toList_copySlice (src : UInt32Array) (srcOff : Nat) (dest : UInt32Array)
     (destOff len : Nat) (exact : Bool) :
@@ -1929,28 +1955,28 @@ public theorem back_eq_getElem (a : UInt32Array) (h : 0 < a.size) :
 
 @[simp] public theorem any_toList (a : UInt32Array) (p : UInt32 → Bool) :
     a.toList.any p = a.any p := by
-  simp [any, ← toList_data]
+  simp [any, ← toList_toArray]
 
 @[simp] public theorem all_toList (a : UInt32Array) (p : UInt32 → Bool) :
     a.toList.all p = a.all p := by
-  simp [all, ← toList_data]
+  simp [all, ← toList_toArray]
 
 @[simp] public theorem contains_toList (a : UInt32Array) (v : UInt32) :
     a.toList.contains v = a.contains v := by
-  simp [contains, ← toList_data]
+  simp [contains, ← toList_toArray]
 
 @[simp] public theorem foldl_toList {β : Type v} (f : β → UInt32 → β) (init : β)
     (a : UInt32Array) : a.toList.foldl f init = a.foldl f init := by
-  simp [foldl_eq_foldl_data, ← toList_data]
+  simp [foldl_eq_foldl_toArray, ← toList_toArray]
 
 @[simp] public theorem foldr_toList {β : Type v} (f : UInt32 → β → β) (init : β)
     (a : UInt32Array) : a.toList.foldr f init = a.foldr f init := by
-  simp [foldr_eq_foldr_data, ← toList_data]
+  simp [foldr_eq_foldr_toArray, ← toList_toArray]
 
 @[simp] public theorem forIn_toList {β : Type v} {m : Type v → Type w} [Monad m] [LawfulMonad m]
     (a : UInt32Array) (init : β) (f : UInt32 → β → m (ForInStep β)) :
     ForIn.forIn a.toList init f = ForIn.forIn a init f := by
-  rw [← toList_data, Array.forIn_toList]
+  rw [← toList_toArray, Array.forIn_toList]
   rfl
 
 private theorem findIdx?_loop_eq (a : UInt32Array) (p : UInt32 → Bool) (i : Nat) :
@@ -2104,11 +2130,11 @@ public theorem Slice.foldr_eq_foldr_toList_copy {β : Type v} (f : UInt32 → β
 
 @[simp] public theorem getElem_uset (a : UInt32Array) (i : USize) (v : UInt32) (h) (j : Nat)
     (hj) : (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
-  simp [-getElem_data, getElem_eq_getElem_data, Array.getElem_set]
+  simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_set]
 
 @[simp] public theorem getElem_set! (a : UInt32Array) (i : Nat) (v : UInt32) (j : Nat) (hj) :
     (a.set! i v)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
-  simp only [getElem_eq_getElem_data, data_set!, Array.set!_eq_setIfInBounds]
+  simp only [getElem_eq_getElem_toArray, toArray_set!, Array.set!_eq_setIfInBounds]
   rw [Array.getElem_setIfInBounds]
 
 @[simp] public theorem getElem?_set! (a : UInt32Array) (i : Nat) (v : UInt32) (j : Nat) :
@@ -2124,7 +2150,7 @@ public theorem size_popWhile_le (p : UInt32 → Bool) (a : UInt32Array) :
     (destOff len : Nat) (exact : Bool) :
     (src.copySlice srcOff dest destOff len exact).size =
       max dest.size (min destOff dest.size + min len (src.size - srcOff)) := by
-  simp [-size_data, size_eq_data_size]
+  simp [-size_toArray, size_eq_toArray_size]
   lia
 
 public theorem getElem_copySlice (src : UInt32Array) (srcOff : Nat) (dest : UInt32Array)
@@ -2153,12 +2179,12 @@ public theorem getElem_copySlice (src : UInt32Array) (srcOff : Nat) (dest : UInt
 @[simp] public theorem foldlM_toList {β : Type v} {m : Type v → Type w} [Monad m]
     (f : β → UInt32 → m β) (init : β) (a : UInt32Array) :
     a.toList.foldlM f init = a.foldlM f init := by
-  rw [← toList_data, Array.foldlM_toList, foldlM, size_eq_data_size]
+  rw [← toList_toArray, Array.foldlM_toList, foldlM, size_eq_toArray_size]
 
 @[simp] public theorem foldrM_toList {β : Type v} {m : Type v → Type w} [Monad m]
     (f : UInt32 → β → m β) (init : β) (a : UInt32Array) :
     a.toList.foldrM f init = a.foldrM f init := by
-  rw [← toList_data, Array.foldrM_toList]
+  rw [← toList_toArray, Array.foldrM_toList]
   rfl
 
 @[simp] public theorem forM_eq_forM {m : Type v → Type w} [Monad m] (f : UInt32 → m PUnit)
@@ -2172,33 +2198,34 @@ public theorem getElem_copySlice (src : UInt32Array) (srcOff : Nat) (dest : UInt
 
 /-! ### Membership -/
 
-public theorem mem_def {x : UInt32} {a : UInt32Array} : x ∈ a ↔ x ∈ a.data := Iff.rfl
+public theorem mem_def {x : UInt32} {a : UInt32Array} : x ∈ a ↔ x ∈ a.toArray := Iff.rfl
 
-@[simp] public theorem mem_data {x : UInt32} {a : UInt32Array} : x ∈ a.data ↔ x ∈ a := Iff.rfl
+@[simp] public theorem mem_toArray {x : UInt32} {a : UInt32Array} : x ∈ a.toArray ↔ x ∈ a :=
+  Iff.rfl
 
 @[simp] public theorem mem_mk {x : UInt32} {xs : Array UInt32} : x ∈ mk xs ↔ x ∈ xs := Iff.rfl
 
 @[simp] public theorem mem_toList {x : UInt32} {a : UInt32Array} : x ∈ a.toList ↔ x ∈ a := by
-  rw [← toList_data, Array.mem_toList_iff, mem_data]
+  rw [← toList_toArray, Array.mem_toList_iff, mem_toArray]
 
 public theorem mem_iff_getElem {x : UInt32} {a : UInt32Array} :
     x ∈ a ↔ ∃ (i : Nat) (h : i < a.size), a[i] = x := by
-  rw [← mem_data, Array.mem_iff_getElem]
+  rw [← mem_toArray, Array.mem_iff_getElem]
   simp
 
 public theorem getElem_mem {a : UInt32Array} {i : Nat} (h : i < a.size) : a[i] ∈ a :=
   mem_iff_getElem.mpr ⟨i, h, rfl⟩
 
 @[simp] public theorem not_mem_empty (x : UInt32) : ¬x ∈ (empty : UInt32Array) := by
-  simp [← mem_data]
+  simp [← mem_toArray]
 
 @[simp] public theorem mem_push {x v : UInt32} {a : UInt32Array} :
     x ∈ a.push v ↔ x ∈ a ∨ x = v := by
-  simp [← mem_data]
+  simp [← mem_toArray]
 
 @[simp] public theorem mem_append {x : UInt32} {a b : UInt32Array} :
     x ∈ a ++ b ↔ x ∈ a ∨ x ∈ b := by
-  simp [← mem_data]
+  simp [← mem_toArray]
 
 /-! ### Iterators -/
 
@@ -3218,7 +3245,7 @@ public def foldrInPlaceRangeThen {β : Type v} {γ : Type w} (a : UInt32Array) (
 
 public theorem contains_iff_mem {a : UInt32Array} {x : UInt32} :
     a.contains x = true ↔ x ∈ a := by
-  simp only [contains, Array.contains_iff_mem, mem_data]
+  simp only [contains, Array.contains_iff_mem, mem_toArray]
 
 private def decMemImpl (x : UInt32) (a : UInt32Array) : Decidable (x ∈ a) :=
   decidable_of_iff _ contains_iff_mem

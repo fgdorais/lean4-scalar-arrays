@@ -39,17 +39,18 @@ types = [
 FLOAT_EQ_OLD = """/-- Decides equality by comparing the two arrays' memory. -/
 @[extern "lean_sarray_dec_eq", expose]
 public def decEq (a b : @& UInt16Array) : Decidable (a = b) :=
-  decidable_of_iff (a.data = b.data) ⟨fun h => by rw [← mk_data a, h, mk_data], fun h => h ▸ rfl⟩
+  decidable_of_iff (a.toArray = b.toArray)
+    ⟨fun h => by rw [← mk_toArray a, h, mk_toArray], fun h => h ▸ rfl⟩
 
 public instance : DecidableEq UInt16Array := decEq
 
-private theorem beq_eq_beq_data (a b : UInt16Array) : (a == b) = (a.data == b.data) := by
+private theorem beq_eq_beq_toArray (a b : UInt16Array) : (a == b) = (a.toArray == b.toArray) := by
   rw [Bool.eq_iff_iff, beq_iff_eq, beq_iff_eq]
-  exact ⟨congrArg data, data_injective⟩
+  exact ⟨congrArg toArray, toArray_injective⟩
 
-/-- The same hash as `a.data`. -/
+/-- The same hash as `a.toArray`. -/
 public def hash (a : @& UInt16Array) : UInt64 :=
-  Hashable.hash a.data
+  Hashable.hash a.toArray
 
 public def hashImpl (a : @& UInt16Array) : UInt64 :=
   a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
@@ -58,7 +59,8 @@ public def hashImpl (a : @& UInt16Array) : UInt64 :=
 
 public instance : Hashable UInt16Array := ⟨hash⟩
 
-public theorem hash_eq_hash_data (a : UInt16Array) : Hashable.hash a = Hashable.hash a.data := by
+public theorem hash_eq_hash_toArray (a : UInt16Array) :
+    Hashable.hash a = Hashable.hash a.toArray := by
   rfl
 """
 FLOAT_EQ_NEW = """/--
@@ -66,7 +68,7 @@ Compares the elements with `==`, like `Array`. Floating-point equality is not de
 `NaN` is not equal to itself and `0.0 == -0.0`.
 -/
 public def beq (a b : @& UInt16Array) : Bool :=
-  a.data == b.data
+  a.toArray == b.toArray
 
 @[noinline]
 private def beqSlow (a b : @& UInt16Array) : Bool :=
@@ -87,7 +89,8 @@ where
 private theorem beqImpl_loop (a b : UInt16Array) (stop : USize) (ha : stop.toNat ≤ a.size)
     (hb : stop.toNat ≤ b.size) (i : USize) :
     beqImpl.loop a b stop ha hb i = true ↔ ∀ (k : Nat) (_ : i.toNat ≤ k) (hk : k < stop.toNat),
-      (a.data[k]'(by rw [size_data']; lia) == b.data[k]'(by rw [size_data']; lia)) = true := by
+      (a.toArray[k]'(by rw [size_toArray']; lia) ==
+        b.toArray[k]'(by rw [size_toArray']; lia)) = true := by
   fun_induction beqImpl.loop a b stop ha hb i with
   | case1 i hi ih =>
     have := USize.lt_iff_toNat_lt.1 hi
@@ -116,7 +119,7 @@ private theorem beqImpl_loop (a b : UInt16Array) (stop : USize) (ha : stop.toNat
     have husize : a.usize = b.usize ↔ a.size = b.size := by
       rw [← USize.toNat_inj, usize, usize, ha, hb]
     rw [beq, Array.beq_eq_decide]
-    have hdata : a.data.size = b.data.size ↔ a.size = b.size := .rfl
+    have hdata : a.toArray.size = b.toArray.size ↔ a.size = b.size := .rfl
     by_cases h : a.size = b.size
     · rw [dite_eq_left (husize.2 h), dite_eq_left (hdata.2 h), Bool.eq_iff_iff, decide_eq_true_eq,
         beqImpl_loop]
@@ -127,7 +130,7 @@ private theorem beqImpl_loop (a b : UInt16Array) (stop : USize) (ha : stop.toNat
 
 public instance : BEq UInt16Array := ⟨beq⟩
 
-private theorem beq_eq_beq_data (a b : UInt16Array) : (a == b) = (a.data == b.data) := rfl
+private theorem beq_eq_beq_toArray (a b : UInt16Array) : (a == b) = (a.toArray == b.toArray) := rfl
 """
 # Also left out for the float types, from the first line up to, but not including, the second: the
 # lemmas and instances that need decidable equality or hashing, and their tests.
