@@ -1008,6 +1008,15 @@ public theorem start_le_stop (s : Float64Array.Slice) : s.start ≤ s.stop :=
 public theorem stop_le_array_size (s : Float64Array.Slice) : s.stop ≤ s.array.size :=
   s.internalRepresentation.stop_le_array_size
 
+/-- Two slices are equal when they have the same array, start and stop. -/
+@[ext] public theorem ext {s t : Float64Array.Slice} (h₁ : s.array = t.array)
+    (h₂ : s.start = t.start) (h₃ : s.stop = t.stop) : s = t := by
+  obtain ⟨⟨a, i, j, _, _⟩⟩ := s
+  obtain ⟨⟨b, k, l, _, _⟩⟩ := t
+  simp only [array, start, stop] at h₁ h₂ h₃
+  subst h₁ h₂ h₃
+  rfl
+
 /-- `s.stop.toUSize` bounds the indices of loops over the slice. -/
 private theorem toNat_toUSize_stop_le (s : Float64Array.Slice) :
     s.stop.toUSize.toNat ≤ s.array.size := by
@@ -1620,6 +1629,9 @@ public theorem size_eq_toArray_size (a : Float64Array) : a.size = a.toArray.size
 @[ext] public theorem ext {a b : Float64Array} (h : a.toArray = b.toArray) : a = b :=
   toArray_injective h
 
+@[simp] public theorem toArray_inj {a b : Float64Array} : a.toArray = b.toArray ↔ a = b :=
+  ⟨toArray_injective, fun h => h ▸ rfl⟩
+
 @[simp] public theorem getElem_mk (a : Array Float) (i : Nat) (h : i < (mk a).size) :
     (mk a)[i] = a[i] := rfl
 
@@ -1863,6 +1875,9 @@ public theorem copySlice_eq_append (src : Float64Array) (srcOff : Nat) (dest : F
 
 @[simp] public theorem toList_inj {a b : Float64Array} : a.toList = b.toList ↔ a = b :=
   ⟨fun h => by rw [← ofList_toList a, h, ofList_toList], fun h => h ▸ rfl⟩
+
+public theorem ext_getElem? {a b : Float64Array} (h : ∀ i : Nat, a[i]? = b[i]?) : a = b :=
+  toList_inj.1 (List.ext_getElem? fun i => by simp [h])
 
 @[simp] public theorem toList_empty : (empty : Float64Array).toList = [] := rfl
 

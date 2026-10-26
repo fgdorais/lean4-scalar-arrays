@@ -88,7 +88,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Linearity    | `markLinear`, `propagateMark`                                               |
 | Memory       | `ensureExclusive`, `ensureCapacity`, `ensureExclusiveWithCapacity`, which are logically the identity |
 | Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
-| Lemmas       | `ext`, `ext_getElem`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!` |
+| Lemmas       | `ext`, `ext_getElem`, `ext_getElem?`, `toArray_inj` and `Slice.ext`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!` |
 
 As with `Array`:
 

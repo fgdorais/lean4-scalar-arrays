@@ -551,6 +551,18 @@ example (a : ISizeArray) (i : Nat) (v : ISize) (h : i < a.size) :
 example (a : ISizeArray) : a.extract 0 a.size = a := by simp
 example (a : ISizeArray) (v : ISize) : (a.push v).pop = a :=
   ISizeArray.ext_getElem (by simp) (by simp_all)
+example (a : ISizeArray) (v : ISize) : (a.push v).pop = a :=
+  ISizeArray.ext_getElem? fun i => by
+    by_cases h : i < a.size <;> simp [h, getElem?_pos, getElem?_neg]
+example (a b : ISizeArray) (h : a.toArray = b.toArray) : a = b := by simpa using h
+example (s t : ISizeArray.Slice) (h : s.array = t.array) (h' : s.start = t.start)
+    (h'' : s.stop = t.stop) : s = t := by
+  ext1 <;> assumption
+example (s t : ISizeArray.Slice) (h : s.array.toArray = t.array.toArray) (h' : s.start = t.start)
+    (h'' : s.stop = t.stop) : s = t := by
+  ext <;> simp_all
+example (s t : ISizeArray.Slice) (h : s = t) : s.start = t.start :=
+  (ISizeArray.Slice.ext_iff.1 h).2.1
 
 /-! Default bounds proofs -/
 
