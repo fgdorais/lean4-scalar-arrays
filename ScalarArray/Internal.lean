@@ -11,12 +11,15 @@ module
 representation behind `ByteArray` and `FloatArray`. A scalar array is a header recording the
 element size, the size and the capacity, followed by the elements stored unboxed.
 
-This module only describes the header: allocation, size and capacity queries, copying and
-resizing. Everything here is private. The typed array modules use it as their runtime
-representation through `import all ScalarArray.Internal`.
+This module describes the header, with allocation, size and capacity queries, copying and
+resizing, and copies of raw bytes. The typed array modules use it as their runtime representation
+through `import all ScalarArray.Internal`, and reach it with `unsafeCast`. Only what their inlined
+code calls is public: the type, `capacity` and `resizeUnsafe`. Inlined code can only use
+declarations of publicly imported modules, so the typed modules also import this one publicly and
+these are visible wherever `ScalarArray` is imported. The rest is private.
 -/
 
-private inductive ScalarArray : Type
+public inductive ScalarArray : Type
   | allocate (elemSize : UInt32) (size capacity : USize) (h : size ≤ capacity)
 
 attribute [extern "lean_alloc_sarray"] ScalarArray.allocate
@@ -32,7 +35,7 @@ private def size : @& ScalarArray → USize
   | allocate _ size _ _ => size
 
 @[extern "lean_sarray_capacity"]
-private def capacity : @& ScalarArray → USize
+public def capacity : @& ScalarArray → USize
   | allocate _ _ capacity _ => capacity
 
 private theorem size_le_capacity : (a : ScalarArray) → a.size ≤ a.capacity
@@ -48,12 +51,23 @@ private def copy (a : ScalarArray) : ScalarArray :=
   a.copyWithCapacity a.capacity a.size_le_capacity
 
 @[extern c inline "#1;\nlean_sarray_set_size(#1, #2)"]
-private unsafe def resizeUnsafe (a : ScalarArray) (size : USize) (h : size ≤ a.capacity)
+public unsafe def resizeUnsafe (a : ScalarArray) (size : USize) (h : size ≤ a.capacity)
     (_exclusive : isExclusiveUnsafe a := by rfl) : ScalarArray :=
   allocate a.elemSize size a.capacity h
 
 @[extern "lean_sarray_ensure_exclusive"]
 private def ensureExclusive (a : ScalarArray) : ScalarArray := a.copy
+
+/--
+Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting
+at byte `destOff`. Only valid when `dest` is exclusive and both ranges are within the capacities.
+-/
+-- TODO: core has no runtime function that copies a slice of a scalar array with any element size;
+-- `lean_byte_array_copy_slice` only works for bytes. Replace this once core has one.
+@[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + #4, lean_sarray_cptr(#2) + #3, #5)"]
+private unsafe def memcpyUnsafe :
+    ScalarArray → @& ScalarArray → (srcOff destOff n : USize) → ScalarArray
+  | dest, _, _, _, _ => dest
 
 /-! ## Loop indices -/
 
