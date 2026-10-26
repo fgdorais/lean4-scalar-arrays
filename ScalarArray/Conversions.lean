@@ -23,7 +23,7 @@ private unsafe def toByteArrayImpl (a : UInt8Array) : ByteArray := unsafeCast a
 
 /-- The same array as a `ByteArray`, without copying. -/
 @[implemented_by toByteArrayImpl, expose]
-public def toByteArray (a : UInt8Array) : ByteArray := ⟨a.data⟩
+public def toByteArray (a : UInt8Array) : ByteArray := ⟨a.toArray⟩
 
 private unsafe def ofByteArrayImpl (b : ByteArray) : UInt8Array := unsafeCast b
 
@@ -31,15 +31,15 @@ private unsafe def ofByteArrayImpl (b : ByteArray) : UInt8Array := unsafeCast b
 @[implemented_by ofByteArrayImpl, expose]
 public def ofByteArray (b : ByteArray) : UInt8Array := mk b.data
 
-@[simp] public theorem data_toByteArray (a : UInt8Array) : a.toByteArray.data = a.data := rfl
+@[simp] public theorem data_toByteArray (a : UInt8Array) : a.toByteArray.data = a.toArray := rfl
 
-@[simp] public theorem data_ofByteArray (b : ByteArray) : (ofByteArray b).data = b.data := rfl
+@[simp] public theorem toArray_ofByteArray (b : ByteArray) : (ofByteArray b).toArray = b.data := rfl
 
 @[simp] public theorem size_toByteArray (a : UInt8Array) : a.toByteArray.size = a.size := by
   simp [← ByteArray.size_data]
 
 @[simp] public theorem size_ofByteArray (b : ByteArray) : (ofByteArray b).size = b.size := by
-  simp [← ByteArray.size_data, -size_data, size_eq_data_size]
+  simp [← ByteArray.size_data, -size_toArray, size_eq_toArray_size]
 
 @[simp] public theorem ofByteArray_toByteArray (a : UInt8Array) :
     ofByteArray a.toByteArray = a := by
@@ -57,7 +57,7 @@ private unsafe def toFloatArrayImpl (a : Float64Array) : FloatArray := unsafeCas
 
 /-- The same array as a `FloatArray`, without copying. -/
 @[implemented_by toFloatArrayImpl, expose]
-public def toFloatArray (a : Float64Array) : FloatArray := ⟨a.data⟩
+public def toFloatArray (a : Float64Array) : FloatArray := ⟨a.toArray⟩
 
 private unsafe def ofFloatArrayImpl (b : FloatArray) : Float64Array := unsafeCast b
 
@@ -65,9 +65,10 @@ private unsafe def ofFloatArrayImpl (b : FloatArray) : Float64Array := unsafeCas
 @[implemented_by ofFloatArrayImpl, expose]
 public def ofFloatArray (b : FloatArray) : Float64Array := mk b.data
 
-@[simp] public theorem data_toFloatArray (a : Float64Array) : a.toFloatArray.data = a.data := rfl
+@[simp] public theorem data_toFloatArray (a : Float64Array) : a.toFloatArray.data = a.toArray := rfl
 
-@[simp] public theorem data_ofFloatArray (b : FloatArray) : (ofFloatArray b).data = b.data := rfl
+@[simp] public theorem toArray_ofFloatArray (b : FloatArray) :
+    (ofFloatArray b).toArray = b.data := rfl
 
 @[simp] public theorem ofFloatArray_toFloatArray (a : Float64Array) :
     ofFloatArray a.toFloatArray = a := by

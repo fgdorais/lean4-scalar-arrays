@@ -19,14 +19,14 @@ private abbrev elemSize : UInt32 := 2
 
 /-! Construction and conversion -/
 
-#guard (Int16Array.mk #[1, 2, 3, big]).data == #[1, 2, 3, big]
+#guard (Int16Array.mk #[1, 2, 3, big]).toArray == #[1, 2, 3, big]
 #guard (Int16Array.mk #[1, 2, 3, big]).toList == [1, 2, 3, big]
-#guard (Int16Array.mk #[]).data == #[]
-#guard Int16Array.empty.data == #[]
-#guard (∅ : Int16Array).data == #[]
-#guard (default : Int16Array).data == #[]
-#guard (Int16Array.emptyWithCapacity 100).data == #[]
-#guard (Int16Array.mk (Array.range 1000 |>.map Nat.toInt16)).data ==
+#guard (Int16Array.mk #[]).toArray == #[]
+#guard Int16Array.empty.toArray == #[]
+#guard (∅ : Int16Array).toArray == #[]
+#guard (default : Int16Array).toArray == #[]
+#guard (Int16Array.emptyWithCapacity 100).toArray == #[]
+#guard (Int16Array.mk (Array.range 1000 |>.map Nat.toInt16)).toArray ==
   (Array.range 1000).map Nat.toInt16
 
 /-! Case analysis -/
@@ -67,44 +67,44 @@ example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
 
 /-! Writing -/
 
-#guard ((Int16Array.mk #[1, 2, 3]).set 1 42 (by decide)).data == #[1, 42, 3]
-#guard ((Int16Array.mk #[1, 2, 3]).uset 2 42 (by simp)).data == #[1, 2, 42]
-#guard ((Int16Array.mk #[1, 2, 3]).set! 0 big).data == #[big, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).set 1 42 (by decide)).toArray == #[1, 42, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).uset 2 42 (by simp)).toArray == #[1, 2, 42]
+#guard ((Int16Array.mk #[1, 2, 3]).set! 0 big).toArray == #[big, 2, 3]
 
 -- Writing to a shared array must leave the original unchanged. The result is checked first so
 -- that it is computed while the original is still live.
 #guard
   let a := Int16Array.mk #[1, 2, 3]
   let b := a.set! 1 42
-  b.data == #[1, 42, 3] && a.data == #[1, 2, 3]
+  b.toArray == #[1, 42, 3] && a.toArray == #[1, 2, 3]
 #guard
   let a := Int16Array.mk #[1, 2, 3]
   let b := a.uset 0 big (by simp [a])
-  b.data == #[big, 2, 3] && a.data == #[1, 2, 3]
+  b.toArray == #[big, 2, 3] && a.toArray == #[1, 2, 3]
 #guard
   let a := Int16Array.mk #[1, 2, 3]
   let b := a.set 2 big (by simp [a])
-  b.data == #[1, 2, big] && a.data == #[1, 2, 3]
+  b.toArray == #[1, 2, big] && a.toArray == #[1, 2, 3]
 
 -- Repeated writes to an exclusive array.
 #guard Id.run do
   let mut a := Int16Array.mk (Array.replicate 1000 0)
   for i in [0:1000] do
     a := a.set! i (i * 3).toInt16
-  return a.data == (Array.range 1000).map fun i => (i * 3).toInt16
+  return a.toArray == (Array.range 1000).map fun i => (i * 3).toInt16
 
 /-! Pushing -/
 
-#guard (Int16Array.empty.push 5 |>.push 6).data == #[5, 6]
-#guard ((Int16Array.emptyWithCapacity 1).push 5 |>.push 6 |>.push 7).data == #[5, 6, 7]
-#guard ((Int16Array.mk #[1, 2]).push 3).data == #[1, 2, 3]
+#guard (Int16Array.empty.push 5 |>.push 6).toArray == #[5, 6]
+#guard ((Int16Array.emptyWithCapacity 1).push 5 |>.push 6 |>.push 7).toArray == #[5, 6, 7]
+#guard ((Int16Array.mk #[1, 2]).push 3).toArray == #[1, 2, 3]
 
 -- Pushing past the capacity many times.
 #guard Id.run do
   let mut a := Int16Array.empty
   for i in [0:10000] do
     a := a.push i.toInt16
-  return a.size == 10000 && a.data == (Array.range 10000).map Nat.toInt16
+  return a.size == 10000 && a.toArray == (Array.range 10000).map Nat.toInt16
 
 -- Pushing to a shared array must leave the original unchanged. The results are checked first so
 -- that they are computed while the original is still live.
@@ -112,7 +112,7 @@ example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
   let a := (Int16Array.emptyWithCapacity 10).push 1
   let b := a.push 2
   let c := a.push 3
-  c.data == #[1, 3] && b.data == #[1, 2] && a.data == #[1]
+  c.toArray == #[1, 3] && b.toArray == #[1, 2] && a.toArray == #[1]
 
 -- Inlined `push` and `uset` on a closed array must copy it on every call, not write into a shared
 -- constant: a later call must not change an earlier result.
@@ -125,12 +125,12 @@ example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
 #guard
   let a := Int16Array.pushOntoConstant 1
   let b := Int16Array.pushOntoConstant 2
-  b.data == #[2] && a.data == #[1]
+  b.toArray == #[2] && a.toArray == #[1]
 
 #guard
   let a := Int16Array.usetConstant 1
   let b := Int16Array.usetConstant 2
-  b.data == #[2, 0] && a.data == #[1, 0]
+  b.toArray == #[2, 0] && a.toArray == #[1, 0]
 
 /-! Printing -/
 
@@ -147,16 +147,16 @@ example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
 
 /-! Writes don't touch neighbouring elements -/
 
-#guard ((Int16Array.mk #[0, 0, 0]).set! 1 big).data == #[0, big, 0]
-#guard ((Int16Array.mk #[big, big, big]).set! 1 0).data == #[big, 0, big]
-#guard ((Int16Array.mk #[0, 0, 0]).push big |>.push 0).data == #[0, 0, 0, big, 0]
+#guard ((Int16Array.mk #[0, 0, 0]).set! 1 big).toArray == #[0, big, 0]
+#guard ((Int16Array.mk #[big, big, big]).set! 1 0).toArray == #[big, 0, big]
+#guard ((Int16Array.mk #[0, 0, 0]).push big |>.push 0).toArray == #[0, 0, 0, big, 0]
 
 /-! Indices beyond 16 bits, and huge `Nat` indices -/
 
 #guard
   let a := (Int16Array.mk (Array.replicate 100000 0)).set! 99999 big |>.set! 70000 1
   a.size == 100000 && a[99999]! == big && a[70000]! == 1 && a[99998]! == 0 &&
-    a[70000 % 65536]! == 0 && a.data[99999]! == big && a.data[70000]! == 1 &&
+    a[70000 % 65536]! == 0 && a.toArray[99999]! == big && a.toArray[70000]! == 1 &&
     (if h : (70000 : USize).toNat < a.size then a[(70000 : USize)] == 1 else false)
 
 #guard (Int16Array.mk #[1, 2, 3])[2 ^ 70]? == none
@@ -167,24 +167,24 @@ example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
 #guard
   let a := Int16Array.mk #[1]
   let b := a.push 2
-  b.data == #[1, 2] && a.data == #[1]
+  b.toArray == #[1, 2] && a.toArray == #[1]
 
 #guard
   let a := Int16Array.mk #[]
   let b := a.push 2
-  b.data == #[2] && a.data == #[]
+  b.toArray == #[2] && a.toArray == #[]
 
 /-! Conversions don't alias -/
 
 #guard
   let a := #[(1 : Int16), 2, 3]
   let b := (Int16Array.mk a).set! 0 big
-  b.data == #[big, 2, 3] && a == #[1, 2, 3]
+  b.toArray == #[big, 2, 3] && a == #[1, 2, 3]
 
 #guard
   let a := Int16Array.mk #[1, 2, 3]
-  let d := a.data.set! 0 big
-  d == #[big, 2, 3] && a.data == #[1, 2, 3]
+  let d := a.toArray.set! 0 big
+  d == #[big, 2, 3] && a.toArray == #[1, 2, 3]
 
 /-! Runtime representation -/
 
@@ -200,11 +200,11 @@ example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
 
 /-! Ensuring exclusivity and capacity -/
 
-#guard (Int16Array.mk #[1, 2, 3]).ensureExclusive.data == #[1, 2, 3]
-#guard ((Int16Array.mk #[1, 2, 3]).ensureCapacity 100).data == #[1, 2, 3]
-#guard ((Int16Array.mk #[1, 2, 3]).ensureCapacity 0).data == #[1, 2, 3]
-#guard ((Int16Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100).data == #[1, 2, 3]
-#guard ((Int16Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 0).data == #[1, 2, 3]
+#guard (Int16Array.mk #[1, 2, 3]).ensureExclusive.toArray == #[1, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).ensureCapacity 100).toArray == #[1, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).ensureCapacity 0).toArray == #[1, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100).toArray == #[1, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 0).toArray == #[1, 2, 3]
 
 #guard rawCapacity ((Int16Array.mk #[1, 2, 3]).ensureCapacity 100) ≥ 100
 #guard rawCapacity ((Int16Array.mk #[1, 2, 3]).ensureExclusiveWithCapacity 100) ≥ 100
@@ -217,26 +217,26 @@ example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
   let a := (Int16Array.emptyWithCapacity 10).push x
   let p := rawAddr a
   let a := a.ensureExclusive.ensureCapacity 5 |>.ensureExclusiveWithCapacity 10
-  rawAddr a == p && a.data == #[x]
+  rawAddr a == p && a.toArray == #[x]
 
 -- Pushes after `ensureExclusiveWithCapacity` don't reallocate.
 @[noinline] def Int16Array.pushesInPlaceAfterEnsure (x : Int16) : Bool :=
   let a := (Int16Array.mk #[x]).ensureExclusiveWithCapacity 4
   let p := rawAddr a
   let a := a.push 2 |>.push 3 |>.push 4
-  rawAddr a == p && a.data == #[x, 2, 3, 4]
+  rawAddr a == p && a.toArray == #[x, 2, 3, 4]
 
 -- `ensureCapacity` doesn't copy a shared array that has room.
 @[noinline] def Int16Array.ensureCapacityKeepsShared (x : Int16) : Bool :=
   let a := (Int16Array.emptyWithCapacity 10).push x
   let b := a.ensureCapacity 5
-  rawAddr b == rawAddr a && b.data == #[x]
+  rawAddr b == rawAddr a && b.toArray == #[x]
 
 -- `ensureExclusiveWithCapacity` copies a shared array once, even when it also needs room.
 @[noinline] def Int16Array.ensureExclusiveWithCapacityCopiesShared (x : Int16) : Bool :=
   let a := (Int16Array.emptyWithCapacity 2).push x
   let b := a.ensureExclusiveWithCapacity 20
-  rawAddr b != rawAddr a && rawCapacity b ≥ 20 && b.data == #[x] && a.data == #[x]
+  rawAddr b != rawAddr a && rawCapacity b ≥ 20 && b.toArray == #[x] && a.toArray == #[x]
 
 #guard Int16Array.ensuresInPlace 1
 #guard Int16Array.pushesInPlaceAfterEnsure 1
@@ -248,15 +248,15 @@ example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
 #guard
   let a := Int16Array.mk #[1, 2, 3]
   let b := a.ensureExclusive.set! 0 big
-  b.data == #[big, 2, 3] && a.data == #[1, 2, 3]
+  b.toArray == #[big, 2, 3] && a.toArray == #[1, 2, 3]
 #guard
   let a := Int16Array.mk #[1, 2, 3]
   let b := (a.ensureCapacity 10).set! 0 big |>.push 4
-  b.data == #[big, 2, 3, 4] && a.data == #[1, 2, 3]
+  b.toArray == #[big, 2, 3, 4] && a.toArray == #[1, 2, 3]
 #guard
   let a := Int16Array.mk #[1, 2, 3]
   let b := (a.ensureExclusiveWithCapacity 10).set! 0 big |>.push 4
-  b.data == #[big, 2, 3, 4] && a.data == #[1, 2, 3]
+  b.toArray == #[big, 2, 3, 4] && a.toArray == #[1, 2, 3]
 
 -- On a closed array, they must not hand out a shared constant: a later call must not change an
 -- earlier result.
@@ -272,37 +272,37 @@ example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
 #guard
   let a := Int16Array.ensureExclusiveConstant 1
   let b := Int16Array.ensureExclusiveConstant 2
-  b.data == #[2, 0] && a.data == #[1, 0]
+  b.toArray == #[2, 0] && a.toArray == #[1, 0]
 
 #guard
   let a := Int16Array.ensureCapacityConstant 1
   let b := Int16Array.ensureCapacityConstant 2
-  b.data == #[2, 0, 2] && a.data == #[1, 0, 1]
+  b.toArray == #[2, 0, 2] && a.toArray == #[1, 0, 1]
 
 #guard
   let a := Int16Array.ensureExclusiveWithCapacityConstant 1
   let b := Int16Array.ensureExclusiveWithCapacityConstant 2
-  b.data == #[2, 0, 2] && a.data == #[1, 0, 1]
+  b.toArray == #[2, 0, 2] && a.toArray == #[1, 0, 1]
 
 
 /-! Appending -/
 
-#guard (Int16Array.mk #[1, 2] ++ Int16Array.mk #[3, big]).data == #[1, 2, 3, big]
-#guard ((Int16Array.mk #[1, 2]).append (Int16Array.mk #[3])).data == #[1, 2, 3]
-#guard (Int16Array.mk #[1, 2] ++ Int16Array.empty).data == #[1, 2]
-#guard (Int16Array.empty ++ Int16Array.mk #[1, 2]).data == #[1, 2]
-#guard (Int16Array.empty ++ Int16Array.empty).data == #[]
-#guard (Int16Array.mk #[0, 0] ++ Int16Array.mk #[big] ++ Int16Array.mk #[0]).data ==
+#guard (Int16Array.mk #[1, 2] ++ Int16Array.mk #[3, big]).toArray == #[1, 2, 3, big]
+#guard ((Int16Array.mk #[1, 2]).append (Int16Array.mk #[3])).toArray == #[1, 2, 3]
+#guard (Int16Array.mk #[1, 2] ++ Int16Array.empty).toArray == #[1, 2]
+#guard (Int16Array.empty ++ Int16Array.mk #[1, 2]).toArray == #[1, 2]
+#guard (Int16Array.empty ++ Int16Array.empty).toArray == #[]
+#guard (Int16Array.mk #[0, 0] ++ Int16Array.mk #[big] ++ Int16Array.mk #[0]).toArray ==
   #[0, 0, big, 0]
 
 -- Appending an array to itself, with and without room.
 #guard
   let a := Int16Array.mk #[1, 2, 3]
-  (a ++ a).data == #[1, 2, 3, 1, 2, 3]
+  (a ++ a).toArray == #[1, 2, 3, 1, 2, 3]
 
 #guard
   let a := (Int16Array.emptyWithCapacity 10).push 1 |>.push 2
-  (a ++ a).data == #[1, 2, 1, 2]
+  (a ++ a).toArray == #[1, 2, 1, 2]
 
 -- Appending to a shared array must leave the original unchanged, with and without room. The
 -- results are checked first so that they are computed while the original is still live.
@@ -310,18 +310,18 @@ example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
   let a := (Int16Array.emptyWithCapacity 10).push 1
   let b := a ++ Int16Array.mk #[2, 3]
   let c := a ++ Int16Array.mk #[4]
-  c.data == #[1, 4] && b.data == #[1, 2, 3] && a.data == #[1]
+  c.toArray == #[1, 4] && b.toArray == #[1, 2, 3] && a.toArray == #[1]
 
 #guard
   let a := Int16Array.mk #[1]
   let b := a ++ Int16Array.mk #[2, 3]
-  b.data == #[1, 2, 3] && a.data == #[1]
+  b.toArray == #[1, 2, 3] && a.toArray == #[1]
 
 -- The right operand is never modified.
 #guard
   let b := Int16Array.mk #[2, 3]
   let c := Int16Array.mk #[1] ++ b
-  c.data == #[1, 2, 3] && b.data == #[2, 3]
+  c.toArray == #[1, 2, 3] && b.toArray == #[2, 3]
 
 -- Many appends to an exclusive array.
 #guard Id.run do
@@ -330,13 +330,13 @@ example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
   for i in [0:1000] do
     a := a ++ Int16Array.mk #[i.toInt16, (i * 7).toInt16, big]
     r := r ++ #[i.toInt16, (i * 7).toInt16, big]
-  return a.data == r
+  return a.toArray == r
 
 -- Large arrays on both sides.
 #guard
   let xs := (Array.range 50000).map Nat.toInt16
   let ys := (Array.range 50000).map fun i => (i * 3).toInt16
-  (Int16Array.mk xs ++ Int16Array.mk ys).data == xs ++ ys
+  (Int16Array.mk xs ++ Int16Array.mk ys).toArray == xs ++ ys
 
 -- An exclusive array with room is appended to in place, and growth is geometric.
 -- The array is built from a parameter so that it isn't extracted as a shared closed term.
@@ -344,13 +344,13 @@ example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
   let a := (Int16Array.emptyWithCapacity 10).push x
   let p := rawAddr a
   let a := a ++ Int16Array.mk #[2, 3]
-  rawAddr a == p && a.data == #[x, 2, 3]
+  rawAddr a == p && a.toArray == #[x, 2, 3]
 
 @[noinline] def Int16Array.appendsToCopyWhenShared (x : Int16) : Bool :=
   let a := (Int16Array.emptyWithCapacity 10).push x
   let p := rawAddr a
   let b := a ++ Int16Array.mk #[2, 3]
-  rawAddr b != p && b.data == #[x, 2, 3] && a.data == #[x]
+  rawAddr b != p && b.toArray == #[x, 2, 3] && a.toArray == #[x]
 
 #guard Int16Array.appendsInPlace 1
 #guard Int16Array.appendsToCopyWhenShared 1
@@ -482,9 +482,9 @@ example (s t : Int16Array.Slice) (h : s == t) : hash s = hash t :=
 
 #guard Int16Array.empty.isEmpty && !(Int16Array.mk #[1]).isEmpty
 #guard (Int16Array.mk #[1]).pop.isEmpty
-#guard (Int16Array.mk #[1, 2, big]).pop.data == #[1, 2]
-#guard Int16Array.empty.pop.data == #[]
-#guard ((Int16Array.mk #[1, 2, 3]).pop.push big).data == #[1, 2, big]
+#guard (Int16Array.mk #[1, 2, big]).pop.toArray == #[1, 2]
+#guard Int16Array.empty.pop.toArray == #[]
+#guard ((Int16Array.mk #[1, 2, 3]).pop.push big).toArray == #[1, 2, big]
 #guard (Int16Array.mk #[1, 2, big]).back? == some big
 #guard Int16Array.empty.back? == none
 #guard (Int16Array.mk #[1, 2, big]).back! == big
@@ -494,14 +494,14 @@ example (s t : Int16Array.Slice) (h : s == t) : hash s = hash t :=
 #guard
   let a := Int16Array.mk #[1, 2, 3]
   let b := a.pop
-  b.data == #[1, 2] && a.data == #[1, 2, 3]
+  b.toArray == #[1, 2] && a.toArray == #[1, 2, 3]
 
 -- The array is built from a parameter so that it isn't extracted as a shared closed term.
 @[noinline] def Int16Array.popsInPlace (x : Int16) : Bool :=
   let a := (Int16Array.mk #[x]).push x
   let p := rawAddr a
   let a := a.pop
-  rawAddr a == p && a.data == #[x]
+  rawAddr a == p && a.toArray == #[x]
 
 #guard Int16Array.popsInPlace 1
 
@@ -515,37 +515,38 @@ example (s t : Int16Array.Slice) (h : s == t) : hash s = hash t :=
   let a := (Int16Array.mk #[x]).push 0 |>.push 0
   let p := rawAddr a
   let a := a.popWhile (· == 0)
-  rawAddr a == p && a.data == #[x]
+  rawAddr a == p && a.toArray == #[x]
 
 #guard Int16Array.popsWhileInPlace 1
 
-example (p : Int16 → Bool) (a : Int16Array) : (a.popWhile p).data = a.data.popWhile p := by simp
+example (p : Int16 → Bool) (a : Int16Array) :
+    (a.popWhile p).toArray = a.toArray.popWhile p := by simp
 
-#guard ((Int16Array.mk #[1, 2, 3, big]).extract 1 3).data == #[2, 3]
-#guard ((Int16Array.mk #[1, 2, 3, big]).extract 2 100).data == #[3, big]
-#guard ((Int16Array.mk #[1, 2, 3]).extract 0 3).data == #[1, 2, 3]
-#guard ((Int16Array.mk #[1, 2, 3]).extract 2 1).data == #[]
-#guard ((Int16Array.mk #[1, 2, 3]).extract 5 9).data == #[]
-#guard ((Int16Array.mk #[1, 2, 3]).extract (2 ^ 70) (2 ^ 71)).data == #[]
-#guard ((Int16Array.mk #[1, 2, 3]).extract 1 (2 ^ 70)).data == #[2, 3]
+#guard ((Int16Array.mk #[1, 2, 3, big]).extract 1 3).toArray == #[2, 3]
+#guard ((Int16Array.mk #[1, 2, 3, big]).extract 2 100).toArray == #[3, big]
+#guard ((Int16Array.mk #[1, 2, 3]).extract 0 3).toArray == #[1, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).extract 2 1).toArray == #[]
+#guard ((Int16Array.mk #[1, 2, 3]).extract 5 9).toArray == #[]
+#guard ((Int16Array.mk #[1, 2, 3]).extract (2 ^ 70) (2 ^ 71)).toArray == #[]
+#guard ((Int16Array.mk #[1, 2, 3]).extract 1 (2 ^ 70)).toArray == #[2, 3]
 #guard
   let xs := (Array.range 100000).map Nat.toInt16
-  ((Int16Array.mk xs).extract 70000 70010).data == xs.extract 70000 70010
+  ((Int16Array.mk xs).extract 70000 70010).toArray == xs.extract 70000 70010
 #guard rawElemSize ((Int16Array.mk #[1, 2, 3]).extract 1 2) == elemSize
 
 -- The extracted array is independent of the original.
 #guard
   let a := Int16Array.mk #[1, 2, 3]
   let b := (a.extract 0 2).set! 0 big
-  b.data == #[big, 2] && a.data == #[1, 2, 3]
+  b.toArray == #[big, 2] && a.toArray == #[1, 2, 3]
 
 /-! Building arrays -/
 
-#guard (Int16Array.replicate 3 big).data == #[big, big, big]
-#guard (Int16Array.replicate 0 1).data == #[]
-#guard (Int16Array.replicate 100000 big).data == Array.replicate 100000 big
-#guard (Int16Array.ofFn (n := 4) fun i => i.val.toInt16).data == #[0, 1, 2, 3]
-#guard (Int16Array.ofFn (n := 0) fun i => i.val.toInt16).data == #[]
+#guard (Int16Array.replicate 3 big).toArray == #[big, big, big]
+#guard (Int16Array.replicate 0 1).toArray == #[]
+#guard (Int16Array.replicate 100000 big).toArray == Array.replicate 100000 big
+#guard (Int16Array.ofFn (n := 4) fun i => i.val.toInt16).toArray == #[0, 1, 2, 3]
+#guard (Int16Array.ofFn (n := 0) fun i => i.val.toInt16).toArray == #[]
 #guard rawElemSize (Int16Array.replicate 2 1) == elemSize
 #guard rawElemSize (Int16Array.ofFn (n := 2) fun _ => 1) == elemSize
 
@@ -564,13 +565,13 @@ example (a : Int16Array) (v : Int16) : (a.push v).pop = a :=
 
 #guard (Int16Array.mk #[1, 2, big]).get 2 == big
 #guard (Int16Array.mk #[1, 2, big]).uget 2 == big
-#guard ((Int16Array.mk #[1, 2, 3]).set 1 big).data == #[1, big, 3]
-#guard ((Int16Array.mk #[1, 2, 3]).uset 1 big).data == #[1, big, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).set 1 big).toArray == #[1, big, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).uset 1 big).toArray == #[1, big, 3]
 
 /-! `set!` leaves the array unchanged when the index is out of bounds, like `ByteArray.set!`. -/
 
-#guard ((Int16Array.mk #[1, 2, 3]).set! 3 big).data == #[1, 2, 3]
-#guard ((Int16Array.mk #[1, 2, 3]).set! (2 ^ 70) big).data == #[1, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).set! 3 big).toArray == #[1, 2, 3]
+#guard ((Int16Array.mk #[1, 2, 3]).set! (2 ^ 70) big).toArray == #[1, 2, 3]
 
 /-! Folds over part of an array -/
 
@@ -587,24 +588,24 @@ example (a : Int16Array) (v : Int16) : (a.push v).pop = a :=
 #guard
   let src := Int16Array.mk #[10, 11, 12, big]
   let dest := Int16Array.mk #[1, 2, 3, 4, 5]
-  (src.copySlice 1 dest 2 2).data == #[1, 2, 11, 12, 5] &&
-  (src.copySlice 1 dest 4 3).data == #[1, 2, 3, 4, 11, 12, big] &&
-  (src.copySlice 0 dest 9 2).data == #[1, 2, 3, 4, 5, 10, 11] &&
-  (src.copySlice 9 dest 1 2).data == #[1, 2, 3, 4, 5] &&
-  (src.copySlice 2 dest 0 10).data == #[12, big, 3, 4, 5] &&
-  (src.copySlice 0 dest 0 0).data == #[1, 2, 3, 4, 5] &&
-  (src.copySlice 0 Int16Array.empty 0 4).data == #[10, 11, 12, big] &&
-  dest.data == #[1, 2, 3, 4, 5] && src.data == #[10, 11, 12, big]
+  (src.copySlice 1 dest 2 2).toArray == #[1, 2, 11, 12, 5] &&
+  (src.copySlice 1 dest 4 3).toArray == #[1, 2, 3, 4, 11, 12, big] &&
+  (src.copySlice 0 dest 9 2).toArray == #[1, 2, 3, 4, 5, 10, 11] &&
+  (src.copySlice 9 dest 1 2).toArray == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 2 dest 0 10).toArray == #[12, big, 3, 4, 5] &&
+  (src.copySlice 0 dest 0 0).toArray == #[1, 2, 3, 4, 5] &&
+  (src.copySlice 0 Int16Array.empty 0 4).toArray == #[10, 11, 12, big] &&
+  dest.toArray == #[1, 2, 3, 4, 5] && src.toArray == #[10, 11, 12, big]
 
 -- Copying from an array into itself.
 #guard
   let a := Int16Array.mk #[1, 2, 3, big]
-  (a.copySlice 0 a 2 4).data == #[1, 2, 1, 2, 3, big]
+  (a.copySlice 0 a 2 4).toArray == #[1, 2, 1, 2, 3, big]
 
 #guard
   let xs := (Array.range 100000).map Nat.toInt16
   let a := Int16Array.mk xs
-  (a.copySlice 70000 (Int16Array.replicate 10 0) 5 10).data ==
+  (a.copySlice 70000 (Int16Array.replicate 10 0) 5 10).toArray ==
     Array.replicate 5 0 ++ xs.extract 70000 70010
 
 #guard rawElemSize ((Int16Array.mk #[1]).copySlice 0 Int16Array.empty 0 1) == elemSize
@@ -613,7 +614,7 @@ example (a : Int16Array) (v : Int16) : (a.push v).pop = a :=
   let dest := (Int16Array.emptyWithCapacity 10).push x |>.push x |>.push x
   let p := rawAddr dest
   let dest := (Int16Array.mk #[big, big]).copySlice 0 dest 1 2
-  rawAddr dest == p && dest.data == #[x, big, big]
+  rawAddr dest == p && dest.toArray == #[x, big, big]
 
 @[noinline] def Int16Array.copySliceGrowth (x : Int16) : Bool :=
   let dest := (Int16Array.mk #[x, x, x, x])
@@ -625,8 +626,8 @@ example (a : Int16Array) (v : Int16) : (a.push v).pop = a :=
 
 /-! Linearity markers -/
 
-#guard ((Int16Array.mk #[1, 2]).markLinear.push big).data == #[1, 2, big]
-#guard ((Int16Array.mk #[1]).propagateMark (Int16Array.mk #[2, big])).data == #[2, big]
+#guard ((Int16Array.mk #[1, 2]).markLinear.push big).toArray == #[1, 2, big]
+#guard ((Int16Array.mk #[1]).propagateMark (Int16Array.mk #[2, big])).toArray == #[2, big]
 
 /-! Search -/
 
@@ -638,10 +639,10 @@ example (a : Int16Array) (v : Int16) : (a.push v).pop = a :=
 
 /-! Lists -/
 
-#guard (Int16Array.ofList [1, 2, big]).data == #[1, 2, big]
-#guard (Int16Array.ofList []).data == #[]
+#guard (Int16Array.ofList [1, 2, big]).toArray == #[1, 2, big]
+#guard (Int16Array.ofList []).toArray == #[]
 #guard [1, 2, big].toInt16Array == Int16Array.mk #[1, 2, big]
-#guard (Int16Array.ofList ((List.range 100000).map Nat.toInt16)).data ==
+#guard (Int16Array.ofList ((List.range 100000).map Nat.toInt16)).toArray ==
   (Array.range 100000).map Nat.toInt16
 #guard rawElemSize (Int16Array.ofList [1, 2]) == elemSize
 
@@ -705,7 +706,7 @@ example (s : Int16Array.Slice) : Int16Array := s.copy
 #guard
   let xs := (Array.range 100000).map Nat.toInt16
   let s := (Int16Array.mk xs)[70000...70010]
-  s.toArray == xs.extract 70000 70010 && s.copy.data == xs.extract 70000 70010
+  s.toArray == xs.extract 70000 70010 && s.copy.toArray == xs.extract 70000 70010
 
 #guard toString (Int16Array.mk #[1, 2, 3])[1...*] == toString (Int16Array.mk #[2, 3])
 
@@ -830,7 +831,7 @@ example (s : Int16Array.Slice) : s.copy.size = s.size := by simp
 #guard Int16Array.empty.iter.toInt16Array == Int16Array.empty
 #guard
   let xs := (Array.range 100000).map Nat.toInt16
-  ((Int16Array.mk xs).iter.map (· + 1)).toInt16Array.data == xs.map (· + 1)
+  ((Int16Array.mk xs).iter.map (· + 1)).toInt16Array.toArray == xs.map (· + 1)
 #guard rawElemSize ((Int16Array.mk #[1]).iter.toInt16Array) == elemSize
 #guard (Int16Array.mk #[1, 2, 3]).iter.toInt16ArrayWithCapacity 100 ==
   Int16Array.mk #[1, 2, 3]
@@ -864,33 +865,33 @@ example (s : Int16Array.Slice) : s.copy.size = s.size := by simp
 
 /-! Writing through slices -/
 
-#guard ((Int16Array.mk #[1, 2, 3, 4])[1...3].set 1 big).array.data == #[1, 2, big, 4]
+#guard ((Int16Array.mk #[1, 2, 3, 4])[1...3].set 1 big).array.toArray == #[1, 2, big, 4]
 #guard ((Int16Array.mk #[1, 2, 3, 4])[1...3].set! 1 big).toList == [2, big]
-#guard ((Int16Array.mk #[1, 2, 3, 4])[1...3].set! 2 big).array.data == #[1, 2, 3, 4]
-#guard ((Int16Array.mk #[1, 2, 3, 4])[1...3].modify 0 (· * 10)).array.data == #[1, 20, 3, 4]
-#guard ((Int16Array.mk #[1, 2, 3, 4])[1...3].modify 2 (· * 10)).array.data == #[1, 2, 3, 4]
-#guard ((Int16Array.mk #[1, 2, 3, big])[1...4].swap 0 2).array.data == #[1, big, 3, 2]
-#guard ((Int16Array.mk #[1, 2, 3, big])[1...4].swap 1 1).array.data == #[1, 2, 3, big]
-#guard ((Int16Array.mk #[0, 1, 2, 3, 4, 0])[1...5].reverse).array.data == #[0, 4, 3, 2, 1, 0]
-#guard ((Int16Array.mk #[0, 1, 2, 3, 0])[1...4].reverse).array.data == #[0, 3, 2, 1, 0]
-#guard ((Int16Array.mk #[1, 2])[1...1].reverse).array.data == #[1, 2]
+#guard ((Int16Array.mk #[1, 2, 3, 4])[1...3].set! 2 big).array.toArray == #[1, 2, 3, 4]
+#guard ((Int16Array.mk #[1, 2, 3, 4])[1...3].modify 0 (· * 10)).array.toArray == #[1, 20, 3, 4]
+#guard ((Int16Array.mk #[1, 2, 3, 4])[1...3].modify 2 (· * 10)).array.toArray == #[1, 2, 3, 4]
+#guard ((Int16Array.mk #[1, 2, 3, big])[1...4].swap 0 2).array.toArray == #[1, big, 3, 2]
+#guard ((Int16Array.mk #[1, 2, 3, big])[1...4].swap 1 1).array.toArray == #[1, 2, 3, big]
+#guard ((Int16Array.mk #[0, 1, 2, 3, 4, 0])[1...5].reverse).array.toArray == #[0, 4, 3, 2, 1, 0]
+#guard ((Int16Array.mk #[0, 1, 2, 3, 0])[1...4].reverse).array.toArray == #[0, 3, 2, 1, 0]
+#guard ((Int16Array.mk #[1, 2])[1...1].reverse).array.toArray == #[1, 2]
 #guard (∅ : Int16Array.Slice).reverse.toList == []
 
 -- `foldlInPlace` on a slice shifts its range right by one, inserting the initial accumulator.
 #guard
   let r := (Int16Array.mk #[1, 2, 3, 4])[1...3].foldlInPlace 9 (fun _ _ x b => (b, x))
-  r.1.array.data == #[1, 9, 2, 4] && r.2 == 3 && r.1.start == 1 && r.1.stop == 3
+  r.1.array.toArray == #[1, 9, 2, 4] && r.2 == 3 && r.1.start == 1 && r.1.stop == 3
 #guard
   let r := (Int16Array.mk #[1, 2, 3, 4])[2...2].foldlInPlace 9 (fun _ _ x b => (b, x))
-  r.1.array.data == #[1, 2, 3, 4] && r.2 == 9
+  r.1.array.toArray == #[1, 2, 3, 4] && r.2 == 9
 
 -- `foldrInPlace` shifts the range left by one, from the last element to the first.
 #guard
   let r := (Int16Array.mk #[1, 2, 3, 4])[1...3].foldrInPlace 9 (fun _ _ x b => (b, x))
-  r.1.array.data == #[1, 3, 9, 4] && r.2 == 2 && r.1.start == 1 && r.1.stop == 3
+  r.1.array.toArray == #[1, 3, 9, 4] && r.2 == 2 && r.1.start == 1 && r.1.stop == 3
 #guard
   let r := (Int16Array.mk #[1, 2, 3, 4])[2...2].foldrInPlace 9 (fun _ _ x b => (b, x))
-  r.1.array.data == #[1, 2, 3, 4] && r.2 == 9
+  r.1.array.toArray == #[1, 2, 3, 4] && r.2 == 9
 
 -- The `Then` versions hand the slice and the last accumulator to `g`, here to store it.
 #guard
@@ -901,13 +902,13 @@ example (s : Int16Array.Slice) : s.copy.size = s.size := by simp
 #guard
   let r := (Int16Array.mk #[1, 2, 3, 4])[0...3].foldlInPlaceThen 9 (fun _ _ x b => (b, x))
     (fun s b => s.array.set! 3 b)
-  r.data == #[9, 1, 2, 3]
+  r.toArray == #[9, 1, 2, 3]
 #guard
   let a := Int16Array.mk #[1, 2, 3, 4]
   let r := a[1...3].foldlInPlaceThen 9 (fun _ _ x b => (b, x)) Prod.mk
   let r' := a[1...3].foldrInPlaceThen 9 (fun _ _ x b => (b, x)) Prod.mk
-  r.1.array.data == #[1, 9, 2, 4] && r.2 == 3 && r'.1.array.data == #[1, 3, 9, 4] && r'.2 == 2 &&
-    a.data == #[1, 2, 3, 4]
+  r.1.array.toArray == #[1, 9, 2, 4] && r.2 == 3 &&
+    r'.1.array.toArray == #[1, 3, 9, 4] && r'.2 == 2 && a.toArray == #[1, 2, 3, 4]
 
 -- The indices passed to `f`, counted from the start of the slice, in the order of the visits.
 #guard
@@ -932,26 +933,27 @@ example (s : Int16Array.Slice) : s.copy.size = s.size := by simp
 #guard
   let a := Int16Array.mk #[1, 2, 3, 4]
   let s := a[1...4].set 0 big
-  s.array.data == #[1, big, 3, 4] && a.data == #[1, 2, 3, 4]
+  s.array.toArray == #[1, big, 3, 4] && a.toArray == #[1, 2, 3, 4]
 #guard
   let a := Int16Array.mk #[1, 2, 3, 4]
   let s := a[0...4].reverse
-  s.array.data == #[4, 3, 2, 1] && a.data == #[1, 2, 3, 4]
+  s.array.toArray == #[4, 3, 2, 1] && a.toArray == #[1, 2, 3, 4]
 #guard
   let a := Int16Array.mk #[1, 2, 3, 4]
   let r := a[0...4].foldlInPlace 9 (fun _ _ x b => (b, x))
-  r.1.array.data == #[9, 1, 2, 3] && a.data == #[1, 2, 3, 4]
+  r.1.array.toArray == #[9, 1, 2, 3] && a.toArray == #[1, 2, 3, 4]
 #guard
   let a := Int16Array.mk #[1, 2, 3, 4]
   let r := a[0...4].foldrInPlace 9 (fun _ _ x b => (b, x))
-  r.1.array.data == #[2, 3, 4, 9] && a.data == #[1, 2, 3, 4]
+  r.1.array.toArray == #[2, 3, 4, 9] && a.toArray == #[1, 2, 3, 4]
 
 -- `f` must see the elements of the original even when it reads them from the shared array itself.
 #guard
   let a := Int16Array.mk #[1, 2, 3, 4]
   let r := a[1...4].foldlInPlace 0 (fun k _ _ b => (a[k.toNat]!, b))
   let r' := a[1...4].foldrInPlace 0 (fun k _ _ b => (a[k.toNat]!, b))
-  r.1.array.data == #[1, 1, 2, 3] && r'.1.array.data == #[1, 1, 2, 3] && a.data == #[1, 2, 3, 4]
+  r.1.array.toArray == #[1, 1, 2, 3] && r'.1.array.toArray == #[1, 1, 2, 3] &&
+    a.toArray == #[1, 2, 3, 4]
 #guard
   let s := (Int16Array.mk #[1, 2, 3, 4])[0...4]
   let t := s.swap 0 3
@@ -970,7 +972,7 @@ example (s : Int16Array.Slice) : s.copy.size = s.size := by simp
   let (s, _) := s.foldrInPlace () (fun _ _ x b => (x + 1, b))
   let s := s.foldlInPlaceThen () (fun _ _ x b => (x + 1, b)) (fun s _ => s)
   let s := s.foldrInPlaceThen () (fun _ _ x b => (x + 1, b)) (fun s _ => s)
-  rawAddr s.array == p && s.array.data == #[x, big + 4, 8, 8, x]
+  rawAddr s.array == p && s.array.toArray == #[x, big + 4, 8, 8, x]
 
 #guard Int16Array.writesThroughSliceInPlace 1
 
@@ -978,7 +980,7 @@ example (s : Int16Array.Slice) : s.copy.size = s.size := by simp
 #guard
   let n := 1000000
   let xs := (Array.range n).map Nat.toInt16
-  (Int16Array.mk xs)[0...n].reverse.array.data == xs.reverse
+  (Int16Array.mk xs)[0...n].reverse.array.toArray == xs.reverse
 
 /-! Folding over windows of one array -/
 
@@ -1003,30 +1005,30 @@ private def fold2Then {β γ : Type} (a : Int16Array) (xs ys rs len : USize) (in
 
 -- Disjoint windows, and the accumulator.
 #guard (fold2 (Int16Array.mk #[1, 2, 3, 4, 5, 6, 0, 0, 0]) 0 3 6 3 0
-  (fun _ _ x y c => (x + y, c + 1))).map (fun r => (r.1.data, r.2)) ==
+  (fun _ _ x y c => (x + y, c + 1))).map (fun r => (r.1.toArray, r.2)) ==
     some (#[1, 2, 3, 4, 5, 6, 5, 7, 9], 3)
 
 -- Overlapping windows: each step reads what the earlier steps wrote.
 #guard (fold2 (Int16Array.mk #[1, 0, 0, 0, 0]) 0 0 1 4 () (fun _ _ x y c => (x + y, c))).map
-  (·.1.data) == some #[1, 2, 4, 8, 16]
+  (·.1.toArray) == some #[1, 2, 4, 8, 16]
 #guard (fold2 (Int16Array.mk #[0, 1, 2, 3, big]) 1 1 0 4 () (fun _ _ x _ c => (x, c))).map
-  (·.1.data) == some #[1, 2, 3, big, big]
+  (·.1.toArray) == some #[1, 2, 3, big, big]
 #guard (fold2 (Int16Array.mk #[1, 2, 3, 4]) 0 1 0 3 () (fun _ _ x y c => (x + y, c))).map
-  (·.1.data) == some #[3, 5, 7, 4]
+  (·.1.toArray) == some #[3, 5, 7, 4]
 #guard (fold2 (Int16Array.mk #[1, 1, 1, 1, 1]) 0 1 1 4 () (fun _ _ x y c => (x + y, c))).map
-  (·.1.data) == some #[1, 2, 3, 4, 5]
+  (·.1.toArray) == some #[1, 2, 3, 4, 5]
 
 -- The indices passed to `f`, in the order of the visits, and the empty fold.
 #guard (fold2 (Int16Array.mk #[1, 2, 3]) 0 0 0 3 [] (fun j _ x _ c => (x, j.toNat :: c))).map
   (·.2) == some [2, 1, 0]
 #guard (fold2 (Int16Array.mk #[1, 2, 3]) 3 0 1 0 big (fun _ _ x _ c => (x, c))).map
-  (fun r => (r.1.data, r.2)) == some (#[1, 2, 3], big)
+  (fun r => (r.1.toArray, r.2)) == some (#[1, 2, 3], big)
 
 -- The `Then` form hands the array and the last accumulator to `g`, here to store it.
 #guard fold2Then (Int16Array.mk #[1, 2, 3, 0]) 0 1 0 2 (0 : Int16)
-  (fun _ _ x y c => (x + y, c + x)) (fun a c => (a.set! 3 c).data) == some #[3, 5, 3, 3]
+  (fun _ _ x y c => (x + y, c + x)) (fun a c => (a.set! 3 c).toArray) == some #[3, 5, 3, 3]
 #guard (fold2Then (Int16Array.mk #[1, 2]) 0 0 0 2 () (fun _ _ x _ c => (x + 1, c))
-  Prod.mk).map (·.1.data) == some #[2, 3]
+  Prod.mk).map (·.1.toArray) == some #[2, 3]
 
 -- The size proof that `g` receives bounds its reads.
 #guard
@@ -1042,18 +1044,18 @@ private def fold2Then {β γ : Type} (a : Int16Array) (xs ys rs len : USize) (in
 #guard
   let a := Int16Array.mk #[1, 2, 3, 4]
   let r := fold2 a 0 1 0 3 () (fun _ _ x y c => (x + y, c))
-  r.map (·.1.data) == some #[3, 5, 7, 4] && a.data == #[1, 2, 3, 4]
+  r.map (·.1.toArray) == some #[3, 5, 7, 4] && a.toArray == #[1, 2, 3, 4]
 #guard
   let a := Int16Array.mk #[1, 2, 3, 4]
   let r := fold2 a 0 0 1 3 () (fun j _ _ _ c => (a[j.toNat]!, c))
-  r.map (·.1.data) == some #[1, 1, 2, 3] && a.data == #[1, 2, 3, 4]
+  r.map (·.1.toArray) == some #[1, 1, 2, 3] && a.toArray == #[1, 2, 3, 4]
 
 -- An exclusive array is written in place, without copying it.
 @[noinline] def Int16Array.foldsWindowsInPlace (x : Int16) : Bool :=
   let a := (Int16Array.emptyWithCapacity 6).push x |>.push 2 |>.push 3 |>.push 0 |>.push 0
   let p := rawAddr a
   match fold2 a 0 1 2 3 () (fun _ _ x y c => (x + y, c)) with
-  | some (a, _) => rawAddr a == p && a.data == #[x, 2, x + 2, x + 4, x + x + 6]
+  | some (a, _) => rawAddr a == p && a.toArray == #[x, 2, x + 2, x + 4, x + x + 6]
   | none => false
 
 #guard Int16Array.foldsWindowsInPlace 1
@@ -1067,7 +1069,7 @@ private def fold2Then {β γ : Type} (a : Int16Array) (xs ys rs len : USize) (in
       r := r.set! i (r[i - 1]! + r[i]!)
     return r
   (fold2 (Int16Array.replicate n 1) 0 1 1 (n - 1).toUSize () (fun _ _ x y c => (x + y, c))).map
-    (·.1.data) == some r
+    (·.1.toArray) == some r
 
 /-! In-place folds over a `USize` range -/
 
@@ -1103,28 +1105,28 @@ private def shift (k : USize) (x : Int16) (b : Int16 × List Nat) :
   let a := Int16Array.mk #[1, 2, 3, 4, 5, big]
   [(0, 6), (1, 3), (2, 0), (0, 0), (6, 0), (5, 1), (0, 1)].all fun (start, len) =>
     let l := (foldlRange? a start.toUSize len.toUSize (big, []) fun k _ => shift k).map
-      fun r => (r.1.data, r.2)
+      fun r => (r.1.toArray, r.2)
     let r := (foldrRange? a start.toUSize len.toUSize (big, []) fun k _ => shift k).map
-      fun r => (r.1.data, r.2)
+      fun r => (r.1.toArray, r.2)
     let l' := foldlSlice a start len (big, []) shift
     let r' := foldrSlice a start len (big, []) shift
-    l == some (l'.1.data, l'.2) && r == some (r'.1.data, r'.2)
+    l == some (l'.1.toArray, l'.2) && r == some (r'.1.toArray, r'.2)
 
 #guard (foldlRange? (Int16Array.mk #[1, 2, 3, 4]) 1 2 (9 : Int16) fun _ _ x b => (b, x)).map
-  (fun r => (r.1.data, r.2)) == some (#[1, 9, 2, 4], 3)
+  (fun r => (r.1.toArray, r.2)) == some (#[1, 9, 2, 4], 3)
 #guard (foldrRange? (Int16Array.mk #[1, 2, 3, 4]) 1 2 (9 : Int16) fun _ _ x b => (b, x)).map
-  (fun r => (r.1.data, r.2)) == some (#[1, 3, 9, 4], 2)
+  (fun r => (r.1.toArray, r.2)) == some (#[1, 3, 9, 4], 2)
 #guard (foldlRange? (Int16Array.mk #[1, 2, 3, 4]) 4 0 (9 : Int16) fun _ _ x b => (b, x)).map
-  (fun r => (r.1.data, r.2)) == some (#[1, 2, 3, 4], 9)
+  (fun r => (r.1.toArray, r.2)) == some (#[1, 2, 3, 4], 9)
 
 -- The `Then` versions hand the array and the last accumulator to `g`, here to store it.
 #guard
   let a := Int16Array.mk #[1, 2, 3, 4]
   if h : (0 : USize).toNat + (3 : USize).toNat ≤ a.size then
     (a.foldlInPlaceRangeThen 0 3 h (9 : Int16) (fun _ _ x b => (b, x)) fun a _ b =>
-        (a.set! 3 b).data) == #[9, 1, 2, 3] &&
+        (a.set! 3 b).toArray) == #[9, 1, 2, 3] &&
       (a.foldrInPlaceRangeThen 0 3 h (9 : Int16) (fun _ _ x b => (b, x)) fun a _ b =>
-        (a.set! 3 b).data) == #[2, 3, 9, 1] && a.data == #[1, 2, 3, 4]
+        (a.set! 3 b).toArray) == #[2, 3, 9, 1] && a.toArray == #[1, 2, 3, 4]
   else false
 
 -- `g` gets the size of the new array, for a bounded write without a check.
@@ -1132,9 +1134,9 @@ private def shift (k : USize) (x : Int16) (b : Int16 × List Nat) :
   let a := Int16Array.mk #[1, 2, 3, 4]
   if h : (0 : USize).toNat + (3 : USize).toNat ≤ a.size then
     (a.foldlInPlaceRangeThen 0 3 h (9 : Int16) (fun _ _ x b => (b, x)) fun a' ha b =>
-        (a'.set 2 b (by rw [ha]; simp at h; lia)).data) == #[9, 1, 3, 4] &&
+        (a'.set 2 b (by rw [ha]; simp at h; lia)).toArray) == #[9, 1, 3, 4] &&
       (a.foldrInPlaceRangeThen 0 3 h (9 : Int16) (fun _ _ x b => (b, x)) fun a' ha b =>
-        (a'.set 2 b (by rw [ha]; simp at h; lia)).data) == #[2, 3, 1, 4]
+        (a'.set 2 b (by rw [ha]; simp at h; lia)).toArray) == #[2, 3, 1, 4]
   else false
 
 -- A shared array is left unchanged, and an exclusive one is written in place.
@@ -1142,8 +1144,8 @@ private def shift (k : USize) (x : Int16) (b : Int16 × List Nat) :
   let a := Int16Array.mk #[1, 2, 3, 4]
   let r := foldlRange? a 0 4 (9 : Int16) fun _ _ x b => (b, x)
   let r' := foldrRange? a 0 4 (9 : Int16) fun _ _ x b => (b, x)
-  r.map (·.1.data) == some #[9, 1, 2, 3] && r'.map (·.1.data) == some #[2, 3, 4, 9] &&
-    a.data == #[1, 2, 3, 4]
+  r.map (·.1.toArray) == some #[9, 1, 2, 3] && r'.map (·.1.toArray) == some #[2, 3, 4, 9] &&
+    a.toArray == #[1, 2, 3, 4]
 
 @[noinline] def Int16Array.foldsRangeInPlace (x : Int16) : Bool :=
   let a := (Int16Array.emptyWithCapacity 8).push x |>.push 2 |>.push 3 |>.push 4 |>.push x
@@ -1151,7 +1153,7 @@ private def shift (k : USize) (x : Int16) (b : Int16 × List Nat) :
   match foldlRange? a 1 3 () (fun _ _ x b => (x + 1, b)) with
   | some (a, _) =>
     match foldrRange? a 1 3 () (fun _ _ x b => (x + 1, b)) with
-    | some (a, _) => rawAddr a == p && a.data == #[x, 4, 5, 6, x]
+    | some (a, _) => rawAddr a == p && a.toArray == #[x, 4, 5, 6, x]
     | none => false
   | none => false
 
