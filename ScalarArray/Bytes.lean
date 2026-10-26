@@ -266,17 +266,18 @@ private def byteSwapImpl (a : UInt16Array) : UInt16Array :=
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
 public def byteSwap (a : UInt16Array) : UInt16Array :=
-  mk (a.data.map UInt16.byteSwap)
+  mk (a.toArray.map UInt16.byteSwap)
 
-@[simp] public theorem data_byteSwap (a : UInt16Array) : a.byteSwap.data = a.data.map UInt16.byteSwap :=
+@[simp] public theorem toArray_byteSwap (a : UInt16Array) :
+    a.byteSwap.toArray = a.toArray.map UInt16.byteSwap :=
   rfl
 
 @[simp] public theorem size_byteSwap (a : UInt16Array) : a.byteSwap.size = a.size := by
-  simp [← size_data]
+  simp [← size_toArray]
 
 @[simp] public theorem getElem_byteSwap (a : UInt16Array) (i : Nat) (h : i < a.byteSwap.size) :
     a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
-  rw [getElem_eq_getElem_data, getElem_eq_getElem_data]
+  rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
   simp
 
 @[simp] public theorem byteSwap_byteSwap (a : UInt16Array) : a.byteSwap.byteSwap = a := by
@@ -490,17 +491,18 @@ private def byteSwapImpl (a : UInt32Array) : UInt32Array :=
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
 public def byteSwap (a : UInt32Array) : UInt32Array :=
-  mk (a.data.map UInt32.byteSwap)
+  mk (a.toArray.map UInt32.byteSwap)
 
-@[simp] public theorem data_byteSwap (a : UInt32Array) : a.byteSwap.data = a.data.map UInt32.byteSwap :=
+@[simp] public theorem toArray_byteSwap (a : UInt32Array) :
+    a.byteSwap.toArray = a.toArray.map UInt32.byteSwap :=
   rfl
 
 @[simp] public theorem size_byteSwap (a : UInt32Array) : a.byteSwap.size = a.size := by
-  simp [← size_data]
+  simp [← size_toArray]
 
 @[simp] public theorem getElem_byteSwap (a : UInt32Array) (i : Nat) (h : i < a.byteSwap.size) :
     a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
-  rw [getElem_eq_getElem_data, getElem_eq_getElem_data]
+  rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
   simp
 
 @[simp] public theorem byteSwap_byteSwap (a : UInt32Array) : a.byteSwap.byteSwap = a := by
@@ -746,17 +748,18 @@ private def byteSwapImpl (a : UInt64Array) : UInt64Array :=
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
 public def byteSwap (a : UInt64Array) : UInt64Array :=
-  mk (a.data.map UInt64.byteSwap)
+  mk (a.toArray.map UInt64.byteSwap)
 
-@[simp] public theorem data_byteSwap (a : UInt64Array) : a.byteSwap.data = a.data.map UInt64.byteSwap :=
+@[simp] public theorem toArray_byteSwap (a : UInt64Array) :
+    a.byteSwap.toArray = a.toArray.map UInt64.byteSwap :=
   rfl
 
 @[simp] public theorem size_byteSwap (a : UInt64Array) : a.byteSwap.size = a.size := by
-  simp [← size_data]
+  simp [← size_toArray]
 
 @[simp] public theorem getElem_byteSwap (a : UInt64Array) (i : Nat) (h : i < a.byteSwap.size) :
     a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
-  rw [getElem_eq_getElem_data, getElem_eq_getElem_data]
+  rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
   simp
 
 @[simp] public theorem byteSwap_byteSwap (a : UInt64Array) : a.byteSwap.byteSwap = a := by
@@ -958,17 +961,18 @@ private def byteSwapImpl (a : Int16Array) : Int16Array :=
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
 public def byteSwap (a : Int16Array) : Int16Array :=
-  mk (a.data.map Int16.byteSwap)
+  mk (a.toArray.map Int16.byteSwap)
 
-@[simp] public theorem data_byteSwap (a : Int16Array) : a.byteSwap.data = a.data.map Int16.byteSwap :=
+@[simp] public theorem toArray_byteSwap (a : Int16Array) :
+    a.byteSwap.toArray = a.toArray.map Int16.byteSwap :=
   rfl
 
 @[simp] public theorem size_byteSwap (a : Int16Array) : a.byteSwap.size = a.size := by
-  simp [← size_data]
+  simp [← size_toArray]
 
 @[simp] public theorem getElem_byteSwap (a : Int16Array) (i : Nat) (h : i < a.byteSwap.size) :
     a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
-  rw [getElem_eq_getElem_data, getElem_eq_getElem_data]
+  rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
   simp
 
 @[simp] public theorem byteSwap_byteSwap (a : Int16Array) : a.byteSwap.byteSwap = a := by
@@ -1186,17 +1190,18 @@ private def byteSwapImpl (a : Int32Array) : Int32Array :=
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
 public def byteSwap (a : Int32Array) : Int32Array :=
-  mk (a.data.map Int32.byteSwap)
+  mk (a.toArray.map Int32.byteSwap)
 
-@[simp] public theorem data_byteSwap (a : Int32Array) : a.byteSwap.data = a.data.map Int32.byteSwap :=
+@[simp] public theorem toArray_byteSwap (a : Int32Array) :
+    a.byteSwap.toArray = a.toArray.map Int32.byteSwap :=
   rfl
 
 @[simp] public theorem size_byteSwap (a : Int32Array) : a.byteSwap.size = a.size := by
-  simp [← size_data]
+  simp [← size_toArray]
 
 @[simp] public theorem getElem_byteSwap (a : Int32Array) (i : Nat) (h : i < a.byteSwap.size) :
     a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
-  rw [getElem_eq_getElem_data, getElem_eq_getElem_data]
+  rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
   simp
 
 @[simp] public theorem byteSwap_byteSwap (a : Int32Array) : a.byteSwap.byteSwap = a := by
@@ -1446,17 +1451,18 @@ private def byteSwapImpl (a : Int64Array) : Int64Array :=
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
 public def byteSwap (a : Int64Array) : Int64Array :=
-  mk (a.data.map Int64.byteSwap)
+  mk (a.toArray.map Int64.byteSwap)
 
-@[simp] public theorem data_byteSwap (a : Int64Array) : a.byteSwap.data = a.data.map Int64.byteSwap :=
+@[simp] public theorem toArray_byteSwap (a : Int64Array) :
+    a.byteSwap.toArray = a.toArray.map Int64.byteSwap :=
   rfl
 
 @[simp] public theorem size_byteSwap (a : Int64Array) : a.byteSwap.size = a.size := by
-  simp [← size_data]
+  simp [← size_toArray]
 
 @[simp] public theorem getElem_byteSwap (a : Int64Array) (i : Nat) (h : i < a.byteSwap.size) :
     a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
-  rw [getElem_eq_getElem_data, getElem_eq_getElem_data]
+  rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
   simp
 
 @[simp] public theorem byteSwap_byteSwap (a : Int64Array) : a.byteSwap.byteSwap = a := by

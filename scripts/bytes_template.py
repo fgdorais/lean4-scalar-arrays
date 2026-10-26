@@ -244,17 +244,18 @@ private def byteSwapImpl (a : {A}) : {A} :=
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
 public def byteSwap (a : {A}) : {A} :=
-  mk (a.data.map {elem}.byteSwap)
+  mk (a.toArray.map {elem}.byteSwap)
 
-@[simp] public theorem data_byteSwap (a : {A}) : a.byteSwap.data = a.data.map {elem}.byteSwap :=
+@[simp] public theorem toArray_byteSwap (a : {A}) :
+    a.byteSwap.toArray = a.toArray.map {elem}.byteSwap :=
   rfl
 
 @[simp] public theorem size_byteSwap (a : {A}) : a.byteSwap.size = a.size := by
-  simp [← size_data]
+  simp [← size_toArray]
 
 @[simp] public theorem getElem_byteSwap (a : {A}) (i : Nat) (h : i < a.byteSwap.size) :
     a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
-  rw [getElem_eq_getElem_data, getElem_eq_getElem_data]
+  rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
   simp
 
 @[simp] public theorem byteSwap_byteSwap (a : {A}) : a.byteSwap.byteSwap = a := by
