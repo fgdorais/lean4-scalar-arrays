@@ -151,8 +151,9 @@ defined by what it does to that array. That model is what you reason about in pr
 At runtime, an `XArray` is a Lean scalar array object: a small header (element size, size and
 capacity) followed by the elements stored unboxed. The operations are implemented through
 `extern` (inline C for reads and writes) and `implemented_by`, so the compiled code never
-builds the `Array`. The header is described by an internal type, `ScalarArray`, in
-`ScalarArray.Internal`. Everything in that module is private and not part of the API.
+builds the `Array`. The header is described by an internal type, `ScalarArray.Raw`, in
+`ScalarArray.Internal`. It and the few operations on it that inlined code calls are public, but
+they are not part of the API; the rest of that module is private.
 
 The model and the C implementation are connected only by testing, so the test suite runs
 against the compiled code.
