@@ -31,9 +31,9 @@ private abbrev elemSize : UInt32 := (System.Platform.numBits / 8).toUInt32
 
 /-! Case analysis -/
 
--- `cases` splits an array as `mk data`, also in compiled code.
+-- `cases` splits an array as `mk a`, also in compiled code.
 private def headOrZero (a : USizeArray) : USize := by
-  cases a with | mk data => exact data[0]?.getD 0
+  cases a with | mk a => exact a[0]?.getD 0
 
 #guard headOrZero (USizeArray.mk #[7, 8]) == 7
 #guard headOrZero USizeArray.empty == 0
@@ -45,7 +45,7 @@ error: Invalid `⟨...⟩` notation: The expected type `Quot fun x x_1 => False`
 Note: This notation can only be used when the expected type is an inductive type with a single constructor
 -/
 #guard_msgs in
-example (a : USizeArray) : USize := match a with | ⟨data⟩ => data[0]!
+example (a : USizeArray) : USize := match a with | ⟨a⟩ => a[0]!
 
 /-! Size -/
 

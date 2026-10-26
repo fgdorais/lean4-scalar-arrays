@@ -31,9 +31,9 @@ private abbrev elemSize : UInt32 := 2
 
 /-! Case analysis -/
 
--- `cases` splits an array as `mk data`, also in compiled code.
+-- `cases` splits an array as `mk a`, also in compiled code.
 private def headOrZero (a : Int16Array) : Int16 := by
-  cases a with | mk data => exact data[0]?.getD 0
+  cases a with | mk a => exact a[0]?.getD 0
 
 #guard headOrZero (Int16Array.mk #[7, 8]) == 7
 #guard headOrZero Int16Array.empty == 0
@@ -45,7 +45,7 @@ error: Invalid `⟨...⟩` notation: The expected type `Quot fun x x_1 => False`
 Note: This notation can only be used when the expected type is an inductive type with a single constructor
 -/
 #guard_msgs in
-example (a : Int16Array) : Int16 := match a with | ⟨data⟩ => data[0]!
+example (a : Int16Array) : Int16 := match a with | ⟨a⟩ => a[0]!
 
 /-! Size -/
 

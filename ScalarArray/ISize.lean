@@ -29,7 +29,7 @@ universe u
 Arrays of `ISize` values, stored unboxed in a scalar array, one machine word per element.
 
 The logical model is an `Array ISize`: `ISizeArray.mk` and `ISizeArray.toArray` convert between
-the two. `cases` and `induction` split a `ISizeArray` as `mk data`.
+the two. `cases` and `induction` split a `ISizeArray` as `mk a`.
 -/
 -- At runtime a `ISizeArray` is a `ScalarArray`, so every function that looks inside the quotient
 -- must be `extern` or `implemented_by`. A quotient rather than a structure: the compiler represents
@@ -243,9 +243,9 @@ private theorem toArrayImpl_loop (a : ISizeArray) (sz : USize) (hsz : sz.toNat �
 
 -- After the `implemented_by` attribute of `mk` and the `csimp` theorem of `toArray`, so that the
 -- compiled code uses them.
-/-- Case analysis on a `ISizeArray` as `mk data`. It is the default for `cases` and `induction`. -/
+/-- Case analysis on a `ISizeArray` as `mk a`. It is the default for `cases` and `induction`. -/
 @[elab_as_elim, cases_eliminator, induction_eliminator]
-public def casesMk {motive : ISizeArray → Sort u} (mk : (data : Array ISize) → motive (mk data))
+public def casesMk {motive : ISizeArray → Sort u} (mk : (a : Array ISize) → motive (mk a))
     (a : ISizeArray) : motive a :=
   mk_toArray a ▸ mk a.toArray
 

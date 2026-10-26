@@ -29,7 +29,7 @@ universe u
 Arrays of `UInt64` values, stored unboxed in a scalar array, 8 bytes per element.
 
 The logical model is an `Array UInt64`: `UInt64Array.mk` and `UInt64Array.toArray` convert between
-the two. `cases` and `induction` split a `UInt64Array` as `mk data`.
+the two. `cases` and `induction` split a `UInt64Array` as `mk a`.
 -/
 -- At runtime a `UInt64Array` is a `ScalarArray`, so every function that looks inside the quotient
 -- must be `extern` or `implemented_by`. A quotient rather than a structure: the compiler represents
@@ -243,9 +243,9 @@ private theorem toArrayImpl_loop (a : UInt64Array) (sz : USize) (hsz : sz.toNat 
 
 -- After the `implemented_by` attribute of `mk` and the `csimp` theorem of `toArray`, so that the
 -- compiled code uses them.
-/-- Case analysis on a `UInt64Array` as `mk data`. It is the default for `cases` and `induction`. -/
+/-- Case analysis on a `UInt64Array` as `mk a`. It is the default for `cases` and `induction`. -/
 @[elab_as_elim, cases_eliminator, induction_eliminator]
-public def casesMk {motive : UInt64Array → Sort u} (mk : (data : Array UInt64) → motive (mk data))
+public def casesMk {motive : UInt64Array → Sort u} (mk : (a : Array UInt64) → motive (mk a))
     (a : UInt64Array) : motive a :=
   mk_toArray a ▸ mk a.toArray
 

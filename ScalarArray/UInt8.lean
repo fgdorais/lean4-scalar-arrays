@@ -29,7 +29,7 @@ universe u
 Arrays of `UInt8` values, stored unboxed in a scalar array, 1 byte per element.
 
 The logical model is an `Array UInt8`: `UInt8Array.mk` and `UInt8Array.toArray` convert between
-the two. `cases` and `induction` split a `UInt8Array` as `mk data`.
+the two. `cases` and `induction` split a `UInt8Array` as `mk a`.
 -/
 -- At runtime a `UInt8Array` is a `ScalarArray`, so every function that looks inside the quotient
 -- must be `extern` or `implemented_by`. A quotient rather than a structure: the compiler represents
@@ -243,9 +243,9 @@ private theorem toArrayImpl_loop (a : UInt8Array) (sz : USize) (hsz : sz.toNat �
 
 -- After the `implemented_by` attribute of `mk` and the `csimp` theorem of `toArray`, so that the
 -- compiled code uses them.
-/-- Case analysis on a `UInt8Array` as `mk data`. It is the default for `cases` and `induction`. -/
+/-- Case analysis on a `UInt8Array` as `mk a`. It is the default for `cases` and `induction`. -/
 @[elab_as_elim, cases_eliminator, induction_eliminator]
-public def casesMk {motive : UInt8Array → Sort u} (mk : (data : Array UInt8) → motive (mk data))
+public def casesMk {motive : UInt8Array → Sort u} (mk : (a : Array UInt8) → motive (mk a))
     (a : UInt8Array) : motive a :=
   mk_toArray a ▸ mk a.toArray
 
