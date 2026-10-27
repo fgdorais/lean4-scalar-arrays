@@ -25,8 +25,6 @@ namespace ScalarArray
 
 namespace ISizeArray
 
-/-! ### Decidable membership and slice hashing -/
-
 public theorem contains_iff_mem {a : ISizeArray} {x : ISize} :
     a.contains x = true ↔ x ∈ a := by
   simp only [contains, Array.contains_iff_mem, mem_toArray]

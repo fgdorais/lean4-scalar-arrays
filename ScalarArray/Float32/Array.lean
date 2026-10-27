@@ -23,6 +23,7 @@ namespace Float32Array
 
 /-! ## Removing elements -/
 
+/-- Whether `a` has no elements. -/
 @[expose] public def isEmpty (a : @& Float32Array) : Bool := a.size == 0
 
 private unsafe def popImpl (a : Float32Array) : Float32Array :=
@@ -37,10 +38,13 @@ private unsafe def popImpl (a : Float32Array) : Float32Array :=
 public def pop (a : Float32Array) : Float32Array :=
   mk a.toArray.pop
 
+/-- The last element of `a`, or `none` if `a` is empty. -/
 public def back? (a : @& Float32Array) : Option Float32 := a[a.size - 1]?
 
+/-- The last element of `a`. Panics if `a` is empty, and then returns `default`. -/
 public def back! (a : @& Float32Array) : Float32 := a[a.size - 1]!
 
+/-- The last element of `a`, which is not empty. -/
 public def back (a : @& Float32Array) (h : 0 < a.size) : Float32 :=
   a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
 
@@ -154,6 +158,7 @@ public def ofFn {n : Nat} (f : Fin n → Float32) : Float32Array :=
 public def ofList (l : List Float32) : Float32Array :=
   mk l.toArray
 
+/-- For internal use only. -/
 public def ofListImpl (l : List Float32) : Float32Array :=
   loop l (emptyWithCapacity l.length)
 where
@@ -187,6 +192,7 @@ private def foldlMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : β �
     (init : β) (a : @& Float32Array) (start stop : Nat) : m β :=
   a.foldlM f init start stop
 
+/-- For internal use only. -/
 @[inline]
 public def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : β → Float32 → m β)
     (init : β) (a : @& Float32Array) (start := 0) (stop := a.size) : m β :=
@@ -262,6 +268,7 @@ private def foldrMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : Floa
     (init : β) (a : @& Float32Array) : m β :=
   a.foldrM f init
 
+/-- For internal use only. -/
 @[inline]
 public def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : Float32 → β → m β)
     (init : β) (a : @& Float32Array) : m β :=
@@ -308,20 +315,27 @@ private theorem foldrMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
       simp only [this, Array.foldrM.fold.eq_1, beq_self_eq_true, ite_true]
   · rfl
 
+/--
+Folds a function over the elements of `a` from index `start` up to, but not including, `stop`, from
+first to last.
+-/
 @[inline, expose]
 public def foldl {β : Type v} (f : β → Float32 → β) (init : β) (a : @& Float32Array) (start := 0)
     (stop := a.size) : β :=
   Id.run <| a.foldlM (pure <| f · ·) init start stop
 
+/-- Folds a function over the elements of `a`, from last to first. -/
 @[inline, expose]
 public def foldr {β : Type v} (f : Float32 → β → β) (init : β) (a : @& Float32Array) : β :=
   Id.run <| a.foldrM (pure <| f · ·) init
 
+/-- Runs a monadic action on each element of `a`, from first to last. -/
 @[inline, expose]
 public def forM {m : Type v → Type w} [Monad m] (f : Float32 → m PUnit) (a : @& Float32Array) :
     m PUnit :=
   a.foldlM (fun _ x => f x) ⟨⟩
 
+/-- The loop behind `for x in a`. Logically it is the loop over `a.toArray`. -/
 @[expose]
 public def forIn {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Float32Array) (init : β)
     (f : Float32 → β → m (ForInStep β)) : m β :=
@@ -332,6 +346,7 @@ private def forInSlow {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Fl
     (init : β) (f : Float32 → β → m (ForInStep β)) : m β :=
   a.forIn init f
 
+/-- For internal use only. -/
 @[inline]
 public def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Float32Array)
     (init : β) (f : Float32 → β → m (ForInStep β)) : m β :=
@@ -397,6 +412,7 @@ public def any (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
 private def anySlow (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
   a.any p
 
+/-- For internal use only. -/
 @[inline]
 public def anyImpl (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else anySlow a p
@@ -442,6 +458,7 @@ public def all (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
 private def allSlow (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
   a.all p
 
+/-- For internal use only. -/
 @[inline]
 public def allImpl (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else allSlow a p
@@ -474,6 +491,7 @@ private theorem allImpl_loop (a : Float32Array) (p : Float32 → Bool) (stop : U
 public def contains (a : @& Float32Array) (v : Float32) : Bool :=
   a.toArray.contains v
 
+/-- For internal use only. -/
 public def containsImpl (a : @& Float32Array) (v : Float32) : Bool :=
   a.any (v == ·)
 
@@ -499,6 +517,7 @@ public def beq (a b : @& Float32Array) : Bool :=
 private def beqSlow (a b : @& Float32Array) : Bool :=
   a.beq b
 
+/-- For internal use only. -/
 public def beqImpl (a b : @& Float32Array) : Bool :=
   if a.size < USize.size ∧ b.size < USize.size then
     if h : a.usize = b.usize then loop a.usize a.toNat_usize_le (h ▸ b.toNat_usize_le) 0 else false
@@ -559,6 +578,7 @@ private theorem beq_eq_beq_toArray (a b : Float32Array) : (a == b) = (a.toArray 
 
 /-! ## Conversion and printing -/
 
+/-- The elements of `a` as a list. -/
 @[expose] public def toList (a : Float32Array) : List Float32 := a.toArray.toList
 
 /-- Prints `ScalarArray.Float32Array.mk #[...]`, which evaluates to an equal array. -/

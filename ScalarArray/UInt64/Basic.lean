@@ -54,6 +54,7 @@ public def toArray (a : @& UInt64Array) : Array UInt64 :=
 @[simp] public theorem mk_toArray (a : UInt64Array) : mk a.toArray = a :=
   Quot.ind (β := fun a : UInt64Array => mk a.toArray = a) (fun _ => rfl) a
 
+/-- The number of elements of `a`. -/
 -- `lean_byte_array_size` reads the size of any scalar array, whatever its element size: in
 -- `lean.h` it is `lean_box(lean_sarray_size(a))`. Caution: by its name it is meant for `ByteArray`,
 -- so recheck it when the toolchain changes. The tests check `size` for every element size.
@@ -61,13 +62,14 @@ public def toArray (a : @& UInt64Array) : Array UInt64 :=
 public def size (a : @& UInt64Array) : Nat :=
   a.toArray.size
 
+/-- For internal use only. -/
+@[inline]
+public unsafe def usizeImpl (a : @& UInt64Array) : USize := (unsafeCast a : Raw).size
+
 /--
 The size of `a` as a `USize`. Since `USize` can address all memory, no array has more elements than
 `USize` can count.
 -/
-@[inline]
-public unsafe def usizeImpl (a : @& UInt64Array) : USize := (unsafeCast a : Raw).size
-
 @[implemented_by usizeImpl, simp, expose]
 public def usize (a : @& UInt64Array) : USize :=
   a.size.toUSize
@@ -76,16 +78,19 @@ public def usize (a : @& UInt64Array) : USize :=
 public theorem toNat_usize_le (a : UInt64Array) : a.usize.toNat ≤ a.size := by
   simp [Nat.mod_le]
 
+/-- The element at the `USize` index `i`. It compiles to an inline load. -/
 @[extern c inline "((uint64_t*)lean_sarray_cptr(#1))[#2]", expose]
 public def uget (a : @& UInt64Array) (i : USize) (h : i.toNat < a.size := by get_elem_tactic) :
     UInt64 :=
   a.toArray.uget i h
 
+/-- The element at index `i`. -/
 @[expose]
 public def get (a : @& UInt64Array) (i : @& Nat) (h : i < a.size := by get_elem_tactic) :
     UInt64 :=
   a.toArray[i]
 
+/-- For internal use only. -/
 -- Public, like `mkImpl`, `usetImpl`, `setImpl` and `pushImpl` below: a private
 -- `implemented_by` target attached with a separate `attribute` command is not visible to other
 -- modules, so code there that uses `get`, `mk`, `toArray`, `uset` or `set` would fail to compile.
@@ -103,6 +108,7 @@ so that `uset` can be inlined into code in other modules.
 public unsafe def setUnsafe (a : UInt64Array) (i : USize) (v : UInt64) : UInt64Array :=
   mk <| a.toArray.uset i v lcProof
 
+/-- For internal use only. -/
 @[inline, never_extract]
 public unsafe def ensureExclusiveImpl (a : UInt64Array) : UInt64Array :=
   unsafeCast (unsafeCast a : Raw).ensureExclusive
@@ -132,6 +138,7 @@ public unsafe def ensureCapacityGrowUnsafe (a : UInt64Array) (n : Nat) : UInt64A
   let s : Raw := unsafeCast a
   unsafeCast (s.copyWithCapacity (toUSizeChecked (max n s.size.toNat)) lcProof)
 
+/-- For internal use only. -/
 -- Inline, and made of public inline externs, so that the common path compiles to an inline capacity
 -- check in other modules.
 @[inline]
@@ -146,6 +153,7 @@ does not copy `a` just because it is shared.
 @[never_extract, implemented_by ensureCapacityImpl, expose]
 public def ensureCapacity (a : UInt64Array) (n : Nat) : UInt64Array := a
 
+/-- For internal use only. -/
 -- Inline, like `ensureCapacityImpl`: one capacity check, then one exclusivity check. The copy made
 -- when `a` lacks room is exclusive, so `a` is copied at most once.
 @[inline]
@@ -175,6 +183,7 @@ where
   loop (sz : USize) (r : UInt64Array) (i : USize) : UInt64Array :=
     if i < sz then loop sz (setUnsafe r i (a.uget i lcProof)) (i + 1) else r
 
+/-- For internal use only. -/
 public unsafe def mkImpl (a : Array UInt64) : UInt64Array :=
   mkWithCapacityImpl a a.size
 
@@ -189,6 +198,7 @@ private theorem toNat_toUSize_of_le {a : UInt64Array} (hsize : a.size < USize.si
   simp only [Nat.toUSize_eq, USize.toNat_ofNat']
   exact Nat.mod_eq_of_lt (by lia)
 
+/-- For internal use only. -/
 -- `toArrayImpl` and the other `Impl` functions below are proved equal to their specifications by
 -- `csimp` theorems, which make the compiler call them instead. A `csimp` theorem must be public,
 -- and so must the functions it names. The loops index with `USize`, so the proofs need
@@ -255,6 +265,7 @@ private unsafe def emptyWithCapacityImpl (capacity : Nat) : UInt64Array :=
 public def emptyWithCapacity (capacity : Nat) : UInt64Array :=
   mk #[]
 
+/-- The empty array. -/
 @[expose] public def empty : UInt64Array := emptyWithCapacity 0
 
 public instance : EmptyCollection UInt64Array := ⟨empty⟩
@@ -270,6 +281,7 @@ public def uset (a : UInt64Array) (i : USize) (v : UInt64)
     (h : i.toNat < a.size := by get_elem_tactic) : UInt64Array :=
   mk (a.toArray.uset i v h)
 
+/-- For internal use only. -/
 -- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
 @[inline]
 public unsafe def usetImpl : type_of% @uset :=
@@ -277,21 +289,25 @@ public unsafe def usetImpl : type_of% @uset :=
 
 attribute [implemented_by usetImpl] uset
 
+/-- Replaces the element at index `i`, in place when `a` is not shared, like `uset`. -/
 @[expose]
 public def set (a : UInt64Array) (i : Nat) (v : UInt64) (h : i < a.size := by get_elem_tactic) :
     UInt64Array :=
   mk (a.toArray.set i v h)
 
+/-- For internal use only. -/
 @[inline]
 public unsafe def setImpl : type_of% @set :=
   fun a i v _ => a.uset i.toUSize v lcProof
 
 attribute [implemented_by setImpl] set
 
+/-- The element at index `i`. Panics if `i` is out of bounds, and then returns `default`. -/
 @[expose]
 public def get! (a : @& UInt64Array) (i : @& Nat) : UInt64 :=
   if h : i < a.size then a.get i h else panic! "index out of bounds"
 
+/-- The element at index `i`, or `v₀` if `i` is out of bounds. -/
 @[expose]
 public def getD (a : @& UInt64Array) (i : @& Nat) (v₀ : UInt64) : UInt64 :=
   if h : i < a.size then a.get i h else v₀
@@ -322,6 +338,7 @@ public unsafe def pushGrowUnsafe (a : UInt64Array) (v : UInt64) : UInt64Array :=
   else
     panic! "out of memory"
 
+/-- For internal use only. -/
 -- Inline, and made of public inline externs, so that the common path compiles to inline C in other
 -- modules: one capacity check, one exclusivity check, a size bump and one store.
 @[inline]
@@ -334,6 +351,10 @@ public unsafe def pushImpl (a : UInt64Array) (v : UInt64) : UInt64Array :=
   else
     pushGrowUnsafe a v
 
+/--
+Appends `v` to `a`, in place when `a` is not shared and has room. A full array grows to capacity
+`2 * capacity + 1`, so repeated pushes take amortized constant time.
+-/
 @[implemented_by pushImpl, expose]
 public def push (a : UInt64Array) (v : UInt64) : UInt64Array :=
   mk (a.toArray.push v)
@@ -341,8 +362,8 @@ public def push (a : UInt64Array) (v : UInt64) : UInt64Array :=
 /--
 Copies the `n` elements of `src` starting at index `srcOff` into `dest` starting at index `destOff`,
 in place, and grows the size of `dest` to `destOff + n` if it is smaller. Only valid when `dest` is
-exclusive, has capacity for `destOff + n` elements, and is not the same object as `src`, and when
-`destOff ≤ dest.size` and `srcOff + n ≤ src.size`.
+exclusive and has capacity for `destOff + n` elements, and when `destOff ≤ dest.size` and
+`srcOff + n ≤ src.size`. The ranges may overlap.
 -/
 @[inline]
 private unsafe def copySliceUnsafe (dest : UInt64Array) (src : @& UInt64Array)

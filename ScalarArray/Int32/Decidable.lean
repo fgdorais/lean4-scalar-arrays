@@ -25,8 +25,6 @@ namespace ScalarArray
 
 namespace Int32Array
 
-/-! ### Decidable membership and slice hashing -/
-
 public theorem contains_iff_mem {a : Int32Array} {x : Int32} :
     a.contains x = true ↔ x ∈ a := by
   simp only [contains, Array.contains_iff_mem, mem_toArray]

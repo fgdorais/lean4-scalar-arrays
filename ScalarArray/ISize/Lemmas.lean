@@ -23,6 +23,8 @@ namespace ScalarArray
 
 namespace ISizeArray
 
+/-! ## Arrays -/
+
 @[simp] public theorem size_mk (a : Array ISize) : (mk a).size = a.size := rfl
 
 public theorem size_eq_toArray_size (a : ISizeArray) : a.size = a.toArray.size := by cases a; rfl
@@ -282,7 +284,7 @@ public theorem copySlice_eq_append (src : ISizeArray) (srcOff : Nat) (dest : ISi
   simp only [Slice.copy, size_extract, Slice.size_eq]
   lia
 
-/-! ### Lists -/
+/-! ## Lists -/
 
 @[simp] public theorem toList_mk (a : Array ISize) : (mk a).toList = a.toList := rfl
 
@@ -341,7 +343,7 @@ public theorem ext_getElem? {a b : ISizeArray} (h : ∀ i : Nat, a[i]? = b[i]?) 
     List.popWhile_toArray]
   simp
 
-/-! ### Machine-word indices -/
+/-! ## Machine-word indices -/
 
 /--
 `usize` is the size when the size fits in a `USize`, which holds for every array in memory. Loops
@@ -356,7 +358,7 @@ public theorem lt_usize_iff (a : ISizeArray) (h : a.size < USize.size) {i : USiz
     i < a.usize ↔ i.toNat < a.size := by
   rw [USize.lt_iff_toNat_lt, toNat_usize_of_lt a h]
 
-/-! ### Last element -/
+/-! ## Last element -/
 
 public theorem back?_eq_getElem? (a : ISizeArray) : a.back? = a[a.size - 1]? := by
   simp only [back?]
@@ -384,7 +386,7 @@ public theorem back_eq_getElem (a : ISizeArray) (h : 0 < a.size) :
 @[simp] public theorem back_push (a : ISizeArray) (v : ISize) (h) : (a.push v).back h = v := by
   simp [back_eq_getElem]
 
-/-! ### More lists -/
+/-! ## More lists -/
 
 @[simp] public theorem toList_uset (a : ISizeArray) (i : USize) (v : ISize) (h) :
     (a.uset i v h).toList = a.toList.set i.toNat v := by
@@ -397,7 +399,7 @@ public theorem back_eq_getElem (a : ISizeArray) (h : 0 < a.size) :
         dest.toList.extract (destOff + min len (src.size - srcOff)) dest.size := by
   simp [copySlice_eq_append]
 
-/-! ### Accessors -/
+/-! ## Accessors -/
 
 @[simp] public theorem get_eq_getElem (a : ISizeArray) (i : Nat) (h) : a.get i h = a[i] := rfl
 
@@ -419,7 +421,7 @@ public theorem back_eq_getElem (a : ISizeArray) (h : 0 < a.size) :
 @[simp] public theorem isEmpty_iff {a : ISizeArray} : a.isEmpty ↔ a = empty := by
   simp [isEmpty, ← size_eq_zero_iff]
 
-/-! ### Queries -/
+/-! ## Queries -/
 
 @[simp] public theorem any_toList (a : ISizeArray) (p : ISize → Bool) :
     a.toList.any p = a.any p := by
@@ -477,7 +479,7 @@ private theorem findFinIdx?_loop_eq (a : ISizeArray) (p : ISize → Bool) (i : N
     (a.findFinIdx? p start).map Fin.val = a.findIdx? p start := by
   simp [findFinIdx?, findIdx?, findFinIdx?_loop_eq]
 
-/-! ### Slices -/
+/-! ## Slices -/
 
 @[simp] public theorem Slice.getElem_copy (s : ISizeArray.Slice) (i : Nat)
     (h : i < s.copy.size) :
@@ -594,7 +596,7 @@ public theorem Slice.foldr_eq_foldr_toList_copy {β : Type v} (f : ISize → β 
   rw [Slice.foldr, Slice.foldrM, Id.run, Slice.foldrM_loop_eq,
     List.take_of_length_le (by simp)]
 
-/-! ### Writes -/
+/-! ## Writes -/
 
 @[simp] public theorem getElem_uset (a : ISizeArray) (i : USize) (v : ISize) (h) (j : Nat)
     (hj) : (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
@@ -642,7 +644,7 @@ public theorem getElem_copySlice (src : ISizeArray) (srcOff : Nat) (dest : ISize
       congr 1
       lia
 
-/-! ### Monadic folds -/
+/-! ## Monadic folds -/
 
 @[simp] public theorem foldlM_toList {β : Type v} {m : Type v → Type w} [Monad m]
     (f : β → ISize → m β) (init : β) (a : ISizeArray) :
@@ -664,7 +666,7 @@ public theorem getElem_copySlice (src : ISizeArray) (srcOff : Nat) (dest : ISize
   rcases a with ⟨l⟩
   exact (List.forM_toArray l f).symm
 
-/-! ### Membership -/
+/-! ## Membership -/
 
 public theorem mem_def {x : ISize} {a : ISizeArray} : x ∈ a ↔ x ∈ a.toArray := Iff.rfl
 
@@ -695,7 +697,7 @@ public theorem getElem_mem {a : ISizeArray} {i : Nat} (h : i < a.size) : a[i] �
     x ∈ a ++ b ↔ x ∈ a ∨ x ∈ b := by
   simp [← mem_toArray]
 
-/-! ### Iterators -/
+/-! ## Iterators -/
 
 private theorem toList_foldl_push (a : ISizeArray) (l : List ISize) :
     (l.foldl (·.push ·) a).toList = a.toList ++ l := by
@@ -736,7 +738,7 @@ private theorem SliceIterator.toList_eq (it : Std.Iter (α := ISizeArray.SliceIt
     simp [Slice.copy]
     lia
 
-/-! ### Slices as copies -/
+/-! ## Slices as copies -/
 
 @[simp] public theorem Slice.size_empty : (Slice.empty : ISizeArray.Slice).size = 0 := rfl
 
@@ -840,7 +842,7 @@ private theorem Slice.findSomeRevM?_loop_eq (p : ISize → Bool) (s : ISizeArray
   rw [List.take_of_length_le (by simp)] at this
   exact this
 
-/-! ### Membership in slices -/
+/-! ## Membership in slices -/
 
 @[simp] public theorem Slice.mem_iff_mem_copy {x : ISize} {s : ISizeArray.Slice} :
     x ∈ s ↔ x ∈ s.copy := Iff.rfl
@@ -853,7 +855,7 @@ public theorem Slice.mem_iff_getElem {x : ISize} {s : ISizeArray.Slice} :
 public theorem Slice.getElem_mem {s : ISizeArray.Slice} {i : Nat} (h : i < s.size) : s[i] ∈ s :=
   mem_iff_getElem.mpr ⟨i, h, rfl⟩
 
-/-! ### Slice equality -/
+/-! ## Slice equality -/
 
 @[simp] public theorem Slice.beq_eq_beq_copy (s t : ISizeArray.Slice) :
     (s == t) = (s.copy == t.copy) := by

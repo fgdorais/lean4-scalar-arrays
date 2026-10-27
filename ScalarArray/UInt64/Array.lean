@@ -23,6 +23,7 @@ namespace UInt64Array
 
 /-! ## Removing elements -/
 
+/-- Whether `a` has no elements. -/
 @[expose] public def isEmpty (a : @& UInt64Array) : Bool := a.size == 0
 
 private unsafe def popImpl (a : UInt64Array) : UInt64Array :=
@@ -37,10 +38,13 @@ private unsafe def popImpl (a : UInt64Array) : UInt64Array :=
 public def pop (a : UInt64Array) : UInt64Array :=
   mk a.toArray.pop
 
+/-- The last element of `a`, or `none` if `a` is empty. -/
 public def back? (a : @& UInt64Array) : Option UInt64 := a[a.size - 1]?
 
+/-- The last element of `a`. Panics if `a` is empty, and then returns `default`. -/
 public def back! (a : @& UInt64Array) : UInt64 := a[a.size - 1]!
 
+/-- The last element of `a`, which is not empty. -/
 public def back (a : @& UInt64Array) (h : 0 < a.size) : UInt64 :=
   a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
 
@@ -154,6 +158,7 @@ public def ofFn {n : Nat} (f : Fin n → UInt64) : UInt64Array :=
 public def ofList (l : List UInt64) : UInt64Array :=
   mk l.toArray
 
+/-- For internal use only. -/
 public def ofListImpl (l : List UInt64) : UInt64Array :=
   loop l (emptyWithCapacity l.length)
 where
@@ -187,6 +192,7 @@ private def foldlMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : β �
     (init : β) (a : @& UInt64Array) (start stop : Nat) : m β :=
   a.foldlM f init start stop
 
+/-- For internal use only. -/
 @[inline]
 public def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : β → UInt64 → m β)
     (init : β) (a : @& UInt64Array) (start := 0) (stop := a.size) : m β :=
@@ -262,6 +268,7 @@ private def foldrMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : UInt
     (init : β) (a : @& UInt64Array) : m β :=
   a.foldrM f init
 
+/-- For internal use only. -/
 @[inline]
 public def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : UInt64 → β → m β)
     (init : β) (a : @& UInt64Array) : m β :=
@@ -308,20 +315,27 @@ private theorem foldrMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
       simp only [this, Array.foldrM.fold.eq_1, beq_self_eq_true, ite_true]
   · rfl
 
+/--
+Folds a function over the elements of `a` from index `start` up to, but not including, `stop`, from
+first to last.
+-/
 @[inline, expose]
 public def foldl {β : Type v} (f : β → UInt64 → β) (init : β) (a : @& UInt64Array) (start := 0)
     (stop := a.size) : β :=
   Id.run <| a.foldlM (pure <| f · ·) init start stop
 
+/-- Folds a function over the elements of `a`, from last to first. -/
 @[inline, expose]
 public def foldr {β : Type v} (f : UInt64 → β → β) (init : β) (a : @& UInt64Array) : β :=
   Id.run <| a.foldrM (pure <| f · ·) init
 
+/-- Runs a monadic action on each element of `a`, from first to last. -/
 @[inline, expose]
 public def forM {m : Type v → Type w} [Monad m] (f : UInt64 → m PUnit) (a : @& UInt64Array) :
     m PUnit :=
   a.foldlM (fun _ x => f x) ⟨⟩
 
+/-- The loop behind `for x in a`. Logically it is the loop over `a.toArray`. -/
 @[expose]
 public def forIn {β : Type v} {m : Type v → Type w} [Monad m] (a : @& UInt64Array) (init : β)
     (f : UInt64 → β → m (ForInStep β)) : m β :=
@@ -332,6 +346,7 @@ private def forInSlow {β : Type v} {m : Type v → Type w} [Monad m] (a : @& UI
     (init : β) (f : UInt64 → β → m (ForInStep β)) : m β :=
   a.forIn init f
 
+/-- For internal use only. -/
 @[inline]
 public def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a : @& UInt64Array)
     (init : β) (f : UInt64 → β → m (ForInStep β)) : m β :=
@@ -397,6 +412,7 @@ public def any (a : @& UInt64Array) (p : UInt64 → Bool) : Bool :=
 private def anySlow (a : @& UInt64Array) (p : UInt64 → Bool) : Bool :=
   a.any p
 
+/-- For internal use only. -/
 @[inline]
 public def anyImpl (a : @& UInt64Array) (p : UInt64 → Bool) : Bool :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else anySlow a p
@@ -442,6 +458,7 @@ public def all (a : @& UInt64Array) (p : UInt64 → Bool) : Bool :=
 private def allSlow (a : @& UInt64Array) (p : UInt64 → Bool) : Bool :=
   a.all p
 
+/-- For internal use only. -/
 @[inline]
 public def allImpl (a : @& UInt64Array) (p : UInt64 → Bool) : Bool :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else allSlow a p
@@ -474,6 +491,7 @@ private theorem allImpl_loop (a : UInt64Array) (p : UInt64 → Bool) (stop : USi
 public def contains (a : @& UInt64Array) (v : UInt64) : Bool :=
   a.toArray.contains v
 
+/-- For internal use only. -/
 public def containsImpl (a : @& UInt64Array) (v : UInt64) : Bool :=
   a.any (v == ·)
 
@@ -504,6 +522,7 @@ private theorem beq_eq_beq_toArray (a b : UInt64Array) : (a == b) = (a.toArray =
 public def hash (a : @& UInt64Array) : UInt64 :=
   Hashable.hash a.toArray
 
+/-- For internal use only. -/
 public def hashImpl (a : @& UInt64Array) : UInt64 :=
   a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
 
@@ -517,6 +536,7 @@ public theorem hash_eq_hash_toArray (a : UInt64Array) :
 
 /-! ## Conversion and printing -/
 
+/-- The elements of `a` as a list. -/
 @[expose] public def toList (a : UInt64Array) : List UInt64 := a.toArray.toList
 
 /-- Prints `ScalarArray.UInt64Array.mk #[...]`, which evaluates to an equal array. -/

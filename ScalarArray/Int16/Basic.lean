@@ -54,6 +54,7 @@ public def toArray (a : @& Int16Array) : Array Int16 :=
 @[simp] public theorem mk_toArray (a : Int16Array) : mk a.toArray = a :=
   Quot.ind (β := fun a : Int16Array => mk a.toArray = a) (fun _ => rfl) a
 
+/-- The number of elements of `a`. -/
 -- `lean_byte_array_size` reads the size of any scalar array, whatever its element size: in
 -- `lean.h` it is `lean_box(lean_sarray_size(a))`. Caution: by its name it is meant for `ByteArray`,
 -- so recheck it when the toolchain changes. The tests check `size` for every element size.
@@ -61,13 +62,14 @@ public def toArray (a : @& Int16Array) : Array Int16 :=
 public def size (a : @& Int16Array) : Nat :=
   a.toArray.size
 
+/-- For internal use only. -/
+@[inline]
+public unsafe def usizeImpl (a : @& Int16Array) : USize := (unsafeCast a : Raw).size
+
 /--
 The size of `a` as a `USize`. Since `USize` can address all memory, no array has more elements than
 `USize` can count.
 -/
-@[inline]
-public unsafe def usizeImpl (a : @& Int16Array) : USize := (unsafeCast a : Raw).size
-
 @[implemented_by usizeImpl, simp, expose]
 public def usize (a : @& Int16Array) : USize :=
   a.size.toUSize
@@ -76,16 +78,19 @@ public def usize (a : @& Int16Array) : USize :=
 public theorem toNat_usize_le (a : Int16Array) : a.usize.toNat ≤ a.size := by
   simp [Nat.mod_le]
 
+/-- The element at the `USize` index `i`. It compiles to an inline load. -/
 @[extern c inline "((uint16_t*)lean_sarray_cptr(#1))[#2]", expose]
 public def uget (a : @& Int16Array) (i : USize) (h : i.toNat < a.size := by get_elem_tactic) :
     Int16 :=
   a.toArray.uget i h
 
+/-- The element at index `i`. -/
 @[expose]
 public def get (a : @& Int16Array) (i : @& Nat) (h : i < a.size := by get_elem_tactic) :
     Int16 :=
   a.toArray[i]
 
+/-- For internal use only. -/
 -- Public, like `mkImpl`, `usetImpl`, `setImpl` and `pushImpl` below: a private
 -- `implemented_by` target attached with a separate `attribute` command is not visible to other
 -- modules, so code there that uses `get`, `mk`, `toArray`, `uset` or `set` would fail to compile.
@@ -103,6 +108,7 @@ so that `uset` can be inlined into code in other modules.
 public unsafe def setUnsafe (a : Int16Array) (i : USize) (v : Int16) : Int16Array :=
   mk <| a.toArray.uset i v lcProof
 
+/-- For internal use only. -/
 @[inline, never_extract]
 public unsafe def ensureExclusiveImpl (a : Int16Array) : Int16Array :=
   unsafeCast (unsafeCast a : Raw).ensureExclusive
@@ -132,6 +138,7 @@ public unsafe def ensureCapacityGrowUnsafe (a : Int16Array) (n : Nat) : Int16Arr
   let s : Raw := unsafeCast a
   unsafeCast (s.copyWithCapacity (toUSizeChecked (max n s.size.toNat)) lcProof)
 
+/-- For internal use only. -/
 -- Inline, and made of public inline externs, so that the common path compiles to an inline capacity
 -- check in other modules.
 @[inline]
@@ -146,6 +153,7 @@ does not copy `a` just because it is shared.
 @[never_extract, implemented_by ensureCapacityImpl, expose]
 public def ensureCapacity (a : Int16Array) (n : Nat) : Int16Array := a
 
+/-- For internal use only. -/
 -- Inline, like `ensureCapacityImpl`: one capacity check, then one exclusivity check. The copy made
 -- when `a` lacks room is exclusive, so `a` is copied at most once.
 @[inline]
@@ -175,6 +183,7 @@ where
   loop (sz : USize) (r : Int16Array) (i : USize) : Int16Array :=
     if i < sz then loop sz (setUnsafe r i (a.uget i lcProof)) (i + 1) else r
 
+/-- For internal use only. -/
 public unsafe def mkImpl (a : Array Int16) : Int16Array :=
   mkWithCapacityImpl a a.size
 
@@ -189,6 +198,7 @@ private theorem toNat_toUSize_of_le {a : Int16Array} (hsize : a.size < USize.siz
   simp only [Nat.toUSize_eq, USize.toNat_ofNat']
   exact Nat.mod_eq_of_lt (by lia)
 
+/-- For internal use only. -/
 -- `toArrayImpl` and the other `Impl` functions below are proved equal to their specifications by
 -- `csimp` theorems, which make the compiler call them instead. A `csimp` theorem must be public,
 -- and so must the functions it names. The loops index with `USize`, so the proofs need
@@ -255,6 +265,7 @@ private unsafe def emptyWithCapacityImpl (capacity : Nat) : Int16Array :=
 public def emptyWithCapacity (capacity : Nat) : Int16Array :=
   mk #[]
 
+/-- The empty array. -/
 @[expose] public def empty : Int16Array := emptyWithCapacity 0
 
 public instance : EmptyCollection Int16Array := ⟨empty⟩
@@ -270,6 +281,7 @@ public def uset (a : Int16Array) (i : USize) (v : Int16)
     (h : i.toNat < a.size := by get_elem_tactic) : Int16Array :=
   mk (a.toArray.uset i v h)
 
+/-- For internal use only. -/
 -- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
 @[inline]
 public unsafe def usetImpl : type_of% @uset :=
@@ -277,21 +289,25 @@ public unsafe def usetImpl : type_of% @uset :=
 
 attribute [implemented_by usetImpl] uset
 
+/-- Replaces the element at index `i`, in place when `a` is not shared, like `uset`. -/
 @[expose]
 public def set (a : Int16Array) (i : Nat) (v : Int16) (h : i < a.size := by get_elem_tactic) :
     Int16Array :=
   mk (a.toArray.set i v h)
 
+/-- For internal use only. -/
 @[inline]
 public unsafe def setImpl : type_of% @set :=
   fun a i v _ => a.uset i.toUSize v lcProof
 
 attribute [implemented_by setImpl] set
 
+/-- The element at index `i`. Panics if `i` is out of bounds, and then returns `default`. -/
 @[expose]
 public def get! (a : @& Int16Array) (i : @& Nat) : Int16 :=
   if h : i < a.size then a.get i h else panic! "index out of bounds"
 
+/-- The element at index `i`, or `v₀` if `i` is out of bounds. -/
 @[expose]
 public def getD (a : @& Int16Array) (i : @& Nat) (v₀ : Int16) : Int16 :=
   if h : i < a.size then a.get i h else v₀
@@ -322,6 +338,7 @@ public unsafe def pushGrowUnsafe (a : Int16Array) (v : Int16) : Int16Array :=
   else
     panic! "out of memory"
 
+/-- For internal use only. -/
 -- Inline, and made of public inline externs, so that the common path compiles to inline C in other
 -- modules: one capacity check, one exclusivity check, a size bump and one store.
 @[inline]
@@ -334,6 +351,10 @@ public unsafe def pushImpl (a : Int16Array) (v : Int16) : Int16Array :=
   else
     pushGrowUnsafe a v
 
+/--
+Appends `v` to `a`, in place when `a` is not shared and has room. A full array grows to capacity
+`2 * capacity + 1`, so repeated pushes take amortized constant time.
+-/
 @[implemented_by pushImpl, expose]
 public def push (a : Int16Array) (v : Int16) : Int16Array :=
   mk (a.toArray.push v)
@@ -341,8 +362,8 @@ public def push (a : Int16Array) (v : Int16) : Int16Array :=
 /--
 Copies the `n` elements of `src` starting at index `srcOff` into `dest` starting at index `destOff`,
 in place, and grows the size of `dest` to `destOff + n` if it is smaller. Only valid when `dest` is
-exclusive, has capacity for `destOff + n` elements, and is not the same object as `src`, and when
-`destOff ≤ dest.size` and `srcOff + n ≤ src.size`.
+exclusive and has capacity for `destOff + n` elements, and when `destOff ≤ dest.size` and
+`srcOff + n ≤ src.size`. The ranges may overlap.
 -/
 @[inline]
 private unsafe def copySliceUnsafe (dest : Int16Array) (src : @& Int16Array)

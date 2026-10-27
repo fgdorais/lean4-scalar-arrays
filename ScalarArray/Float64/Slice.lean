@@ -227,6 +227,7 @@ public protected structure SliceIterator where
   /-- The rest of the slice. -/
   xs : Float64Array.Slice
 
+/-- One step of the iterator: the first element of the rest of the slice, if there is one. -/
 @[inline, expose]
 public def SliceIterator.step :
     Std.IterM (α := Float64Array.SliceIterator) Id Float →
@@ -326,6 +327,7 @@ public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : Float →
     (s : Float64Array.Slice) : m β :=
   loop s.size (Nat.le_refl _) init
 where
+  /-- The loop of `foldrM`: folds `f` over the first `i` elements of `s`, from last to first. -/
   @[specialize] loop : (i : Nat) → i ≤ s.size → β → m β
     | 0, _, b => pure b
     | i + 1, h, b => do loop i (Nat.le_of_succ_le h) (← f s[i] b)
@@ -335,6 +337,7 @@ private def foldrMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : Floa
     (init : β) (s : Float64Array.Slice) : m β :=
   s.foldrM f init
 
+/-- For internal use only. -/
 @[inline]
 public def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m]
     (f : Float → β → m β) (init : β) (s : Float64Array.Slice) : m β :=
@@ -399,6 +402,7 @@ public def findSomeRevM? {β : Type v} {m : Type v → Type w} [Monad m] (s : Fl
     (f : Float → m (Option β)) : m (Option β) :=
   loop s.size (Nat.le_refl _)
 where
+  /-- The loop of `findSomeRevM?`: searches the first `i` elements of `s`, from the end. -/
   @[specialize] loop : (i : Nat) → i ≤ s.size → m (Option β)
     | 0, _ => pure none
     | i + 1, h => do
@@ -411,6 +415,7 @@ private def findSomeRevMSlow {β : Type v} {m : Type v → Type w} [Monad m]
     (s : Float64Array.Slice) (f : Float → m (Option β)) : m (Option β) :=
   s.findSomeRevM? f
 
+/-- For internal use only. -/
 @[inline]
 public def findSomeRevMImpl {β : Type v} {m : Type v → Type w} [Monad m]
     (s : Float64Array.Slice) (f : Float → m (Option β)) : m (Option β) :=
@@ -519,6 +524,7 @@ public def beq (s t : Float64Array.Slice) : Bool :=
 private def beqSlow (s t : Float64Array.Slice) : Bool :=
   s.beq t
 
+/-- For internal use only. -/
 -- Compares the sizes as `USize`s, so that the loop knows that the indices into `t` stay in bounds.
 public def beqImpl (s t : Float64Array.Slice) : Bool :=
   if s.array.size < USize.size ∧ t.array.size < USize.size then
