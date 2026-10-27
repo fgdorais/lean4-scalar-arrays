@@ -145,8 +145,10 @@ to itself and `0.0 == -0.0`.
 
 ## How it works
 
-Each `XArray` is defined as an inductive type wrapping an `Array X`, and every operation is
-defined by what it does to that array. That model is what you reason about in proofs.
+Each `XArray` is defined as a quotient of `Array X` by the empty relation: `XArray.mk` and
+`XArray.toArray` convert between the two, and every operation is defined by what it does to that
+array. That model is what you reason about in proofs. It is a quotient rather than a structure so
+that compiled code can't match on it and run `Array` code on what is really a scalar array.
 
 At runtime, an `XArray` is a Lean scalar array object: a small header (element size, size and
 capacity) followed by the elements stored unboxed. The operations are implemented through
