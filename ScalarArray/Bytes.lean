@@ -123,8 +123,10 @@ private unsafe def Slice.toBytesLEImpl (s : UInt16Array.Slice) : ByteArray :=
   if hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (2 * s.start.toUSize) (2 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (2 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 2 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : UInt16Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -217,8 +219,10 @@ private unsafe def Slice.toBytesBEImpl (s : UInt16Array.Slice) : ByteArray :=
   if !hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (2 * s.start.toUSize) (2 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (2 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 2 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : UInt16Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -338,8 +342,10 @@ private unsafe def Slice.toBytesLEImpl (s : UInt32Array.Slice) : ByteArray :=
   if hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (4 * s.start.toUSize) (4 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (4 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 4 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : UInt32Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -438,8 +444,10 @@ private unsafe def Slice.toBytesBEImpl (s : UInt32Array.Slice) : ByteArray :=
   if !hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (4 * s.start.toUSize) (4 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (4 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 4 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : UInt32Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -565,8 +573,10 @@ private unsafe def Slice.toBytesLEImpl (s : UInt64Array.Slice) : ByteArray :=
   if hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (8 * s.start.toUSize) (8 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (8 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 8 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : UInt64Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -677,8 +687,10 @@ private unsafe def Slice.toBytesBEImpl (s : UInt64Array.Slice) : ByteArray :=
   if !hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (8 * s.start.toUSize) (8 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (8 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 8 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : UInt64Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -816,8 +828,10 @@ private unsafe def Slice.toBytesLEImpl (s : Int16Array.Slice) : ByteArray :=
   if hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (2 * s.start.toUSize) (2 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (2 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 2 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : Int16Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -912,8 +926,10 @@ private unsafe def Slice.toBytesBEImpl (s : Int16Array.Slice) : ByteArray :=
   if !hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (2 * s.start.toUSize) (2 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (2 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 2 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : Int16Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -1035,8 +1051,10 @@ private unsafe def Slice.toBytesLEImpl (s : Int32Array.Slice) : ByteArray :=
   if hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (4 * s.start.toUSize) (4 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (4 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 4 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : Int32Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -1137,8 +1155,10 @@ private unsafe def Slice.toBytesBEImpl (s : Int32Array.Slice) : ByteArray :=
   if !hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (4 * s.start.toUSize) (4 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (4 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 4 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : Int32Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -1266,8 +1286,10 @@ private unsafe def Slice.toBytesLEImpl (s : Int64Array.Slice) : ByteArray :=
   if hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (8 * s.start.toUSize) (8 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (8 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 8 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : Int64Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -1380,8 +1402,10 @@ private unsafe def Slice.toBytesBEImpl (s : Int64Array.Slice) : ByteArray :=
   if !hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (8 * s.start.toUSize) (8 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (8 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 8 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : Int64Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -1498,8 +1522,10 @@ private unsafe def Slice.toBytesLEImpl (s : Float32Array.Slice) : ByteArray :=
   if hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (4 * s.start.toUSize) (4 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (4 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 4 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : Float32Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -1576,8 +1602,10 @@ private unsafe def Slice.toBytesBEImpl (s : Float32Array.Slice) : ByteArray :=
   if !hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (4 * s.start.toUSize) (4 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (4 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 4 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : Float32Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -1658,8 +1686,10 @@ private unsafe def Slice.toBytesLEImpl (s : Float64Array.Slice) : ByteArray :=
   if hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (8 * s.start.toUSize) (8 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (8 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 8 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : Float64Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
@@ -1744,8 +1774,10 @@ private unsafe def Slice.toBytesBEImpl (s : Float64Array.Slice) : ByteArray :=
   if !hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (8 * s.start.toUSize) (8 * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate (8 * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := 8 * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : Float64Array) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
