@@ -1,6 +1,6 @@
 name = "«lean4-scalar-arrays»"
 version = "1.0.0"
-defaultTargets = ["ScalarArray", "ScalarArrayTest"]
+defaultTargets = ["ScalarArray", "ScalarArrayTest", "bench"]
 testDriver = "ScalarArrayTest"
 
 # Linters that are off by default.
@@ -21,3 +21,7 @@ precompileModules = true
 name = "batteries"
 git = "https://github.com/leanprover-community/batteries"
 rev = "main"
+
+[[lean_exe]]
+name = "bench"
+root = "ScalarArrayBench"

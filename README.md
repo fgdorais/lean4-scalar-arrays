@@ -196,6 +196,13 @@ Each type `X` has a module `ScalarArray.X`, which imports its parts:
 
 The tests in `ScalarArrayTest.X` are split the same way.
 
+`lake exe bench` times the main operations of `UInt8Array`, `UInt32Array`, `UInt64Array` and
+`Float64Array`, and compares each with the same operation on core's `ByteArray`, `Array` or
+`FloatArray`. `lake build` compiles it so that it keeps up with the API, but CI doesn't run it.
+To run it on GitHub, add the `benchmark` label to a pull request, which compares the pull request
+with its base, or start the Benchmarks workflow from the Actions tab. The results are in the run's
+summary.
+
 The source and test files for the twelve types are generated from the `UInt16` versions, in
 `ScalarArray/UInt16/` and `ScalarArrayTest/UInt16/`. Make changes there, then regenerate the other
 types:
