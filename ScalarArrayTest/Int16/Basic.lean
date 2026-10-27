@@ -411,3 +411,21 @@ example (a : Int16Array) : Int16 := match a with | ⟨a⟩ => a[0]!
 
 #guard Int16Array.copiesSliceInPlace 1
 #guard Int16Array.copySliceGrowth 1
+
+-- Copying an array onto itself, shifted by one in each direction, so that the two ranges overlap.
+-- The arrays are long enough that a plain `memcpy` would not happen to get them right, and the
+-- expected elements come from `f`, not from the array that was overwritten.
+@[noinline] def Int16Array.copySliceOntoItselfForward (x : Int16) : Bool :=
+  let f (i : Nat) : Int16 := (i % 251).toInt16 + x
+  let a := Int16Array.ofFn (n := 10000) fun i => f i
+  let b := a.copySlice 0 a 1 9999
+  b.size == 10000 && b[0]! == f 0 && (List.range 9999).all fun i => b[i + 1]! == f i
+
+@[noinline] def Int16Array.copySliceOntoItselfBackward (x : Int16) : Bool :=
+  let f (i : Nat) : Int16 := (i % 251).toInt16 + x
+  let a := Int16Array.ofFn (n := 10000) fun i => f i
+  let b := a.copySlice 1 a 0 9999
+  b.size == 10000 && b[9999]! == f 9999 && (List.range 9999).all fun i => b[i]! == f (i + 1)
+
+#guard Int16Array.copySliceOntoItselfForward 1
+#guard Int16Array.copySliceOntoItselfBackward 1
