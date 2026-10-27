@@ -42,6 +42,8 @@ rev = "main"
 ```
 
 Then `import ScalarArray` for every type, or `import ScalarArray.UInt32` and so on for just one.
+The experimental `ScalarArray.Bytes`, which converts the arrays to and from `ByteArray` in little-
+or big-endian byte order, is not part of `import ScalarArray` and has to be imported on its own.
 
 The operations are implemented in C, so the library is built with `precompileModules`, and Lake
 loads the compiled code whenever a file that imports it runs `#eval` or `#guard`. This works in the
