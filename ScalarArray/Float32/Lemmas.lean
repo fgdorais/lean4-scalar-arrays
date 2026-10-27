@@ -184,7 +184,7 @@ public theorem size_eq_zero_iff {a : Float32Array} : a.size = 0 ↔ a = empty :=
 
 public theorem getElem!_eq_getElem!_toArray (a : Float32Array) (i : Nat) :
     a[i]! = a.toArray[i]! := by
-  by_cases h : i < a.size <;> simp [h] <;> rfl
+  by_cases h : i < a.size <;> simp [h]
 
 @[simp] public theorem toArray_ofList (l : List Float32) : (ofList l).toArray = l.toArray := rfl
 
@@ -473,7 +473,8 @@ public theorem findIdx?_eq (a : Float32Array) (p : Float32 → Bool) (start : Na
 
 private theorem findFinIdx?_loop_eq (a : Float32Array) (p : Float32 → Bool) (i : Nat) :
     (findFinIdx?.loop a p i).map Fin.val = findIdx?.loop a p i := by
-  fun_induction findFinIdx?.loop a p i <;> rw [findIdx?.loop] <;> simp_all <;> lia
+  fun_induction findFinIdx?.loop a p i <;> rw [findIdx?.loop] <;> simp_all
+  lia
 
 @[simp] public theorem map_val_findFinIdx? (a : Float32Array) (p : Float32 → Bool) (start : Nat) :
     (a.findFinIdx? p start).map Fin.val = a.findIdx? p start := by
@@ -818,7 +819,9 @@ private theorem foldl_count_eq (p : Float32 → Bool) (l : List Float32) (n : Na
     l.foldl (fun n x => if p x then n + 1 else n) n = n + l.countP p := by
   induction l generalizing n with
   | nil => rfl
-  | cons x l ih => by_cases hx : p x <;> simp [ih, hx] <;> lia
+  | cons x l ih =>
+    by_cases hx : p x <;> simp [ih, hx]
+    lia
 
 @[simp] public theorem Slice.count_eq_countP_toList_copy (s : Float32Array.Slice)
     (p : Float32 → Bool) : s.count p = s.copy.toList.countP p := by
@@ -834,7 +837,8 @@ private theorem Slice.findSomeRevM?_loop_eq (p : Float32 → Bool) (s : Float32A
   | succ i ih =>
     have hi : i < s.copy.toList.length := by simp; lia
     rw [Slice.findSomeRevM?.loop, List.take_add_one, List.getElem?_eq_getElem hi]
-    by_cases hp : p s[i] <;> simp [ih, hp] <;> rfl
+    by_cases hp : p s[i] <;> simp [ih, hp]
+    rfl
 
 @[simp] public theorem Slice.findRev?_eq_find?_reverse_toList_copy (s : Float32Array.Slice)
     (p : Float32 → Bool) : s.findRev? p = s.copy.toList.reverse.find? p := by

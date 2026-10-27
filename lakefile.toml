@@ -3,6 +3,9 @@ version = "1.0.0"
 defaultTargets = ["ScalarArray", "ScalarArrayTest"]
 testDriver = "ScalarArrayTest"
 
+# Linters that are off by default.
+leanOptions = { linter.missingDocs = true, linter.extra = true }
+
 [[lean_lib]]
 name = "ScalarArray"
 # All modules, including the experimental `ScalarArray.Bytes` that the root does not import.

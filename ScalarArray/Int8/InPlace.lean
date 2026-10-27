@@ -232,7 +232,9 @@ private theorem getElem_reverse_loop (s : Int8Array.Slice) (i j : Nat) (hj : j <
   simp only [reverse, hs, ↓reduceDIte]
   rw [getElem_reverse_loop _ _ _ _ (by lia) _ h']
   simp only [Nat.zero_le, true_and, Nat.zero_add]
-  split <;> (try congr 1) <;> lia
+  split
+  · congr 1
+  · lia
 
 @[simp] public theorem toList_copy_reverse (s : Int8Array.Slice) :
     s.reverse.copy.toList = s.copy.toList.reverse := by
