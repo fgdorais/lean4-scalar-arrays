@@ -145,8 +145,10 @@ to itself and `0.0 == -0.0`.
 
 ## How it works
 
-Each `XArray` is defined as an inductive type wrapping an `Array X`, and every operation is
-defined by what it does to that array. That model is what you reason about in proofs.
+Each `XArray` is defined as a quotient of `Array X` by the empty relation: `XArray.mk` and
+`XArray.toArray` convert between the two, and every operation is defined by what it does to that
+array. That model is what you reason about in proofs. It is a quotient rather than a structure so
+that compiled code can't match on it and run `Array` code on what is really a scalar array.
 
 At runtime, an `XArray` is a Lean scalar array object: a small header (element size, size and
 capacity) followed by the elements stored unboxed. The operations are implemented through
@@ -175,15 +177,30 @@ Lean model. They cover every operation, sharing (writes to a shared array must
 not affect other references to it), indices beyond 16 bits, huge `Nat` indices, the runtime
 element size and capacity, and bit-exact round-trips of special floating-point values.
 
-The source and test files for the twelve types are generated from the `UInt16` versions,
-`ScalarArray/UInt16.lean` and `ScalarArrayTest/UInt16.lean`. Make changes there, then regenerate
-the other types:
+Each type `X` has a module `ScalarArray.X`, which imports its parts:
+
+| Part | Contents |
+|---|---|
+| `ScalarArray.X.Basic` | the type and its model, reads, writes, `push`, capacity, `append`, `copySlice` |
+| `ScalarArray.X.Array` | removing elements, search, building arrays, iteration, equality, hashing, printing |
+| `ScalarArray.X.Slice` | slices: the type, slice notation, reads, iterators, folds, equality |
+| `ScalarArray.X.Lemmas` | lemmas about arrays and slices |
+| `ScalarArray.X.InPlace` | writes through slices and in-place folds |
+| `ScalarArray.X.Decidable` | decidable membership, slice hashing; not for `Float32` and `Float64` |
+
+The tests in `ScalarArrayTest.X` are split the same way.
+
+The source and test files for the twelve types are generated from the `UInt16` versions, in
+`ScalarArray/UInt16/` and `ScalarArrayTest/UInt16/`. Make changes there, then regenerate the other
+types:
 
 ```bash
 python3 scripts/generate.py
 ```
 
 `python3 scripts/generate.py --check` changes nothing and fails if a generated file is out of date.
+The generated files are marked `linguist-generated` in `.gitattributes`, so GitHub collapses them in
+diffs.
 
 -----
 
