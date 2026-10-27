@@ -172,3 +172,15 @@ example (a : Int64Array) (start len : USize) (h : start.toNat + len.toNat ≤ a.
     (a.foldlInPlaceRange start len h 0 f).1.size = a.size ∧
       (a.foldrInPlaceRange start len h 0 f).1.size = a.size := by
   simp
+
+/-! `grind` -/
+
+example (a : Int64Array) (v w : Int64) : ((a.push v).push w).size = a.size + 2 := by grind
+example (a : Int64Array) (i : Nat) (v : Int64) (h : i < a.size) :
+    (a.set i v h)[i]'(by grind) = v := by grind
+example (a b : Int64Array) (i : Nat) (h : i < a.size) :
+    (a ++ b)[i]'(by grind) = a[i] := by grind
+example (a : Int64Array) (v x : Int64) (h : x ∈ a) : x ∈ a.push v := by grind
+example (a : Int64Array) (i : Nat) (v : Int64) (j : Nat) (h : j < a.size) (hij : i ≠ j) :
+    (a.set! i v)[j]'(by grind) = a[j] := by grind
+example (x : Int64) : ¬x ∈ (Int64Array.empty) := by grind
