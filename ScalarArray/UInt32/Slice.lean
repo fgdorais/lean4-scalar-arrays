@@ -327,6 +327,7 @@ public def foldrM {β : Type v} {m : Type v → Type w} [Monad m] (f : UInt32 �
     (s : UInt32Array.Slice) : m β :=
   loop s.size (Nat.le_refl _) init
 where
+  /-- The loop of `foldrM`: folds `f` over the first `i` elements of `s`, from last to first. -/
   @[specialize] loop : (i : Nat) → i ≤ s.size → β → m β
     | 0, _, b => pure b
     | i + 1, h, b => do loop i (Nat.le_of_succ_le h) (← f s[i] b)
@@ -401,6 +402,7 @@ public def findSomeRevM? {β : Type v} {m : Type v → Type w} [Monad m] (s : UI
     (f : UInt32 → m (Option β)) : m (Option β) :=
   loop s.size (Nat.le_refl _)
 where
+  /-- The loop of `findSomeRevM?`: searches the first `i` elements of `s`, from the end. -/
   @[specialize] loop : (i : Nat) → i ≤ s.size → m (Option β)
     | 0, _ => pure none
     | i + 1, h => do
