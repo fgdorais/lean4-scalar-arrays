@@ -189,8 +189,10 @@ private unsafe def Slice.toBytes{order}Impl (s : {A}.Slice) : ByteArray :=
   if {host} then
     unsafeCast (copyBytes 1 (unsafeCast s.array) ({n} * s.start.toUSize) ({n} * s.size.toUSize))
   else
-    (loop s.array s.stop.toUSize (UInt8Array.replicate ({n} * s.size) 0) s.start.toUSize
-      0).toByteArray
+    -- Uninitialized: the loop stores every byte, so filling it first would be a wasted pass.
+    let m := {n} * s.size.toUSize
+    let r : UInt8Array := unsafeCast (Raw.allocate 1 m m lcProof)
+    (loop s.array s.stop.toUSize r s.start.toUSize 0).toByteArray
 where
   loop (a : {A}) (stop : USize) (r : UInt8Array) (i j : USize) : UInt8Array :=
     if i < stop then
