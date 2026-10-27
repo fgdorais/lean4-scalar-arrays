@@ -114,7 +114,7 @@ public instance : EmptyCollection Int8Array.Slice := ⟨Slice.empty⟩
 
 public instance : Inhabited Int8Array.Slice := ⟨Slice.empty⟩
 
-/-- The elements of the slice, copied into a new array with a single `memcpy`. -/
+/-- The elements of the slice, copied into a new array with a single `memmove`. -/
 @[expose]
 public def copy (s : Int8Array.Slice) : Int8Array :=
   s.array.extract s.start s.stop

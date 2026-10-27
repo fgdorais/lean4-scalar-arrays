@@ -65,7 +65,10 @@ public def size (a : @& Int64Array) : Nat :=
 The size of `a` as a `USize`. Since `USize` can address all memory, no array has more elements than
 `USize` can count.
 -/
-@[extern "lean_sarray_size", simp, expose]
+@[inline]
+public unsafe def usizeImpl (a : @& Int64Array) : USize := (unsafeCast a : Raw).size
+
+@[implemented_by usizeImpl, simp, expose]
 public def usize (a : @& Int64Array) : USize :=
   a.size.toUSize
 
@@ -100,15 +103,18 @@ so that `uset` can be inlined into code in other modules.
 public unsafe def setUnsafe (a : Int64Array) (i : USize) (v : Int64) : Int64Array :=
   mk <| a.toArray.uset i v lcProof
 
+@[inline, never_extract]
+public unsafe def ensureExclusiveImpl (a : Int64Array) : Int64Array :=
+  unsafeCast (unsafeCast a : Raw).ensureExclusive
+
 /--
 Returns `a` itself when it is not shared, and a copy otherwise. Logically this is the identity.
 It is useful before a run of in-place writes, so that only the first one can copy.
 -/
--- The same runtime function as the private `Raw.ensureExclusive`, which code in other
--- modules can't reach. `never_extract`: once `uset` or `push` is inlined, `c.ensureExclusive` on a
--- closed array `c` would otherwise be hoisted into a shared constant, which the following in-place
--- write would then modify.
-@[never_extract, extern "lean_sarray_ensure_exclusive", expose]
+-- `never_extract`: once `uset` or `push` is inlined, `c.ensureExclusive` on a closed array `c`
+-- would otherwise be hoisted into a shared constant, which the following in-place write would then
+-- modify.
+@[never_extract, implemented_by ensureExclusiveImpl, expose]
 public def ensureExclusive (a : Int64Array) : Int64Array := a
 
 private def toUSizeChecked (n : Nat) : USize :=
@@ -343,7 +349,7 @@ private unsafe def copySliceUnsafe (dest : Int64Array) (src : @& Int64Array)
     (srcOff destOff n : USize) : Int64Array :=
   let src : Raw := unsafeCast src
   let esz := src.elemSize.toUSize
-  let d := (unsafeCast dest : Raw).memcpyUnsafe src (srcOff * esz) (destOff * esz) (n * esz)
+  let d := (unsafeCast dest : Raw).memmoveUnsafe src (srcOff * esz) (destOff * esz) (n * esz)
   unsafeCast (d.resizeUnsafe (max d.size (destOff + n)) lcProof lcProof)
 
 private unsafe def appendImpl (a b : Int64Array) : Int64Array :=

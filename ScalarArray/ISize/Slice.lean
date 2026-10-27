@@ -114,7 +114,7 @@ public instance : EmptyCollection ISizeArray.Slice := ⟨Slice.empty⟩
 
 public instance : Inhabited ISizeArray.Slice := ⟨Slice.empty⟩
 
-/-- The elements of the slice, copied into a new array with a single `memcpy`. -/
+/-- The elements of the slice, copied into a new array with a single `memmove`. -/
 @[expose]
 public def copy (s : ISizeArray.Slice) : ISizeArray :=
   s.array.extract s.start s.stop

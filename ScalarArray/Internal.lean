@@ -13,8 +13,10 @@ element size, the size and the capacity, followed by the elements stored unboxed
 
 This module describes the header, with allocation, size and capacity queries, copying and
 resizing, and copies of raw bytes. The typed array modules use it as their runtime representation
-through `import all ScalarArray.Internal`, and reach it with `unsafeCast`. Only what their inlined
-code calls is public: the type, `capacity` and `resizeUnsafe`. Inlined code can only use
+through `import all ScalarArray.Internal`, and reach it with `unsafeCast`. Every `extern` on scalar
+arrays is here, except the element-typed reads and writes. Only what the typed modules' inlined
+code calls is public: the type, `size`, `capacity`, `resizeUnsafe` and `ensureExclusive`. Inlined
+code can only use
 declarations of publicly imported modules, so the typed modules also import this one publicly and
 these are visible wherever `ScalarArray` is imported. They are all in `ScalarArray.Raw`, out of the
 way of the typed arrays. The rest is private.
@@ -35,7 +37,7 @@ private def elemSize : @& Raw → UInt32
   | allocate elemSize _ _ _ => elemSize
 
 @[extern "lean_sarray_size"]
-private def size : @& Raw → USize
+public def size : @& Raw → USize
   | allocate _ size _ _ => size
 
 @[extern "lean_sarray_capacity"]
@@ -59,17 +61,23 @@ public unsafe def resizeUnsafe (a : Raw) (size : USize) (h : size ≤ a.capacity
     (_exclusive : isExclusiveUnsafe a := by rfl) : Raw :=
   allocate a.elemSize size a.capacity h
 
-@[extern "lean_sarray_ensure_exclusive"]
-private def ensureExclusive (a : Raw) : Raw := a.copy
+-- `never_extract`: once inlined, `c.ensureExclusive` on a closed array `c` would otherwise be
+-- hoisted into a shared constant, which the following in-place write would then modify.
+@[never_extract, extern "lean_sarray_ensure_exclusive"]
+public def ensureExclusive (a : Raw) : Raw := a.copy
 
 /--
 Copies `n` bytes of the data of `src`, starting at byte `srcOff`, into the data of `dest`, starting
 at byte `destOff`. Only valid when `dest` is exclusive and both ranges are within the capacities.
+The ranges may overlap.
 -/
+-- `memmove` rather than `memcpy`, so that overlapping ranges are never undefined behavior; for
+-- ranges that don't overlap it is as fast. A builtin, since `lean.h` doesn't include `string.h`.
 -- TODO: core has no runtime function that copies a slice of a scalar array with any element size;
 -- `lean_byte_array_copy_slice` only works for bytes. Replace this once core has one.
-@[extern c inline "#1;\n__builtin_memcpy(lean_sarray_cptr(#1) + #4, lean_sarray_cptr(#2) + #3, #5)"]
-private unsafe def memcpyUnsafe :
+@[extern c inline "#1;\n__builtin_memmove(lean_sarray_cptr(#1) + #4, \
+  lean_sarray_cptr(#2) + #3, #5)"]
+private unsafe def memmoveUnsafe :
     Raw → @& Raw → (srcOff destOff n : USize) → Raw
   | dest, _, _, _, _ => dest
 
