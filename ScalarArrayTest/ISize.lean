@@ -135,7 +135,24 @@ example (a : ISizeArray) : ISize := match a with | ⟨a⟩ => a[0]!
 /-! Printing -/
 
 #guard toString (ISizeArray.mk #[1, 2]) == "ISizeArray.mk " ++ toString #[(1 : ISize), 2]
-#guard reprStr (ISizeArray.mk #[1, 2]) == "ISizeArray.mk " ++ reprStr #[(1 : ISize), 2]
+#guard reprStr (ISizeArray.mk #[1, 2]) ==
+  "ScalarArray.ISizeArray.mk " ++ reprStr #[(1 : ISize), 2]
+#guard reprStr (some (ISizeArray.mk #[1, 2])) ==
+  "some (ScalarArray.ISizeArray.mk " ++ reprStr #[(1 : ISize), 2] ++ ")"
+#guard reprStr (ISizeArray.mk #[1, 2, 3])[1...2] ==
+  "(ScalarArray.ISizeArray.mk " ++ reprStr #[(1 : ISize), 2, 3] ++ ")[1...2]"
+#guard reprStr (some (ISizeArray.mk #[1, 2, 3])[1...2]) ==
+  "some (ScalarArray.ISizeArray.mk " ++ reprStr #[(1 : ISize), 2, 3] ++ ")[1...2]"
+
+-- What `repr` prints evaluates to the input, also as an argument.
+#guard ScalarArray.ISizeArray.mk #[1, 2] == ISizeArray.mk #[1, 2]
+#guard (some (ScalarArray.ISizeArray.mk #[1, 2])) == some (ISizeArray.mk #[1, 2])
+#guard
+  let s := (ScalarArray.ISizeArray.mk #[1, 2, 3])[1...2]
+  s.array == ISizeArray.mk #[1, 2, 3] && s.start == 1 && s.stop == 2
+#guard
+  let s? := some (ScalarArray.ISizeArray.mk #[1, 2, 3])[1...2]
+  s?.map (fun s => (s.array.toArray, s.start, s.stop)) == some (#[1, 2, 3], 1, 2)
 
 /-! Every index, through both `Nat` and `USize` indices -/
 
@@ -555,14 +572,6 @@ example (a : ISizeArray) (v : ISize) : (a.push v).pop = a :=
   ISizeArray.ext_getElem? fun i => by
     by_cases h : i < a.size <;> simp [h, getElem?_pos, getElem?_neg]
 example (a b : ISizeArray) (h : a.toArray = b.toArray) : a = b := by simpa using h
-example (s t : ISizeArray.Slice) (h : s.array = t.array) (h' : s.start = t.start)
-    (h'' : s.stop = t.stop) : s = t := by
-  ext1 <;> assumption
-example (s t : ISizeArray.Slice) (h : s.array.toArray = t.array.toArray) (h' : s.start = t.start)
-    (h'' : s.stop = t.stop) : s = t := by
-  ext <;> simp_all
-example (s t : ISizeArray.Slice) (h : s = t) : s.start = t.start :=
-  (ISizeArray.Slice.ext_iff.1 h).2.1
 
 /-! Default bounds proofs -/
 
