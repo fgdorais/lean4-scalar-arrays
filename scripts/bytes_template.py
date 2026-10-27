@@ -41,8 +41,9 @@ in-place byte swaps of the integer arrays. Floats are converted through their IE
 
 The results do not depend on the byte order of the machine. That byte order is computed once, when
 the module is initialized: when a conversion asks for the machine's own order, it copies the whole
-array at once. Otherwise it is a loop of shifts and byte accesses, which the C compiler turns into
-whole-word loads, stores and byte swap instructions.
+array at once. Otherwise `ofBytes…` copies and then swaps the bytes of each element in place, and
+`toBytes…` is a loop of shifts and byte accesses, which the C compiler turns into whole-word loads,
+stores and byte swap instructions.
 
 **Experimental.** The names and types here may still change. `import ScalarArray` does not import
 this module; use `import ScalarArray.Bytes`.
@@ -129,10 +130,6 @@ def idx(n, k):
     return f'{n} * i' if k == 0 else f'{n} * i + {k}'
 
 
-def uidx(k):
-    return 'i' if k == 0 else f'(i + {k})'
-
-
 def section(name, elem, u, n, to_u, of_u, swap):
     roundtrip = swap
     shows = ''.join(f'\n      show ({idx(n, k)}) / {n} = i by lia, show ({idx(n, k)}) % {n} = {k} by lia,'
@@ -144,8 +141,32 @@ def section(name, elem, u, n, to_u, of_u, swap):
                   f'    congr 1\n    generalize s[i].to{u} = x\n    bv_decide')
     A = name + 'Array'
     out = [f'\nnamespace {A}\n']
-    push_arg = 'u' if of_u == '{}' else '(' + of_u.format('u') + ')'
     wrap = of_u != '{}'
+    if swap:
+        out.append(f'''
+private def byteSwapImpl (a : {A}) : {A} :=
+  a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
+
+/-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
+@[implemented_by byteSwapImpl, expose]
+public def byteSwap (a : {A}) : {A} :=
+  mk (a.toArray.map {elem}.byteSwap)
+
+@[simp] public theorem toArray_byteSwap (a : {A}) :
+    a.byteSwap.toArray = a.toArray.map {elem}.byteSwap :=
+  rfl
+
+@[simp] public theorem size_byteSwap (a : {A}) : a.byteSwap.size = a.size := by
+  simp [← size_toArray]
+
+@[simp] public theorem getElem_byteSwap (a : {A}) (i : Nat) (h : i < a.byteSwap.size) :
+    a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
+  rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
+  simp
+
+@[simp] public theorem byteSwap_byteSwap (a : {A}) : a.byteSwap.byteSwap = a := by
+  apply ext_getElem <;> simp
+''')
     for order in ['LE', 'BE']:
         doc = ORDER_DOC[order]
         host = 'hostLittleEndian' if order == 'LE' else '!hostLittleEndian'
@@ -162,10 +183,6 @@ def section(name, elem, u, n, to_u, of_u, swap):
         combine = ' |||\n        '.join(
             (f'(b[{idx(n, k)}]\'(by lia)).to{u}' if shift(order, n, k) == 0 else
              f'((b[{idx(n, k)}]\'(by lia)).to{u} <<< {shift(order, n, k)})')
-            for k in range(n))
-        combine_impl = ' |||\n          '.join(
-            (f'(b.uget {uidx(k)} lcProof).to{u}' if shift(order, n, k) == 0 else
-             f'((b.uget {uidx(k)} lcProof).to{u} <<< {shift(order, n, k)})')
             for k in range(n))
         out.append(f'''
 private unsafe def Slice.toBytes{order}Impl (s : {A}.Slice) : ByteArray :=
@@ -196,18 +213,14 @@ public def toBytes{order} (a : {A}) : ByteArray := a.toSlice.toBytes{order}
 
 private unsafe def ofBytes{order}?Impl (b : ByteArray) : Option {A} :=
   if b.size % {n} = 0 then
-    if {host} then some (unsafeCast (copyBytes {n} (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / {n})) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes {n} (unsafeCast b) 0 b.usize
+    if {host} then
+      some (unsafeCast r)
+    else
+      some (unsafeCast ({u}Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : {A}) (i : USize) : {A} :=
-    if i < b.usize then
-      let u :=
-          {combine_impl}
-      loop (r.push {push_arg}) (i + {n})
-    else
-      r
 
 /--
 Reads `b` as elements, each in {doc}.
@@ -261,31 +274,6 @@ public def ofBytes{order}! (b : ByteArray) : {A} :=
 @[simp] public theorem ofBytes{order}?_toBytes{order} (a : {A}) :
     ofBytes{order}? a.toBytes{order} = some a := by
   simp [toBytes{order}]
-''')
-    if swap:
-        out.append(f'''
-private def byteSwapImpl (a : {A}) : {A} :=
-  a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
-
-/-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
-@[implemented_by byteSwapImpl, expose]
-public def byteSwap (a : {A}) : {A} :=
-  mk (a.toArray.map {elem}.byteSwap)
-
-@[simp] public theorem toArray_byteSwap (a : {A}) :
-    a.byteSwap.toArray = a.toArray.map {elem}.byteSwap :=
-  rfl
-
-@[simp] public theorem size_byteSwap (a : {A}) : a.byteSwap.size = a.size := by
-  simp [← size_toArray]
-
-@[simp] public theorem getElem_byteSwap (a : {A}) (i : Nat) (h : i < a.byteSwap.size) :
-    a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
-  rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
-  simp
-
-@[simp] public theorem byteSwap_byteSwap (a : {A}) : a.byteSwap.byteSwap = a := by
-  apply ext_getElem <;> simp
 ''')
     out.append(f'\nend {A}\n')
     return ''.join(out)
@@ -374,6 +362,22 @@ def {bytes_} : ByteArray :=
 #guard
   {P}.toBytesLE.data.reverse ==
     ({A}.mk #[{y}, {x}]).toBytesBE.data
+''')
+    if not swap:
+        bits = {4: '0x00000000, 0x80000000, 0x7F800000, 0xFF800000,\n    '
+                   '0x7FC00000, 0x00000001, 0x7F7FFFFF',
+                8: '0x0000000000000000, 0x8000000000000000,\n    '
+                   '0x7FF0000000000000, 0xFFF0000000000000, 0x7FF8000000000000,\n    '
+                   '0x0000000000000001, 0x7FEFFFFFFFFFFFFF'}[n]
+        out.append(f'''
+-- Signed zeros, infinities, NaN, the smallest subnormal and the largest finite value keep their
+-- bits in both byte orders, which `==` on floats couldn't tell. Only the canonical NaN: `ofBits`
+-- and `toBits` in core don't keep NaN payloads.
+#guard
+  let bits : Array {u} := #[{bits}]
+  let a := {A}.mk (bits.map {elem}.ofBits)
+  ({A}.ofBytesLE! a.toBytesLE).toArray.map (·.toBits) == bits &&
+    ({A}.ofBytesBE! a.toBytesBE).toArray.map (·.toBits) == bits
 ''')
     if swap:
         out.append(f'''

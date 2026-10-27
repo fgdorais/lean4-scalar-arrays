@@ -386,6 +386,16 @@ def Float32BytesBE : ByteArray :=
   Float32Pair.toBytesLE.data.reverse ==
     (Float32Array.mk #[-2.0, 1.0]).toBytesBE.data
 
+-- Signed zeros, infinities, NaN, the smallest subnormal and the largest finite value keep their
+-- bits in both byte orders, which `==` on floats couldn't tell. Only the canonical NaN: `ofBits`
+-- and `toBits` in core don't keep NaN payloads.
+#guard
+  let bits : Array UInt32 := #[0x00000000, 0x80000000, 0x7F800000, 0xFF800000,
+    0x7FC00000, 0x00000001, 0x7F7FFFFF]
+  let a := Float32Array.mk (bits.map Float32.ofBits)
+  (Float32Array.ofBytesLE! a.toBytesLE).toArray.map (·.toBits) == bits &&
+    (Float32Array.ofBytesBE! a.toBytesBE).toArray.map (·.toBits) == bits
+
 /-! `Float64Array` -/
 
 def Float64Pair : Float64Array := Float64Array.mk #[1.0, -2.0]
@@ -425,3 +435,14 @@ def Float64BytesBE : ByteArray :=
 #guard
   Float64Pair.toBytesLE.data.reverse ==
     (Float64Array.mk #[-2.0, 1.0]).toBytesBE.data
+
+-- Signed zeros, infinities, NaN, the smallest subnormal and the largest finite value keep their
+-- bits in both byte orders, which `==` on floats couldn't tell. Only the canonical NaN: `ofBits`
+-- and `toBits` in core don't keep NaN payloads.
+#guard
+  let bits : Array UInt64 := #[0x0000000000000000, 0x8000000000000000,
+    0x7FF0000000000000, 0xFFF0000000000000, 0x7FF8000000000000,
+    0x0000000000000001, 0x7FEFFFFFFFFFFFFF]
+  let a := Float64Array.mk (bits.map Float.ofBits)
+  (Float64Array.ofBytesLE! a.toBytesLE).toArray.map (·.toBits) == bits &&
+    (Float64Array.ofBytesBE! a.toBytesBE).toArray.map (·.toBits) == bits

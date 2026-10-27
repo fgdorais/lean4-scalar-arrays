@@ -24,8 +24,9 @@ in-place byte swaps of the integer arrays. Floats are converted through their IE
 
 The results do not depend on the byte order of the machine. That byte order is computed once, when
 the module is initialized: when a conversion asks for the machine's own order, it copies the whole
-array at once. Otherwise it is a loop of shifts and byte accesses, which the C compiler turns into
-whole-word loads, stores and byte swap instructions.
+array at once. Otherwise `ofBytes…` copies and then swaps the bytes of each element in place, and
+`toBytes…` is a loop of shifts and byte accesses, which the C compiler turns into whole-word loads,
+stores and byte swap instructions.
 
 **Experimental.** The names and types here may still change. `import ScalarArray` does not import
 this module; use `import ScalarArray.Bytes`.
@@ -95,6 +96,29 @@ private unsafe def copyBytes (elemSize : UInt32) (a : @& Raw) (off len : USize) 
 
 namespace UInt16Array
 
+private def byteSwapImpl (a : UInt16Array) : UInt16Array :=
+  a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
+
+/-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
+@[implemented_by byteSwapImpl, expose]
+public def byteSwap (a : UInt16Array) : UInt16Array :=
+  mk (a.toArray.map UInt16.byteSwap)
+
+@[simp] public theorem toArray_byteSwap (a : UInt16Array) :
+    a.byteSwap.toArray = a.toArray.map UInt16.byteSwap :=
+  rfl
+
+@[simp] public theorem size_byteSwap (a : UInt16Array) : a.byteSwap.size = a.size := by
+  simp [← size_toArray]
+
+@[simp] public theorem getElem_byteSwap (a : UInt16Array) (i : Nat) (h : i < a.byteSwap.size) :
+    a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
+  rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
+  simp
+
+@[simp] public theorem byteSwap_byteSwap (a : UInt16Array) : a.byteSwap.byteSwap = a := by
+  apply ext_getElem <;> simp
+
 private unsafe def Slice.toBytesLEImpl (s : UInt16Array.Slice) : ByteArray :=
   if hostLittleEndian then
     unsafeCast (copyBytes 1 (unsafeCast s.array) (2 * s.start.toUSize) (2 * s.size.toUSize))
@@ -125,19 +149,14 @@ public def toBytesLE (a : UInt16Array) : ByteArray := a.toSlice.toBytesLE
 
 private unsafe def ofBytesLE?Impl (b : ByteArray) : Option UInt16Array :=
   if b.size % 2 = 0 then
-    if hostLittleEndian then some (unsafeCast (copyBytes 2 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 2)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 2 (unsafeCast b) 0 b.usize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt16Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : UInt16Array) (i : USize) : UInt16Array :=
-    if i < b.usize then
-      let u :=
-          (b.uget i lcProof).toUInt16 |||
-          ((b.uget (i + 1) lcProof).toUInt16 <<< 8)
-      loop (r.push u) (i + 2)
-    else
-      r
 
 /--
 Reads `b` as elements, each in little-endian order, least significant byte first.
@@ -224,19 +243,14 @@ public def toBytesBE (a : UInt16Array) : ByteArray := a.toSlice.toBytesBE
 
 private unsafe def ofBytesBE?Impl (b : ByteArray) : Option UInt16Array :=
   if b.size % 2 = 0 then
-    if !hostLittleEndian then some (unsafeCast (copyBytes 2 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 2)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 2 (unsafeCast b) 0 b.usize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt16Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : UInt16Array) (i : USize) : UInt16Array :=
-    if i < b.usize then
-      let u :=
-          ((b.uget i lcProof).toUInt16 <<< 8) |||
-          (b.uget (i + 1) lcProof).toUInt16
-      loop (r.push u) (i + 2)
-    else
-      r
 
 /--
 Reads `b` as elements, each in big-endian order, most significant byte first.
@@ -293,32 +307,32 @@ public def ofBytesBE! (b : ByteArray) : UInt16Array :=
     ofBytesBE? a.toBytesBE = some a := by
   simp [toBytesBE]
 
-private def byteSwapImpl (a : UInt16Array) : UInt16Array :=
+end UInt16Array
+
+namespace UInt32Array
+
+private def byteSwapImpl (a : UInt32Array) : UInt32Array :=
   a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
-public def byteSwap (a : UInt16Array) : UInt16Array :=
-  mk (a.toArray.map UInt16.byteSwap)
+public def byteSwap (a : UInt32Array) : UInt32Array :=
+  mk (a.toArray.map UInt32.byteSwap)
 
-@[simp] public theorem toArray_byteSwap (a : UInt16Array) :
-    a.byteSwap.toArray = a.toArray.map UInt16.byteSwap :=
+@[simp] public theorem toArray_byteSwap (a : UInt32Array) :
+    a.byteSwap.toArray = a.toArray.map UInt32.byteSwap :=
   rfl
 
-@[simp] public theorem size_byteSwap (a : UInt16Array) : a.byteSwap.size = a.size := by
+@[simp] public theorem size_byteSwap (a : UInt32Array) : a.byteSwap.size = a.size := by
   simp [← size_toArray]
 
-@[simp] public theorem getElem_byteSwap (a : UInt16Array) (i : Nat) (h : i < a.byteSwap.size) :
+@[simp] public theorem getElem_byteSwap (a : UInt32Array) (i : Nat) (h : i < a.byteSwap.size) :
     a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
   rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
   simp
 
-@[simp] public theorem byteSwap_byteSwap (a : UInt16Array) : a.byteSwap.byteSwap = a := by
+@[simp] public theorem byteSwap_byteSwap (a : UInt32Array) : a.byteSwap.byteSwap = a := by
   apply ext_getElem <;> simp
-
-end UInt16Array
-
-namespace UInt32Array
 
 private unsafe def Slice.toBytesLEImpl (s : UInt32Array.Slice) : ByteArray :=
   if hostLittleEndian then
@@ -352,21 +366,14 @@ public def toBytesLE (a : UInt32Array) : ByteArray := a.toSlice.toBytesLE
 
 private unsafe def ofBytesLE?Impl (b : ByteArray) : Option UInt32Array :=
   if b.size % 4 = 0 then
-    if hostLittleEndian then some (unsafeCast (copyBytes 4 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 4)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 4 (unsafeCast b) 0 b.usize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt32Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : UInt32Array) (i : USize) : UInt32Array :=
-    if i < b.usize then
-      let u :=
-          (b.uget i lcProof).toUInt32 |||
-          ((b.uget (i + 1) lcProof).toUInt32 <<< 8) |||
-          ((b.uget (i + 2) lcProof).toUInt32 <<< 16) |||
-          ((b.uget (i + 3) lcProof).toUInt32 <<< 24)
-      loop (r.push u) (i + 4)
-    else
-      r
 
 /--
 Reads `b` as elements, each in little-endian order, least significant byte first.
@@ -459,21 +466,14 @@ public def toBytesBE (a : UInt32Array) : ByteArray := a.toSlice.toBytesBE
 
 private unsafe def ofBytesBE?Impl (b : ByteArray) : Option UInt32Array :=
   if b.size % 4 = 0 then
-    if !hostLittleEndian then some (unsafeCast (copyBytes 4 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 4)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 4 (unsafeCast b) 0 b.usize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt32Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : UInt32Array) (i : USize) : UInt32Array :=
-    if i < b.usize then
-      let u :=
-          ((b.uget i lcProof).toUInt32 <<< 24) |||
-          ((b.uget (i + 1) lcProof).toUInt32 <<< 16) |||
-          ((b.uget (i + 2) lcProof).toUInt32 <<< 8) |||
-          (b.uget (i + 3) lcProof).toUInt32
-      loop (r.push u) (i + 4)
-    else
-      r
 
 /--
 Reads `b` as elements, each in big-endian order, most significant byte first.
@@ -534,32 +534,32 @@ public def ofBytesBE! (b : ByteArray) : UInt32Array :=
     ofBytesBE? a.toBytesBE = some a := by
   simp [toBytesBE]
 
-private def byteSwapImpl (a : UInt32Array) : UInt32Array :=
+end UInt32Array
+
+namespace UInt64Array
+
+private def byteSwapImpl (a : UInt64Array) : UInt64Array :=
   a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
-public def byteSwap (a : UInt32Array) : UInt32Array :=
-  mk (a.toArray.map UInt32.byteSwap)
+public def byteSwap (a : UInt64Array) : UInt64Array :=
+  mk (a.toArray.map UInt64.byteSwap)
 
-@[simp] public theorem toArray_byteSwap (a : UInt32Array) :
-    a.byteSwap.toArray = a.toArray.map UInt32.byteSwap :=
+@[simp] public theorem toArray_byteSwap (a : UInt64Array) :
+    a.byteSwap.toArray = a.toArray.map UInt64.byteSwap :=
   rfl
 
-@[simp] public theorem size_byteSwap (a : UInt32Array) : a.byteSwap.size = a.size := by
+@[simp] public theorem size_byteSwap (a : UInt64Array) : a.byteSwap.size = a.size := by
   simp [← size_toArray]
 
-@[simp] public theorem getElem_byteSwap (a : UInt32Array) (i : Nat) (h : i < a.byteSwap.size) :
+@[simp] public theorem getElem_byteSwap (a : UInt64Array) (i : Nat) (h : i < a.byteSwap.size) :
     a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
   rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
   simp
 
-@[simp] public theorem byteSwap_byteSwap (a : UInt32Array) : a.byteSwap.byteSwap = a := by
+@[simp] public theorem byteSwap_byteSwap (a : UInt64Array) : a.byteSwap.byteSwap = a := by
   apply ext_getElem <;> simp
-
-end UInt32Array
-
-namespace UInt64Array
 
 private unsafe def Slice.toBytesLEImpl (s : UInt64Array.Slice) : ByteArray :=
   if hostLittleEndian then
@@ -597,25 +597,14 @@ public def toBytesLE (a : UInt64Array) : ByteArray := a.toSlice.toBytesLE
 
 private unsafe def ofBytesLE?Impl (b : ByteArray) : Option UInt64Array :=
   if b.size % 8 = 0 then
-    if hostLittleEndian then some (unsafeCast (copyBytes 8 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 8)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 8 (unsafeCast b) 0 b.usize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt64Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : UInt64Array) (i : USize) : UInt64Array :=
-    if i < b.usize then
-      let u :=
-          (b.uget i lcProof).toUInt64 |||
-          ((b.uget (i + 1) lcProof).toUInt64 <<< 8) |||
-          ((b.uget (i + 2) lcProof).toUInt64 <<< 16) |||
-          ((b.uget (i + 3) lcProof).toUInt64 <<< 24) |||
-          ((b.uget (i + 4) lcProof).toUInt64 <<< 32) |||
-          ((b.uget (i + 5) lcProof).toUInt64 <<< 40) |||
-          ((b.uget (i + 6) lcProof).toUInt64 <<< 48) |||
-          ((b.uget (i + 7) lcProof).toUInt64 <<< 56)
-      loop (r.push u) (i + 8)
-    else
-      r
 
 /--
 Reads `b` as elements, each in little-endian order, least significant byte first.
@@ -720,25 +709,14 @@ public def toBytesBE (a : UInt64Array) : ByteArray := a.toSlice.toBytesBE
 
 private unsafe def ofBytesBE?Impl (b : ByteArray) : Option UInt64Array :=
   if b.size % 8 = 0 then
-    if !hostLittleEndian then some (unsafeCast (copyBytes 8 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 8)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 8 (unsafeCast b) 0 b.usize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt64Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : UInt64Array) (i : USize) : UInt64Array :=
-    if i < b.usize then
-      let u :=
-          ((b.uget i lcProof).toUInt64 <<< 56) |||
-          ((b.uget (i + 1) lcProof).toUInt64 <<< 48) |||
-          ((b.uget (i + 2) lcProof).toUInt64 <<< 40) |||
-          ((b.uget (i + 3) lcProof).toUInt64 <<< 32) |||
-          ((b.uget (i + 4) lcProof).toUInt64 <<< 24) |||
-          ((b.uget (i + 5) lcProof).toUInt64 <<< 16) |||
-          ((b.uget (i + 6) lcProof).toUInt64 <<< 8) |||
-          (b.uget (i + 7) lcProof).toUInt64
-      loop (r.push u) (i + 8)
-    else
-      r
 
 /--
 Reads `b` as elements, each in big-endian order, most significant byte first.
@@ -807,32 +785,32 @@ public def ofBytesBE! (b : ByteArray) : UInt64Array :=
     ofBytesBE? a.toBytesBE = some a := by
   simp [toBytesBE]
 
-private def byteSwapImpl (a : UInt64Array) : UInt64Array :=
+end UInt64Array
+
+namespace Int16Array
+
+private def byteSwapImpl (a : Int16Array) : Int16Array :=
   a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
-public def byteSwap (a : UInt64Array) : UInt64Array :=
-  mk (a.toArray.map UInt64.byteSwap)
+public def byteSwap (a : Int16Array) : Int16Array :=
+  mk (a.toArray.map Int16.byteSwap)
 
-@[simp] public theorem toArray_byteSwap (a : UInt64Array) :
-    a.byteSwap.toArray = a.toArray.map UInt64.byteSwap :=
+@[simp] public theorem toArray_byteSwap (a : Int16Array) :
+    a.byteSwap.toArray = a.toArray.map Int16.byteSwap :=
   rfl
 
-@[simp] public theorem size_byteSwap (a : UInt64Array) : a.byteSwap.size = a.size := by
+@[simp] public theorem size_byteSwap (a : Int16Array) : a.byteSwap.size = a.size := by
   simp [← size_toArray]
 
-@[simp] public theorem getElem_byteSwap (a : UInt64Array) (i : Nat) (h : i < a.byteSwap.size) :
+@[simp] public theorem getElem_byteSwap (a : Int16Array) (i : Nat) (h : i < a.byteSwap.size) :
     a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
   rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
   simp
 
-@[simp] public theorem byteSwap_byteSwap (a : UInt64Array) : a.byteSwap.byteSwap = a := by
+@[simp] public theorem byteSwap_byteSwap (a : Int16Array) : a.byteSwap.byteSwap = a := by
   apply ext_getElem <;> simp
-
-end UInt64Array
-
-namespace Int16Array
 
 private unsafe def Slice.toBytesLEImpl (s : Int16Array.Slice) : ByteArray :=
   if hostLittleEndian then
@@ -864,19 +842,14 @@ public def toBytesLE (a : Int16Array) : ByteArray := a.toSlice.toBytesLE
 
 private unsafe def ofBytesLE?Impl (b : ByteArray) : Option Int16Array :=
   if b.size % 2 = 0 then
-    if hostLittleEndian then some (unsafeCast (copyBytes 2 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 2)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 2 (unsafeCast b) 0 b.usize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt16Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : Int16Array) (i : USize) : Int16Array :=
-    if i < b.usize then
-      let u :=
-          (b.uget i lcProof).toUInt16 |||
-          ((b.uget (i + 1) lcProof).toUInt16 <<< 8)
-      loop (r.push (u.toInt16)) (i + 2)
-    else
-      r
 
 /--
 Reads `b` as elements, each in little-endian order, least significant byte first.
@@ -965,19 +938,14 @@ public def toBytesBE (a : Int16Array) : ByteArray := a.toSlice.toBytesBE
 
 private unsafe def ofBytesBE?Impl (b : ByteArray) : Option Int16Array :=
   if b.size % 2 = 0 then
-    if !hostLittleEndian then some (unsafeCast (copyBytes 2 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 2)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 2 (unsafeCast b) 0 b.usize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt16Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : Int16Array) (i : USize) : Int16Array :=
-    if i < b.usize then
-      let u :=
-          ((b.uget i lcProof).toUInt16 <<< 8) |||
-          (b.uget (i + 1) lcProof).toUInt16
-      loop (r.push (u.toInt16)) (i + 2)
-    else
-      r
 
 /--
 Reads `b` as elements, each in big-endian order, most significant byte first.
@@ -1036,32 +1004,32 @@ public def ofBytesBE! (b : ByteArray) : Int16Array :=
     ofBytesBE? a.toBytesBE = some a := by
   simp [toBytesBE]
 
-private def byteSwapImpl (a : Int16Array) : Int16Array :=
+end Int16Array
+
+namespace Int32Array
+
+private def byteSwapImpl (a : Int32Array) : Int32Array :=
   a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
-public def byteSwap (a : Int16Array) : Int16Array :=
-  mk (a.toArray.map Int16.byteSwap)
+public def byteSwap (a : Int32Array) : Int32Array :=
+  mk (a.toArray.map Int32.byteSwap)
 
-@[simp] public theorem toArray_byteSwap (a : Int16Array) :
-    a.byteSwap.toArray = a.toArray.map Int16.byteSwap :=
+@[simp] public theorem toArray_byteSwap (a : Int32Array) :
+    a.byteSwap.toArray = a.toArray.map Int32.byteSwap :=
   rfl
 
-@[simp] public theorem size_byteSwap (a : Int16Array) : a.byteSwap.size = a.size := by
+@[simp] public theorem size_byteSwap (a : Int32Array) : a.byteSwap.size = a.size := by
   simp [← size_toArray]
 
-@[simp] public theorem getElem_byteSwap (a : Int16Array) (i : Nat) (h : i < a.byteSwap.size) :
+@[simp] public theorem getElem_byteSwap (a : Int32Array) (i : Nat) (h : i < a.byteSwap.size) :
     a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
   rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
   simp
 
-@[simp] public theorem byteSwap_byteSwap (a : Int16Array) : a.byteSwap.byteSwap = a := by
+@[simp] public theorem byteSwap_byteSwap (a : Int32Array) : a.byteSwap.byteSwap = a := by
   apply ext_getElem <;> simp
-
-end Int16Array
-
-namespace Int32Array
 
 private unsafe def Slice.toBytesLEImpl (s : Int32Array.Slice) : ByteArray :=
   if hostLittleEndian then
@@ -1095,21 +1063,14 @@ public def toBytesLE (a : Int32Array) : ByteArray := a.toSlice.toBytesLE
 
 private unsafe def ofBytesLE?Impl (b : ByteArray) : Option Int32Array :=
   if b.size % 4 = 0 then
-    if hostLittleEndian then some (unsafeCast (copyBytes 4 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 4)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 4 (unsafeCast b) 0 b.usize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt32Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : Int32Array) (i : USize) : Int32Array :=
-    if i < b.usize then
-      let u :=
-          (b.uget i lcProof).toUInt32 |||
-          ((b.uget (i + 1) lcProof).toUInt32 <<< 8) |||
-          ((b.uget (i + 2) lcProof).toUInt32 <<< 16) |||
-          ((b.uget (i + 3) lcProof).toUInt32 <<< 24)
-      loop (r.push (u.toInt32)) (i + 4)
-    else
-      r
 
 /--
 Reads `b` as elements, each in little-endian order, least significant byte first.
@@ -1204,21 +1165,14 @@ public def toBytesBE (a : Int32Array) : ByteArray := a.toSlice.toBytesBE
 
 private unsafe def ofBytesBE?Impl (b : ByteArray) : Option Int32Array :=
   if b.size % 4 = 0 then
-    if !hostLittleEndian then some (unsafeCast (copyBytes 4 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 4)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 4 (unsafeCast b) 0 b.usize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt32Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : Int32Array) (i : USize) : Int32Array :=
-    if i < b.usize then
-      let u :=
-          ((b.uget i lcProof).toUInt32 <<< 24) |||
-          ((b.uget (i + 1) lcProof).toUInt32 <<< 16) |||
-          ((b.uget (i + 2) lcProof).toUInt32 <<< 8) |||
-          (b.uget (i + 3) lcProof).toUInt32
-      loop (r.push (u.toInt32)) (i + 4)
-    else
-      r
 
 /--
 Reads `b` as elements, each in big-endian order, most significant byte first.
@@ -1281,32 +1235,32 @@ public def ofBytesBE! (b : ByteArray) : Int32Array :=
     ofBytesBE? a.toBytesBE = some a := by
   simp [toBytesBE]
 
-private def byteSwapImpl (a : Int32Array) : Int32Array :=
+end Int32Array
+
+namespace Int64Array
+
+private def byteSwapImpl (a : Int64Array) : Int64Array :=
   a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
-public def byteSwap (a : Int32Array) : Int32Array :=
-  mk (a.toArray.map Int32.byteSwap)
+public def byteSwap (a : Int64Array) : Int64Array :=
+  mk (a.toArray.map Int64.byteSwap)
 
-@[simp] public theorem toArray_byteSwap (a : Int32Array) :
-    a.byteSwap.toArray = a.toArray.map Int32.byteSwap :=
+@[simp] public theorem toArray_byteSwap (a : Int64Array) :
+    a.byteSwap.toArray = a.toArray.map Int64.byteSwap :=
   rfl
 
-@[simp] public theorem size_byteSwap (a : Int32Array) : a.byteSwap.size = a.size := by
+@[simp] public theorem size_byteSwap (a : Int64Array) : a.byteSwap.size = a.size := by
   simp [← size_toArray]
 
-@[simp] public theorem getElem_byteSwap (a : Int32Array) (i : Nat) (h : i < a.byteSwap.size) :
+@[simp] public theorem getElem_byteSwap (a : Int64Array) (i : Nat) (h : i < a.byteSwap.size) :
     a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
   rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
   simp
 
-@[simp] public theorem byteSwap_byteSwap (a : Int32Array) : a.byteSwap.byteSwap = a := by
+@[simp] public theorem byteSwap_byteSwap (a : Int64Array) : a.byteSwap.byteSwap = a := by
   apply ext_getElem <;> simp
-
-end Int32Array
-
-namespace Int64Array
 
 private unsafe def Slice.toBytesLEImpl (s : Int64Array.Slice) : ByteArray :=
   if hostLittleEndian then
@@ -1344,25 +1298,14 @@ public def toBytesLE (a : Int64Array) : ByteArray := a.toSlice.toBytesLE
 
 private unsafe def ofBytesLE?Impl (b : ByteArray) : Option Int64Array :=
   if b.size % 8 = 0 then
-    if hostLittleEndian then some (unsafeCast (copyBytes 8 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 8)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 8 (unsafeCast b) 0 b.usize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt64Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : Int64Array) (i : USize) : Int64Array :=
-    if i < b.usize then
-      let u :=
-          (b.uget i lcProof).toUInt64 |||
-          ((b.uget (i + 1) lcProof).toUInt64 <<< 8) |||
-          ((b.uget (i + 2) lcProof).toUInt64 <<< 16) |||
-          ((b.uget (i + 3) lcProof).toUInt64 <<< 24) |||
-          ((b.uget (i + 4) lcProof).toUInt64 <<< 32) |||
-          ((b.uget (i + 5) lcProof).toUInt64 <<< 40) |||
-          ((b.uget (i + 6) lcProof).toUInt64 <<< 48) |||
-          ((b.uget (i + 7) lcProof).toUInt64 <<< 56)
-      loop (r.push (u.toInt64)) (i + 8)
-    else
-      r
 
 /--
 Reads `b` as elements, each in little-endian order, least significant byte first.
@@ -1469,25 +1412,14 @@ public def toBytesBE (a : Int64Array) : ByteArray := a.toSlice.toBytesBE
 
 private unsafe def ofBytesBE?Impl (b : ByteArray) : Option Int64Array :=
   if b.size % 8 = 0 then
-    if !hostLittleEndian then some (unsafeCast (copyBytes 8 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 8)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 8 (unsafeCast b) 0 b.usize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt64Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : Int64Array) (i : USize) : Int64Array :=
-    if i < b.usize then
-      let u :=
-          ((b.uget i lcProof).toUInt64 <<< 56) |||
-          ((b.uget (i + 1) lcProof).toUInt64 <<< 48) |||
-          ((b.uget (i + 2) lcProof).toUInt64 <<< 40) |||
-          ((b.uget (i + 3) lcProof).toUInt64 <<< 32) |||
-          ((b.uget (i + 4) lcProof).toUInt64 <<< 24) |||
-          ((b.uget (i + 5) lcProof).toUInt64 <<< 16) |||
-          ((b.uget (i + 6) lcProof).toUInt64 <<< 8) |||
-          (b.uget (i + 7) lcProof).toUInt64
-      loop (r.push (u.toInt64)) (i + 8)
-    else
-      r
 
 /--
 Reads `b` as elements, each in big-endian order, most significant byte first.
@@ -1558,29 +1490,6 @@ public def ofBytesBE! (b : ByteArray) : Int64Array :=
     ofBytesBE? a.toBytesBE = some a := by
   simp [toBytesBE]
 
-private def byteSwapImpl (a : Int64Array) : Int64Array :=
-  a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
-
-/-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
-@[implemented_by byteSwapImpl, expose]
-public def byteSwap (a : Int64Array) : Int64Array :=
-  mk (a.toArray.map Int64.byteSwap)
-
-@[simp] public theorem toArray_byteSwap (a : Int64Array) :
-    a.byteSwap.toArray = a.toArray.map Int64.byteSwap :=
-  rfl
-
-@[simp] public theorem size_byteSwap (a : Int64Array) : a.byteSwap.size = a.size := by
-  simp [← size_toArray]
-
-@[simp] public theorem getElem_byteSwap (a : Int64Array) (i : Nat) (h : i < a.byteSwap.size) :
-    a.byteSwap[i] = (a[i]'(by simpa using h)).byteSwap := by
-  rw [getElem_eq_getElem_toArray, getElem_eq_getElem_toArray]
-  simp
-
-@[simp] public theorem byteSwap_byteSwap (a : Int64Array) : a.byteSwap.byteSwap = a := by
-  apply ext_getElem <;> simp
-
 end Int64Array
 
 namespace Float32Array
@@ -1617,21 +1526,14 @@ public def toBytesLE (a : Float32Array) : ByteArray := a.toSlice.toBytesLE
 
 private unsafe def ofBytesLE?Impl (b : ByteArray) : Option Float32Array :=
   if b.size % 4 = 0 then
-    if hostLittleEndian then some (unsafeCast (copyBytes 4 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 4)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 4 (unsafeCast b) 0 b.usize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt32Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : Float32Array) (i : USize) : Float32Array :=
-    if i < b.usize then
-      let u :=
-          (b.uget i lcProof).toUInt32 |||
-          ((b.uget (i + 1) lcProof).toUInt32 <<< 8) |||
-          ((b.uget (i + 2) lcProof).toUInt32 <<< 16) |||
-          ((b.uget (i + 3) lcProof).toUInt32 <<< 24)
-      loop (r.push (Float32.ofBits u)) (i + 4)
-    else
-      r
 
 /--
 Reads `b` as elements, each in little-endian order, least significant byte first.
@@ -1702,21 +1604,14 @@ public def toBytesBE (a : Float32Array) : ByteArray := a.toSlice.toBytesBE
 
 private unsafe def ofBytesBE?Impl (b : ByteArray) : Option Float32Array :=
   if b.size % 4 = 0 then
-    if !hostLittleEndian then some (unsafeCast (copyBytes 4 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 4)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 4 (unsafeCast b) 0 b.usize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt32Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : Float32Array) (i : USize) : Float32Array :=
-    if i < b.usize then
-      let u :=
-          ((b.uget i lcProof).toUInt32 <<< 24) |||
-          ((b.uget (i + 1) lcProof).toUInt32 <<< 16) |||
-          ((b.uget (i + 2) lcProof).toUInt32 <<< 8) |||
-          (b.uget (i + 3) lcProof).toUInt32
-      loop (r.push (Float32.ofBits u)) (i + 4)
-    else
-      r
 
 /--
 Reads `b` as elements, each in big-endian order, most significant byte first.
@@ -1795,25 +1690,14 @@ public def toBytesLE (a : Float64Array) : ByteArray := a.toSlice.toBytesLE
 
 private unsafe def ofBytesLE?Impl (b : ByteArray) : Option Float64Array :=
   if b.size % 8 = 0 then
-    if hostLittleEndian then some (unsafeCast (copyBytes 8 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 8)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 8 (unsafeCast b) 0 b.usize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt64Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : Float64Array) (i : USize) : Float64Array :=
-    if i < b.usize then
-      let u :=
-          (b.uget i lcProof).toUInt64 |||
-          ((b.uget (i + 1) lcProof).toUInt64 <<< 8) |||
-          ((b.uget (i + 2) lcProof).toUInt64 <<< 16) |||
-          ((b.uget (i + 3) lcProof).toUInt64 <<< 24) |||
-          ((b.uget (i + 4) lcProof).toUInt64 <<< 32) |||
-          ((b.uget (i + 5) lcProof).toUInt64 <<< 40) |||
-          ((b.uget (i + 6) lcProof).toUInt64 <<< 48) |||
-          ((b.uget (i + 7) lcProof).toUInt64 <<< 56)
-      loop (r.push (Float.ofBits u)) (i + 8)
-    else
-      r
 
 /--
 Reads `b` as elements, each in little-endian order, least significant byte first.
@@ -1892,25 +1776,14 @@ public def toBytesBE (a : Float64Array) : ByteArray := a.toSlice.toBytesBE
 
 private unsafe def ofBytesBE?Impl (b : ByteArray) : Option Float64Array :=
   if b.size % 8 = 0 then
-    if !hostLittleEndian then some (unsafeCast (copyBytes 8 (unsafeCast b) 0 b.usize))
-    else some (loop (emptyWithCapacity (b.size / 8)) 0)
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 8 (unsafeCast b) 0 b.usize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt64Array.byteSwap (unsafeCast r)))
   else
     none
-where
-  loop (r : Float64Array) (i : USize) : Float64Array :=
-    if i < b.usize then
-      let u :=
-          ((b.uget i lcProof).toUInt64 <<< 56) |||
-          ((b.uget (i + 1) lcProof).toUInt64 <<< 48) |||
-          ((b.uget (i + 2) lcProof).toUInt64 <<< 40) |||
-          ((b.uget (i + 3) lcProof).toUInt64 <<< 32) |||
-          ((b.uget (i + 4) lcProof).toUInt64 <<< 24) |||
-          ((b.uget (i + 5) lcProof).toUInt64 <<< 16) |||
-          ((b.uget (i + 6) lcProof).toUInt64 <<< 8) |||
-          (b.uget (i + 7) lcProof).toUInt64
-      loop (r.push (Float.ofBits u)) (i + 8)
-    else
-      r
 
 /--
 Reads `b` as elements, each in big-endian order, most significant byte first.
