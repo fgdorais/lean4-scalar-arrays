@@ -54,7 +54,9 @@ public def toArray (a : @& UInt16Array) : Array UInt16 :=
 @[simp] public theorem mk_toArray (a : UInt16Array) : mk a.toArray = a :=
   Quot.ind (β := fun a : UInt16Array => mk a.toArray = a) (fun _ => rfl) a
 
--- `lean_byte_array_size` reads the size of any scalar array, whatever its element size.
+-- `lean_byte_array_size` reads the size of any scalar array, whatever its element size: in
+-- `lean.h` it is `lean_box(lean_sarray_size(a))`. Caution: by its name it is meant for `ByteArray`,
+-- so recheck it when the toolchain changes. The tests check `size` for every element size.
 @[extern "lean_byte_array_size", tagged_return, expose]
 public def size (a : @& UInt16Array) : Nat :=
   a.toArray.size

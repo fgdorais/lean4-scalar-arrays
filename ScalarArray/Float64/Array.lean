@@ -81,13 +81,18 @@ public def extract (a : @& Float64Array) (start stop : Nat) : Float64Array :=
 /-! ## Linearity -/
 
 /--
-Marks `a` as linear, a debugging aid: if a marked array is ever shared and then modified, the
-runtime reports it. Logically this is the identity.
+Marks `a` as linear, a debugging aid: if a marked array is ever copied because it is shared when
+it needs to be exclusive, as before an in-place write, the runtime panics. The mark goes on an
+exclusive array, so if `a` is shared it is copied first and the copy is marked. Logically this is
+the identity.
 -/
 @[never_extract, extern "lean_sarray_mark_linear", expose]
 public def markLinear (a : Float64Array) : Float64Array := a
 
-/-- Returns `b`, marking it as linear if `a` is marked. Logically this is `b`. -/
+/--
+Returns `b`, marked as linear if `a` is marked. Like `markLinear`, marking copies `b` first if it is
+shared. Logically this is `b`.
+-/
 @[never_extract, extern "lean_sarray_propagate_mark", expose]
 public def propagateMark (a : @& Float64Array) (b : Float64Array) : Float64Array := b
 
