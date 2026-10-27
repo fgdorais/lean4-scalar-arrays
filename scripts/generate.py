@@ -59,6 +59,7 @@ private theorem beq_eq_beq_toArray (a b : UInt16Array) : (a == b) = (a.toArray =
 public def hash (a : @& UInt16Array) : UInt64 :=
   Hashable.hash a.toArray
 
+/-- For internal use only. -/
 public def hashImpl (a : @& UInt16Array) : UInt64 :=
   a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
 
@@ -81,6 +82,7 @@ public def beq (a b : @& UInt16Array) : Bool :=
 private def beqSlow (a b : @& UInt16Array) : Bool :=
   a.beq b
 
+/-- For internal use only. -/
 public def beqImpl (a b : @& UInt16Array) : Bool :=
   if a.size < USize.size ∧ b.size < USize.size then
     if h : a.usize = b.usize then loop a.usize a.toNat_usize_le (h ▸ b.toNat_usize_le) 0 else false
