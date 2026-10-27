@@ -54,6 +54,7 @@ public def toArray (a : @& Int32Array) : Array Int32 :=
 @[simp] public theorem mk_toArray (a : Int32Array) : mk a.toArray = a :=
   Quot.ind (β := fun a : Int32Array => mk a.toArray = a) (fun _ => rfl) a
 
+/-- The number of elements of `a`. -/
 -- `lean_byte_array_size` reads the size of any scalar array, whatever its element size: in
 -- `lean.h` it is `lean_box(lean_sarray_size(a))`. Caution: by its name it is meant for `ByteArray`,
 -- so recheck it when the toolchain changes. The tests check `size` for every element size.
@@ -61,13 +62,13 @@ public def toArray (a : @& Int32Array) : Array Int32 :=
 public def size (a : @& Int32Array) : Nat :=
   a.toArray.size
 
+@[inline]
+public unsafe def usizeImpl (a : @& Int32Array) : USize := (unsafeCast a : Raw).size
+
 /--
 The size of `a` as a `USize`. Since `USize` can address all memory, no array has more elements than
 `USize` can count.
 -/
-@[inline]
-public unsafe def usizeImpl (a : @& Int32Array) : USize := (unsafeCast a : Raw).size
-
 @[implemented_by usizeImpl, simp, expose]
 public def usize (a : @& Int32Array) : USize :=
   a.size.toUSize
@@ -76,11 +77,13 @@ public def usize (a : @& Int32Array) : USize :=
 public theorem toNat_usize_le (a : Int32Array) : a.usize.toNat ≤ a.size := by
   simp [Nat.mod_le]
 
+/-- The element at the `USize` index `i`. It compiles to an inline load. -/
 @[extern c inline "((uint32_t*)lean_sarray_cptr(#1))[#2]", expose]
 public def uget (a : @& Int32Array) (i : USize) (h : i.toNat < a.size := by get_elem_tactic) :
     Int32 :=
   a.toArray.uget i h
 
+/-- The element at index `i`. -/
 @[expose]
 public def get (a : @& Int32Array) (i : @& Nat) (h : i < a.size := by get_elem_tactic) :
     Int32 :=
@@ -255,6 +258,7 @@ private unsafe def emptyWithCapacityImpl (capacity : Nat) : Int32Array :=
 public def emptyWithCapacity (capacity : Nat) : Int32Array :=
   mk #[]
 
+/-- The empty array. -/
 @[expose] public def empty : Int32Array := emptyWithCapacity 0
 
 public instance : EmptyCollection Int32Array := ⟨empty⟩
@@ -277,6 +281,7 @@ public unsafe def usetImpl : type_of% @uset :=
 
 attribute [implemented_by usetImpl] uset
 
+/-- Replaces the element at index `i`, in place when `a` is not shared, like `uset`. -/
 @[expose]
 public def set (a : Int32Array) (i : Nat) (v : Int32) (h : i < a.size := by get_elem_tactic) :
     Int32Array :=
@@ -288,10 +293,12 @@ public unsafe def setImpl : type_of% @set :=
 
 attribute [implemented_by setImpl] set
 
+/-- The element at index `i`. Panics if `i` is out of bounds, and then returns `default`. -/
 @[expose]
 public def get! (a : @& Int32Array) (i : @& Nat) : Int32 :=
   if h : i < a.size then a.get i h else panic! "index out of bounds"
 
+/-- The element at index `i`, or `v₀` if `i` is out of bounds. -/
 @[expose]
 public def getD (a : @& Int32Array) (i : @& Nat) (v₀ : Int32) : Int32 :=
   if h : i < a.size then a.get i h else v₀
@@ -334,6 +341,10 @@ public unsafe def pushImpl (a : Int32Array) (v : Int32) : Int32Array :=
   else
     pushGrowUnsafe a v
 
+/--
+Appends `v` to `a`, in place when `a` is not shared and has room. A full array grows to capacity
+`2 * capacity + 1`, so repeated pushes take amortized constant time.
+-/
 @[implemented_by pushImpl, expose]
 public def push (a : Int32Array) (v : Int32) : Int32Array :=
   mk (a.toArray.push v)
@@ -341,8 +352,8 @@ public def push (a : Int32Array) (v : Int32) : Int32Array :=
 /--
 Copies the `n` elements of `src` starting at index `srcOff` into `dest` starting at index `destOff`,
 in place, and grows the size of `dest` to `destOff + n` if it is smaller. Only valid when `dest` is
-exclusive, has capacity for `destOff + n` elements, and is not the same object as `src`, and when
-`destOff ≤ dest.size` and `srcOff + n ≤ src.size`.
+exclusive and has capacity for `destOff + n` elements, and when `destOff ≤ dest.size` and
+`srcOff + n ≤ src.size`. The ranges may overlap.
 -/
 @[inline]
 private unsafe def copySliceUnsafe (dest : Int32Array) (src : @& Int32Array)

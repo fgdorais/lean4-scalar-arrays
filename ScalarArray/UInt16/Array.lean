@@ -23,6 +23,7 @@ namespace UInt16Array
 
 /-! ## Removing elements -/
 
+/-- Whether `a` has no elements. -/
 @[expose] public def isEmpty (a : @& UInt16Array) : Bool := a.size == 0
 
 private unsafe def popImpl (a : UInt16Array) : UInt16Array :=
@@ -37,10 +38,13 @@ private unsafe def popImpl (a : UInt16Array) : UInt16Array :=
 public def pop (a : UInt16Array) : UInt16Array :=
   mk a.toArray.pop
 
+/-- The last element of `a`, or `none` if `a` is empty. -/
 public def back? (a : @& UInt16Array) : Option UInt16 := a[a.size - 1]?
 
+/-- The last element of `a`. Panics if `a` is empty, and then returns `default`. -/
 public def back! (a : @& UInt16Array) : UInt16 := a[a.size - 1]!
 
+/-- The last element of `a`, which is not empty. -/
 public def back (a : @& UInt16Array) (h : 0 < a.size) : UInt16 :=
   a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
 
@@ -308,20 +312,27 @@ private theorem foldrMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
       simp only [this, Array.foldrM.fold.eq_1, beq_self_eq_true, ite_true]
   · rfl
 
+/--
+Folds a function over the elements of `a` from index `start` up to, but not including, `stop`, from
+first to last.
+-/
 @[inline, expose]
 public def foldl {β : Type v} (f : β → UInt16 → β) (init : β) (a : @& UInt16Array) (start := 0)
     (stop := a.size) : β :=
   Id.run <| a.foldlM (pure <| f · ·) init start stop
 
+/-- Folds a function over the elements of `a`, from last to first. -/
 @[inline, expose]
 public def foldr {β : Type v} (f : UInt16 → β → β) (init : β) (a : @& UInt16Array) : β :=
   Id.run <| a.foldrM (pure <| f · ·) init
 
+/-- Runs a monadic action on each element of `a`, from first to last. -/
 @[inline, expose]
 public def forM {m : Type v → Type w} [Monad m] (f : UInt16 → m PUnit) (a : @& UInt16Array) :
     m PUnit :=
   a.foldlM (fun _ x => f x) ⟨⟩
 
+/-- The loop behind `for x in a`. Logically it is the loop over `a.toArray`. -/
 @[expose]
 public def forIn {β : Type v} {m : Type v → Type w} [Monad m] (a : @& UInt16Array) (init : β)
     (f : UInt16 → β → m (ForInStep β)) : m β :=
@@ -517,6 +528,7 @@ public theorem hash_eq_hash_toArray (a : UInt16Array) :
 
 /-! ## Conversion and printing -/
 
+/-- The elements of `a` as a list. -/
 @[expose] public def toList (a : UInt16Array) : List UInt16 := a.toArray.toList
 
 /-- Prints `ScalarArray.UInt16Array.mk #[...]`, which evaluates to an equal array. -/

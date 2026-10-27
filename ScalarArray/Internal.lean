@@ -5,21 +5,22 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 /-!
-# Scalar arrays
+# The runtime representation of scalar arrays
 
 `ScalarArray.Raw` exposes the Lean runtime's scalar array objects (`lean_sarray_object`), the
 representation behind `ByteArray` and `FloatArray`. A scalar array is a header recording the
 element size, the size and the capacity, followed by the elements stored unboxed.
 
-This module describes the header, with allocation, size and capacity queries, copying and
-resizing, and copies of raw bytes. The typed array modules use it as their runtime representation
-through `import all ScalarArray.Internal`, and reach it with `unsafeCast`. Every `extern` on scalar
-arrays is here, except the element-typed reads and writes. Only what the typed modules' inlined
-code calls is public: the type, `size`, `capacity`, `resizeUnsafe` and `ensureExclusive`. Inlined
-code can only use
-declarations of publicly imported modules, so the typed modules also import this one publicly and
-these are visible wherever `ScalarArray` is imported. They are all in `ScalarArray.Raw`, out of the
-way of the typed arrays. The rest is private.
+This module binds the runtime functions on that header: allocation, size and capacity queries,
+copying, resizing and copies of raw bytes. The typed array modules use it as their runtime
+representation through `import all ScalarArray.Internal`, and reach it with `unsafeCast`. Their own
+externs are only those that are part of their API, such as `size`, `decEq` and `markLinear`, and
+the reads and writes `uget` and `setUnsafe`, whose C names the element type.
+
+Only what the typed modules' inlined code calls is public: the type, `size`, `capacity`,
+`resizeUnsafe` and `ensureExclusive`. Inlined code can only use declarations of publicly imported
+modules, so the typed modules import this one publicly, and these are visible wherever
+`ScalarArray` is imported. They are not part of the API. The rest is private.
 -/
 
 namespace ScalarArray
@@ -36,10 +37,12 @@ namespace Raw
 private def elemSize : @& Raw → UInt32
   | allocate elemSize _ _ _ => elemSize
 
+/-- The number of elements of `a`. -/
 @[extern "lean_sarray_size"]
 public def size : @& Raw → USize
   | allocate _ size _ _ => size
 
+/-- The number of elements `a` has room for before it must be reallocated. -/
 @[extern "lean_sarray_capacity"]
 public def capacity : @& Raw → USize
   | allocate _ _ capacity _ => capacity
@@ -56,11 +59,16 @@ private def copyWithCapacity (a : Raw) (capacity : USize) (h : a.size ≤ capaci
 private def copy (a : Raw) : Raw :=
   a.copyWithCapacity a.capacity a.size_le_capacity
 
+/--
+Sets the size of `a` to `size`, in place. Only valid when `a` is exclusive; the elements past the
+old size are uninitialized until they are stored.
+-/
 @[extern c inline "#1;\nlean_sarray_set_size(#1, #2)"]
 public unsafe def resizeUnsafe (a : Raw) (size : USize) (h : size ≤ a.capacity)
     (_exclusive : isExclusiveUnsafe a := by rfl) : Raw :=
   allocate a.elemSize size a.capacity h
 
+/-- Returns `a` itself when it is not shared, and a copy otherwise. -/
 -- `never_extract`: once inlined, `c.ensureExclusive` on a closed array `c` would otherwise be
 -- hoisted into a shared constant, which the following in-place write would then modify.
 @[never_extract, extern "lean_sarray_ensure_exclusive"]

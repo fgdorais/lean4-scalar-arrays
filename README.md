@@ -85,6 +85,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Search       | `findIdx?`, `findFinIdx?`                                                   |
 | Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `get`, `getD`, `get!`, `popFront`, `copy`, `for x in s`, `foldl`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findSomeRevM?`, `toArray`, `toList` |
 | Slice writes | `Slice.set`, `set!`, `modify`, `swap`, `reverse`, `foldlInPlace`, `foldrInPlace`, `foldlInPlaceThen`, `foldrInPlaceThen`, which write into the slice's array; `s.array` gives the whole array back |
+| In-place folds | `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, and `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array |
 | Equality     | `a == b`; for integer types also `DecidableEq` and `Hashable`               |
 | Linearity    | `markLinear`, `propagateMark`                                               |
@@ -104,13 +105,14 @@ As with `ByteArray`, `set!` returns the array unchanged when the index is out of
 `foldlM` take optional `start` and `stop` indices.
 
 `a ++ b` copies the elements of `b` with a single `memmove`, into `a` itself when it is not shared
-and has room. `extract` and `copySlice` also copy with a single `memmove`. Iteration reads the elements
-directly, without building an `Array`.
+and has room. `extract` and `copySlice` also copy with a single `memmove`. Iteration reads the
+elements directly, without building an `Array`.
 
 `UInt8Array` converts to and from core's `ByteArray` with `toByteArray`, `ofByteArray` and
 `ByteArray.toUInt8Array`, and `Float64Array` to and from core's `FloatArray` with `toFloatArray`,
-`ofFloatArray` and `FloatArray.toFloat64Array` (`import ScalarArray.Conversions`). These conversions
-never copy, so core's functions can be used directly on these arrays and vice versa.
+`ofFloatArray` and `FloatArray.toFloat64Array`, in `ScalarArray.Conversions`, which
+`import ScalarArray` includes. These conversions never copy, so core's functions can be used
+directly on these arrays and vice versa.
 
 Slices are `Std.Slice`s, like core's `Subarray`, so they work with the generic slice API and core's
 range notation `a[i...j]` (the older `a[i:j]` notation only applies to `Array`). Taking a slice
@@ -159,8 +161,10 @@ builds the `Array`. The header is described by an internal type, `ScalarArray.Ra
 `ScalarArray.Internal`. It and the few operations on it that inlined code calls are public, but
 they are not part of the API; the rest of that module is private.
 
-The model and the C implementation are connected only by testing, so the test suite runs
-against the compiled code.
+The implementations written in safe Lean, such as the loops behind `toArray`, `foldlM` and
+`forIn`, are proved equal to their specifications by `csimp` theorems. The `extern` and unsafe
+`implemented_by` code is connected to the model only by testing, so the test suite runs against
+the compiled code.
 
 ## Development
 

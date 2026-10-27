@@ -227,6 +227,7 @@ public protected structure SliceIterator where
   /-- The rest of the slice. -/
   xs : ISizeArray.Slice
 
+/-- One step of the iterator: the first element of the rest of the slice, if there is one. -/
 @[inline, expose]
 public def SliceIterator.step :
     Std.IterM (α := ISizeArray.SliceIterator) Id ISize →

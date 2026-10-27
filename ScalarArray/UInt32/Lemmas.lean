@@ -23,6 +23,8 @@ namespace ScalarArray
 
 namespace UInt32Array
 
+/-! ## Arrays -/
+
 @[simp] public theorem size_mk (a : Array UInt32) : (mk a).size = a.size := rfl
 
 public theorem size_eq_toArray_size (a : UInt32Array) : a.size = a.toArray.size := by cases a; rfl
@@ -282,7 +284,7 @@ public theorem copySlice_eq_append (src : UInt32Array) (srcOff : Nat) (dest : UI
   simp only [Slice.copy, size_extract, Slice.size_eq]
   lia
 
-/-! ### Lists -/
+/-! ## Lists -/
 
 @[simp] public theorem toList_mk (a : Array UInt32) : (mk a).toList = a.toList := rfl
 
@@ -341,7 +343,7 @@ public theorem ext_getElem? {a b : UInt32Array} (h : ∀ i : Nat, a[i]? = b[i]?)
     List.popWhile_toArray]
   simp
 
-/-! ### Machine-word indices -/
+/-! ## Machine-word indices -/
 
 /--
 `usize` is the size when the size fits in a `USize`, which holds for every array in memory. Loops
@@ -356,7 +358,7 @@ public theorem lt_usize_iff (a : UInt32Array) (h : a.size < USize.size) {i : USi
     i < a.usize ↔ i.toNat < a.size := by
   rw [USize.lt_iff_toNat_lt, toNat_usize_of_lt a h]
 
-/-! ### Last element -/
+/-! ## Last element -/
 
 public theorem back?_eq_getElem? (a : UInt32Array) : a.back? = a[a.size - 1]? := by
   simp only [back?]
@@ -384,7 +386,7 @@ public theorem back_eq_getElem (a : UInt32Array) (h : 0 < a.size) :
 @[simp] public theorem back_push (a : UInt32Array) (v : UInt32) (h) : (a.push v).back h = v := by
   simp [back_eq_getElem]
 
-/-! ### More lists -/
+/-! ## More lists -/
 
 @[simp] public theorem toList_uset (a : UInt32Array) (i : USize) (v : UInt32) (h) :
     (a.uset i v h).toList = a.toList.set i.toNat v := by
@@ -397,7 +399,7 @@ public theorem back_eq_getElem (a : UInt32Array) (h : 0 < a.size) :
         dest.toList.extract (destOff + min len (src.size - srcOff)) dest.size := by
   simp [copySlice_eq_append]
 
-/-! ### Accessors -/
+/-! ## Accessors -/
 
 @[simp] public theorem get_eq_getElem (a : UInt32Array) (i : Nat) (h) : a.get i h = a[i] := rfl
 
@@ -419,7 +421,7 @@ public theorem back_eq_getElem (a : UInt32Array) (h : 0 < a.size) :
 @[simp] public theorem isEmpty_iff {a : UInt32Array} : a.isEmpty ↔ a = empty := by
   simp [isEmpty, ← size_eq_zero_iff]
 
-/-! ### Queries -/
+/-! ## Queries -/
 
 @[simp] public theorem any_toList (a : UInt32Array) (p : UInt32 → Bool) :
     a.toList.any p = a.any p := by
@@ -477,7 +479,7 @@ private theorem findFinIdx?_loop_eq (a : UInt32Array) (p : UInt32 → Bool) (i :
     (a.findFinIdx? p start).map Fin.val = a.findIdx? p start := by
   simp [findFinIdx?, findIdx?, findFinIdx?_loop_eq]
 
-/-! ### Slices -/
+/-! ## Slices -/
 
 @[simp] public theorem Slice.getElem_copy (s : UInt32Array.Slice) (i : Nat)
     (h : i < s.copy.size) :
@@ -594,7 +596,7 @@ public theorem Slice.foldr_eq_foldr_toList_copy {β : Type v} (f : UInt32 → β
   rw [Slice.foldr, Slice.foldrM, Id.run, Slice.foldrM_loop_eq,
     List.take_of_length_le (by simp)]
 
-/-! ### Writes -/
+/-! ## Writes -/
 
 @[simp] public theorem getElem_uset (a : UInt32Array) (i : USize) (v : UInt32) (h) (j : Nat)
     (hj) : (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
@@ -642,7 +644,7 @@ public theorem getElem_copySlice (src : UInt32Array) (srcOff : Nat) (dest : UInt
       congr 1
       lia
 
-/-! ### Monadic folds -/
+/-! ## Monadic folds -/
 
 @[simp] public theorem foldlM_toList {β : Type v} {m : Type v → Type w} [Monad m]
     (f : β → UInt32 → m β) (init : β) (a : UInt32Array) :
@@ -664,7 +666,7 @@ public theorem getElem_copySlice (src : UInt32Array) (srcOff : Nat) (dest : UInt
   rcases a with ⟨l⟩
   exact (List.forM_toArray l f).symm
 
-/-! ### Membership -/
+/-! ## Membership -/
 
 public theorem mem_def {x : UInt32} {a : UInt32Array} : x ∈ a ↔ x ∈ a.toArray := Iff.rfl
 
@@ -695,7 +697,7 @@ public theorem getElem_mem {a : UInt32Array} {i : Nat} (h : i < a.size) : a[i] �
     x ∈ a ++ b ↔ x ∈ a ∨ x ∈ b := by
   simp [← mem_toArray]
 
-/-! ### Iterators -/
+/-! ## Iterators -/
 
 private theorem toList_foldl_push (a : UInt32Array) (l : List UInt32) :
     (l.foldl (·.push ·) a).toList = a.toList ++ l := by
@@ -736,7 +738,7 @@ private theorem SliceIterator.toList_eq (it : Std.Iter (α := UInt32Array.SliceI
     simp [Slice.copy]
     lia
 
-/-! ### Slices as copies -/
+/-! ## Slices as copies -/
 
 @[simp] public theorem Slice.size_empty : (Slice.empty : UInt32Array.Slice).size = 0 := rfl
 
@@ -840,7 +842,7 @@ private theorem Slice.findSomeRevM?_loop_eq (p : UInt32 → Bool) (s : UInt32Arr
   rw [List.take_of_length_le (by simp)] at this
   exact this
 
-/-! ### Membership in slices -/
+/-! ## Membership in slices -/
 
 @[simp] public theorem Slice.mem_iff_mem_copy {x : UInt32} {s : UInt32Array.Slice} :
     x ∈ s ↔ x ∈ s.copy := Iff.rfl
@@ -853,7 +855,7 @@ public theorem Slice.mem_iff_getElem {x : UInt32} {s : UInt32Array.Slice} :
 public theorem Slice.getElem_mem {s : UInt32Array.Slice} {i : Nat} (h : i < s.size) : s[i] ∈ s :=
   mem_iff_getElem.mpr ⟨i, h, rfl⟩
 
-/-! ### Slice equality -/
+/-! ## Slice equality -/
 
 @[simp] public theorem Slice.beq_eq_beq_copy (s t : UInt32Array.Slice) :
     (s == t) = (s.copy == t.copy) := by

@@ -626,7 +626,7 @@ public def foldrInPlaceThen {β : Type v} {γ : Type w} (s : Int16Array.Slice) (
 
 end Slice
 
-/-! ### Folding over windows of one array -/
+/-! ## Folding over windows of one array -/
 
 /-- The loop of `foldlInPlace2`, over `Nat` offsets and indices. -/
 @[expose]
@@ -734,7 +734,7 @@ public def foldlInPlace2Then {β : Type v} {γ : Type w} (a : Int16Array) (xs ys
         (a.foldlInPlace2 xs ys rs len hx hy hr init f).2 :=
   rfl
 
-/-! ### In-place folds over a `USize` range -/
+/-! ## In-place folds over a `USize` range -/
 
 @[inline]
 private unsafe def foldlInPlaceRangeImpl {β : Type v} (a : Int16Array) (start len : USize)

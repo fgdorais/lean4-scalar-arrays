@@ -54,6 +54,7 @@ public def toArray (a : @& UInt64Array) : Array UInt64 :=
 @[simp] public theorem mk_toArray (a : UInt64Array) : mk a.toArray = a :=
   Quot.ind (β := fun a : UInt64Array => mk a.toArray = a) (fun _ => rfl) a
 
+/-- The number of elements of `a`. -/
 -- `lean_byte_array_size` reads the size of any scalar array, whatever its element size: in
 -- `lean.h` it is `lean_box(lean_sarray_size(a))`. Caution: by its name it is meant for `ByteArray`,
 -- so recheck it when the toolchain changes. The tests check `size` for every element size.
@@ -61,13 +62,13 @@ public def toArray (a : @& UInt64Array) : Array UInt64 :=
 public def size (a : @& UInt64Array) : Nat :=
   a.toArray.size
 
+@[inline]
+public unsafe def usizeImpl (a : @& UInt64Array) : USize := (unsafeCast a : Raw).size
+
 /--
 The size of `a` as a `USize`. Since `USize` can address all memory, no array has more elements than
 `USize` can count.
 -/
-@[inline]
-public unsafe def usizeImpl (a : @& UInt64Array) : USize := (unsafeCast a : Raw).size
-
 @[implemented_by usizeImpl, simp, expose]
 public def usize (a : @& UInt64Array) : USize :=
   a.size.toUSize
@@ -76,11 +77,13 @@ public def usize (a : @& UInt64Array) : USize :=
 public theorem toNat_usize_le (a : UInt64Array) : a.usize.toNat ≤ a.size := by
   simp [Nat.mod_le]
 
+/-- The element at the `USize` index `i`. It compiles to an inline load. -/
 @[extern c inline "((uint64_t*)lean_sarray_cptr(#1))[#2]", expose]
 public def uget (a : @& UInt64Array) (i : USize) (h : i.toNat < a.size := by get_elem_tactic) :
     UInt64 :=
   a.toArray.uget i h
 
+/-- The element at index `i`. -/
 @[expose]
 public def get (a : @& UInt64Array) (i : @& Nat) (h : i < a.size := by get_elem_tactic) :
     UInt64 :=
@@ -255,6 +258,7 @@ private unsafe def emptyWithCapacityImpl (capacity : Nat) : UInt64Array :=
 public def emptyWithCapacity (capacity : Nat) : UInt64Array :=
   mk #[]
 
+/-- The empty array. -/
 @[expose] public def empty : UInt64Array := emptyWithCapacity 0
 
 public instance : EmptyCollection UInt64Array := ⟨empty⟩
@@ -277,6 +281,7 @@ public unsafe def usetImpl : type_of% @uset :=
 
 attribute [implemented_by usetImpl] uset
 
+/-- Replaces the element at index `i`, in place when `a` is not shared, like `uset`. -/
 @[expose]
 public def set (a : UInt64Array) (i : Nat) (v : UInt64) (h : i < a.size := by get_elem_tactic) :
     UInt64Array :=
@@ -288,10 +293,12 @@ public unsafe def setImpl : type_of% @set :=
 
 attribute [implemented_by setImpl] set
 
+/-- The element at index `i`. Panics if `i` is out of bounds, and then returns `default`. -/
 @[expose]
 public def get! (a : @& UInt64Array) (i : @& Nat) : UInt64 :=
   if h : i < a.size then a.get i h else panic! "index out of bounds"
 
+/-- The element at index `i`, or `v₀` if `i` is out of bounds. -/
 @[expose]
 public def getD (a : @& UInt64Array) (i : @& Nat) (v₀ : UInt64) : UInt64 :=
   if h : i < a.size then a.get i h else v₀
@@ -334,6 +341,10 @@ public unsafe def pushImpl (a : UInt64Array) (v : UInt64) : UInt64Array :=
   else
     pushGrowUnsafe a v
 
+/--
+Appends `v` to `a`, in place when `a` is not shared and has room. A full array grows to capacity
+`2 * capacity + 1`, so repeated pushes take amortized constant time.
+-/
 @[implemented_by pushImpl, expose]
 public def push (a : UInt64Array) (v : UInt64) : UInt64Array :=
   mk (a.toArray.push v)
@@ -341,8 +352,8 @@ public def push (a : UInt64Array) (v : UInt64) : UInt64Array :=
 /--
 Copies the `n` elements of `src` starting at index `srcOff` into `dest` starting at index `destOff`,
 in place, and grows the size of `dest` to `destOff + n` if it is smaller. Only valid when `dest` is
-exclusive, has capacity for `destOff + n` elements, and is not the same object as `src`, and when
-`destOff ≤ dest.size` and `srcOff + n ≤ src.size`.
+exclusive and has capacity for `destOff + n` elements, and when `destOff ≤ dest.size` and
+`srcOff + n ≤ src.size`. The ranges may overlap.
 -/
 @[inline]
 private unsafe def copySliceUnsafe (dest : UInt64Array) (src : @& UInt64Array)

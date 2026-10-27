@@ -25,8 +25,6 @@ namespace ScalarArray
 
 namespace UInt8Array
 
-/-! ### Decidable membership and slice hashing -/
-
 public theorem contains_iff_mem {a : UInt8Array} {x : UInt8} :
     a.contains x = true ↔ x ∈ a := by
   simp only [contains, Array.contains_iff_mem, mem_toArray]

@@ -23,6 +23,7 @@ namespace Float32Array
 
 /-! ## Removing elements -/
 
+/-- Whether `a` has no elements. -/
 @[expose] public def isEmpty (a : @& Float32Array) : Bool := a.size == 0
 
 private unsafe def popImpl (a : Float32Array) : Float32Array :=
@@ -37,10 +38,13 @@ private unsafe def popImpl (a : Float32Array) : Float32Array :=
 public def pop (a : Float32Array) : Float32Array :=
   mk a.toArray.pop
 
+/-- The last element of `a`, or `none` if `a` is empty. -/
 public def back? (a : @& Float32Array) : Option Float32 := a[a.size - 1]?
 
+/-- The last element of `a`. Panics if `a` is empty, and then returns `default`. -/
 public def back! (a : @& Float32Array) : Float32 := a[a.size - 1]!
 
+/-- The last element of `a`, which is not empty. -/
 public def back (a : @& Float32Array) (h : 0 < a.size) : Float32 :=
   a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
 
@@ -308,20 +312,27 @@ private theorem foldrMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
       simp only [this, Array.foldrM.fold.eq_1, beq_self_eq_true, ite_true]
   · rfl
 
+/--
+Folds a function over the elements of `a` from index `start` up to, but not including, `stop`, from
+first to last.
+-/
 @[inline, expose]
 public def foldl {β : Type v} (f : β → Float32 → β) (init : β) (a : @& Float32Array) (start := 0)
     (stop := a.size) : β :=
   Id.run <| a.foldlM (pure <| f · ·) init start stop
 
+/-- Folds a function over the elements of `a`, from last to first. -/
 @[inline, expose]
 public def foldr {β : Type v} (f : Float32 → β → β) (init : β) (a : @& Float32Array) : β :=
   Id.run <| a.foldrM (pure <| f · ·) init
 
+/-- Runs a monadic action on each element of `a`, from first to last. -/
 @[inline, expose]
 public def forM {m : Type v → Type w} [Monad m] (f : Float32 → m PUnit) (a : @& Float32Array) :
     m PUnit :=
   a.foldlM (fun _ x => f x) ⟨⟩
 
+/-- The loop behind `for x in a`. Logically it is the loop over `a.toArray`. -/
 @[expose]
 public def forIn {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Float32Array) (init : β)
     (f : Float32 → β → m (ForInStep β)) : m β :=
@@ -559,6 +570,7 @@ private theorem beq_eq_beq_toArray (a b : Float32Array) : (a == b) = (a.toArray 
 
 /-! ## Conversion and printing -/
 
+/-- The elements of `a` as a list. -/
 @[expose] public def toList (a : Float32Array) : List Float32 := a.toArray.toList
 
 /-- Prints `ScalarArray.Float32Array.mk #[...]`, which evaluates to an equal array. -/

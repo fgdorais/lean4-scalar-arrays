@@ -28,4 +28,8 @@ Unboxed arrays of scalar values, backed by the Lean runtime's scalar arrays:
 * floating point: `Float32Array`, `Float64Array`.
 
 All of them live in the `ScalarArray` namespace and share the same API.
+
+`ScalarArray.Conversions`, which this module imports, converts `UInt8Array` and `Float64Array` to
+and from core's `ByteArray` and `FloatArray` without copying. The experimental `ScalarArray.Bytes`
+converts the arrays to and from bytes in a chosen byte order; import it on its own.
 -/
