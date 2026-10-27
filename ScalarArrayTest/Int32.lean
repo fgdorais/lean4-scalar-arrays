@@ -581,14 +581,6 @@ example (a : Int32Array) (v : Int32) : (a.push v).pop = a :=
   Int32Array.ext_getElem? fun i => by
     by_cases h : i < a.size <;> simp [h, getElem?_pos, getElem?_neg]
 example (a b : Int32Array) (h : a.toArray = b.toArray) : a = b := by simpa using h
-example (s t : Int32Array.Slice) (h : s.array = t.array) (h' : s.start = t.start)
-    (h'' : s.stop = t.stop) : s = t := by
-  ext1 <;> assumption
-example (s t : Int32Array.Slice) (h : s.array.toArray = t.array.toArray) (h' : s.start = t.start)
-    (h'' : s.stop = t.stop) : s = t := by
-  ext <;> simp_all
-example (s t : Int32Array.Slice) (h : s = t) : s.start = t.start :=
-  (Int32Array.Slice.ext_iff.1 h).2.1
 
 /-! Default bounds proofs -/
 

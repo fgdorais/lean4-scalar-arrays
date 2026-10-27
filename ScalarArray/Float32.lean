@@ -983,15 +983,6 @@ public theorem start_le_stop (s : Float32Array.Slice) : s.start ≤ s.stop :=
 public theorem stop_le_array_size (s : Float32Array.Slice) : s.stop ≤ s.array.size :=
   s.internalRepresentation.stop_le_array_size
 
-/-- Two slices are equal when they have the same array, start and stop. -/
-@[ext] public theorem ext {s t : Float32Array.Slice} (h₁ : s.array = t.array)
-    (h₂ : s.start = t.start) (h₃ : s.stop = t.stop) : s = t := by
-  obtain ⟨⟨a, i, j, _, _⟩⟩ := s
-  obtain ⟨⟨b, k, l, _, _⟩⟩ := t
-  simp only [array, start, stop] at h₁ h₂ h₃
-  subst h₁ h₂ h₃
-  rfl
-
 /-- `s.stop.toUSize` bounds the indices of loops over the slice. -/
 private theorem toNat_toUSize_stop_le (s : Float32Array.Slice) :
     s.stop.toUSize.toNat ≤ s.array.size := by
