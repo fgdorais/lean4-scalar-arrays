@@ -158,6 +158,7 @@ public def ofFn {n : Nat} (f : Fin n → Int64) : Int64Array :=
 public def ofList (l : List Int64) : Int64Array :=
   mk l.toArray
 
+/-- For internal use only. -/
 public def ofListImpl (l : List Int64) : Int64Array :=
   loop l (emptyWithCapacity l.length)
 where
@@ -191,6 +192,7 @@ private def foldlMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : β �
     (init : β) (a : @& Int64Array) (start stop : Nat) : m β :=
   a.foldlM f init start stop
 
+/-- For internal use only. -/
 @[inline]
 public def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : β → Int64 → m β)
     (init : β) (a : @& Int64Array) (start := 0) (stop := a.size) : m β :=
@@ -266,6 +268,7 @@ private def foldrMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : Int6
     (init : β) (a : @& Int64Array) : m β :=
   a.foldrM f init
 
+/-- For internal use only. -/
 @[inline]
 public def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : Int64 → β → m β)
     (init : β) (a : @& Int64Array) : m β :=
@@ -343,6 +346,7 @@ private def forInSlow {β : Type v} {m : Type v → Type w} [Monad m] (a : @& In
     (init : β) (f : Int64 → β → m (ForInStep β)) : m β :=
   a.forIn init f
 
+/-- For internal use only. -/
 @[inline]
 public def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Int64Array)
     (init : β) (f : Int64 → β → m (ForInStep β)) : m β :=
@@ -408,6 +412,7 @@ public def any (a : @& Int64Array) (p : Int64 → Bool) : Bool :=
 private def anySlow (a : @& Int64Array) (p : Int64 → Bool) : Bool :=
   a.any p
 
+/-- For internal use only. -/
 @[inline]
 public def anyImpl (a : @& Int64Array) (p : Int64 → Bool) : Bool :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else anySlow a p
@@ -453,6 +458,7 @@ public def all (a : @& Int64Array) (p : Int64 → Bool) : Bool :=
 private def allSlow (a : @& Int64Array) (p : Int64 → Bool) : Bool :=
   a.all p
 
+/-- For internal use only. -/
 @[inline]
 public def allImpl (a : @& Int64Array) (p : Int64 → Bool) : Bool :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else allSlow a p
@@ -485,6 +491,7 @@ private theorem allImpl_loop (a : Int64Array) (p : Int64 → Bool) (stop : USize
 public def contains (a : @& Int64Array) (v : Int64) : Bool :=
   a.toArray.contains v
 
+/-- For internal use only. -/
 public def containsImpl (a : @& Int64Array) (v : Int64) : Bool :=
   a.any (v == ·)
 
@@ -515,6 +522,7 @@ private theorem beq_eq_beq_toArray (a b : Int64Array) : (a == b) = (a.toArray ==
 public def hash (a : @& Int64Array) : UInt64 :=
   Hashable.hash a.toArray
 
+/-- For internal use only. -/
 public def hashImpl (a : @& Int64Array) : UInt64 :=
   a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
 

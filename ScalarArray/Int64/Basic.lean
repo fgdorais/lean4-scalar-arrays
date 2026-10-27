@@ -62,6 +62,7 @@ public def toArray (a : @& Int64Array) : Array Int64 :=
 public def size (a : @& Int64Array) : Nat :=
   a.toArray.size
 
+/-- For internal use only. -/
 @[inline]
 public unsafe def usizeImpl (a : @& Int64Array) : USize := (unsafeCast a : Raw).size
 
@@ -89,6 +90,7 @@ public def get (a : @& Int64Array) (i : @& Nat) (h : i < a.size := by get_elem_t
     Int64 :=
   a.toArray[i]
 
+/-- For internal use only. -/
 -- Public, like `mkImpl`, `usetImpl`, `setImpl` and `pushImpl` below: a private
 -- `implemented_by` target attached with a separate `attribute` command is not visible to other
 -- modules, so code there that uses `get`, `mk`, `toArray`, `uset` or `set` would fail to compile.
@@ -106,6 +108,7 @@ so that `uset` can be inlined into code in other modules.
 public unsafe def setUnsafe (a : Int64Array) (i : USize) (v : Int64) : Int64Array :=
   mk <| a.toArray.uset i v lcProof
 
+/-- For internal use only. -/
 @[inline, never_extract]
 public unsafe def ensureExclusiveImpl (a : Int64Array) : Int64Array :=
   unsafeCast (unsafeCast a : Raw).ensureExclusive
@@ -135,6 +138,7 @@ public unsafe def ensureCapacityGrowUnsafe (a : Int64Array) (n : Nat) : Int64Arr
   let s : Raw := unsafeCast a
   unsafeCast (s.copyWithCapacity (toUSizeChecked (max n s.size.toNat)) lcProof)
 
+/-- For internal use only. -/
 -- Inline, and made of public inline externs, so that the common path compiles to an inline capacity
 -- check in other modules.
 @[inline]
@@ -149,6 +153,7 @@ does not copy `a` just because it is shared.
 @[never_extract, implemented_by ensureCapacityImpl, expose]
 public def ensureCapacity (a : Int64Array) (n : Nat) : Int64Array := a
 
+/-- For internal use only. -/
 -- Inline, like `ensureCapacityImpl`: one capacity check, then one exclusivity check. The copy made
 -- when `a` lacks room is exclusive, so `a` is copied at most once.
 @[inline]
@@ -178,6 +183,7 @@ where
   loop (sz : USize) (r : Int64Array) (i : USize) : Int64Array :=
     if i < sz then loop sz (setUnsafe r i (a.uget i lcProof)) (i + 1) else r
 
+/-- For internal use only. -/
 public unsafe def mkImpl (a : Array Int64) : Int64Array :=
   mkWithCapacityImpl a a.size
 
@@ -192,6 +198,7 @@ private theorem toNat_toUSize_of_le {a : Int64Array} (hsize : a.size < USize.siz
   simp only [Nat.toUSize_eq, USize.toNat_ofNat']
   exact Nat.mod_eq_of_lt (by lia)
 
+/-- For internal use only. -/
 -- `toArrayImpl` and the other `Impl` functions below are proved equal to their specifications by
 -- `csimp` theorems, which make the compiler call them instead. A `csimp` theorem must be public,
 -- and so must the functions it names. The loops index with `USize`, so the proofs need
@@ -274,6 +281,7 @@ public def uset (a : Int64Array) (i : USize) (v : Int64)
     (h : i.toNat < a.size := by get_elem_tactic) : Int64Array :=
   mk (a.toArray.uset i v h)
 
+/-- For internal use only. -/
 -- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
 @[inline]
 public unsafe def usetImpl : type_of% @uset :=
@@ -287,6 +295,7 @@ public def set (a : Int64Array) (i : Nat) (v : Int64) (h : i < a.size := by get_
     Int64Array :=
   mk (a.toArray.set i v h)
 
+/-- For internal use only. -/
 @[inline]
 public unsafe def setImpl : type_of% @set :=
   fun a i v _ => a.uset i.toUSize v lcProof
@@ -329,6 +338,7 @@ public unsafe def pushGrowUnsafe (a : Int64Array) (v : Int64) : Int64Array :=
   else
     panic! "out of memory"
 
+/-- For internal use only. -/
 -- Inline, and made of public inline externs, so that the common path compiles to inline C in other
 -- modules: one capacity check, one exclusivity check, a size bump and one store.
 @[inline]

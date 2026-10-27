@@ -158,6 +158,7 @@ public def ofFn {n : Nat} (f : Fin n → ISize) : ISizeArray :=
 public def ofList (l : List ISize) : ISizeArray :=
   mk l.toArray
 
+/-- For internal use only. -/
 public def ofListImpl (l : List ISize) : ISizeArray :=
   loop l (emptyWithCapacity l.length)
 where
@@ -191,6 +192,7 @@ private def foldlMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : β �
     (init : β) (a : @& ISizeArray) (start stop : Nat) : m β :=
   a.foldlM f init start stop
 
+/-- For internal use only. -/
 @[inline]
 public def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : β → ISize → m β)
     (init : β) (a : @& ISizeArray) (start := 0) (stop := a.size) : m β :=
@@ -266,6 +268,7 @@ private def foldrMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : ISiz
     (init : β) (a : @& ISizeArray) : m β :=
   a.foldrM f init
 
+/-- For internal use only. -/
 @[inline]
 public def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : ISize → β → m β)
     (init : β) (a : @& ISizeArray) : m β :=
@@ -343,6 +346,7 @@ private def forInSlow {β : Type v} {m : Type v → Type w} [Monad m] (a : @& IS
     (init : β) (f : ISize → β → m (ForInStep β)) : m β :=
   a.forIn init f
 
+/-- For internal use only. -/
 @[inline]
 public def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a : @& ISizeArray)
     (init : β) (f : ISize → β → m (ForInStep β)) : m β :=
@@ -408,6 +412,7 @@ public def any (a : @& ISizeArray) (p : ISize → Bool) : Bool :=
 private def anySlow (a : @& ISizeArray) (p : ISize → Bool) : Bool :=
   a.any p
 
+/-- For internal use only. -/
 @[inline]
 public def anyImpl (a : @& ISizeArray) (p : ISize → Bool) : Bool :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else anySlow a p
@@ -453,6 +458,7 @@ public def all (a : @& ISizeArray) (p : ISize → Bool) : Bool :=
 private def allSlow (a : @& ISizeArray) (p : ISize → Bool) : Bool :=
   a.all p
 
+/-- For internal use only. -/
 @[inline]
 public def allImpl (a : @& ISizeArray) (p : ISize → Bool) : Bool :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else allSlow a p
@@ -485,6 +491,7 @@ private theorem allImpl_loop (a : ISizeArray) (p : ISize → Bool) (stop : USize
 public def contains (a : @& ISizeArray) (v : ISize) : Bool :=
   a.toArray.contains v
 
+/-- For internal use only. -/
 public def containsImpl (a : @& ISizeArray) (v : ISize) : Bool :=
   a.any (v == ·)
 
@@ -515,6 +522,7 @@ private theorem beq_eq_beq_toArray (a b : ISizeArray) : (a == b) = (a.toArray ==
 public def hash (a : @& ISizeArray) : UInt64 :=
   Hashable.hash a.toArray
 
+/-- For internal use only. -/
 public def hashImpl (a : @& ISizeArray) : UInt64 :=
   a.foldl (fun r x => mixHash r (Hashable.hash x)) 7
 

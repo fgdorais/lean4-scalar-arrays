@@ -336,6 +336,7 @@ private def foldrMSlow {β : Type v} {m : Type v → Type w} [Monad m] (f : Int6
     (init : β) (s : Int64Array.Slice) : m β :=
   s.foldrM f init
 
+/-- For internal use only. -/
 @[inline]
 public def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m]
     (f : Int64 → β → m β) (init : β) (s : Int64Array.Slice) : m β :=
@@ -412,6 +413,7 @@ private def findSomeRevMSlow {β : Type v} {m : Type v → Type w} [Monad m]
     (s : Int64Array.Slice) (f : Int64 → m (Option β)) : m (Option β) :=
   s.findSomeRevM? f
 
+/-- For internal use only. -/
 @[inline]
 public def findSomeRevMImpl {β : Type v} {m : Type v → Type w} [Monad m]
     (s : Int64Array.Slice) (f : Int64 → m (Option β)) : m (Option β) :=
@@ -520,6 +522,7 @@ public def beq (s t : Int64Array.Slice) : Bool :=
 private def beqSlow (s t : Int64Array.Slice) : Bool :=
   s.beq t
 
+/-- For internal use only. -/
 -- Compares the sizes as `USize`s, so that the loop knows that the indices into `t` stay in bounds.
 public def beqImpl (s t : Int64Array.Slice) : Bool :=
   if s.array.size < USize.size ∧ t.array.size < USize.size then
