@@ -72,11 +72,14 @@ at byte `destOff`. Only valid when `dest` is exclusive and both ranges are withi
 The ranges may overlap.
 -/
 -- `memmove` rather than `memcpy`, so that overlapping ranges are never undefined behavior; for
--- ranges that don't overlap it is as fast. A builtin, since `lean.h` doesn't include `string.h`.
+-- ranges that don't overlap it is as fast. `lean.h` doesn't include `string.h`, so the code
+-- declares `memmove` itself, at block scope, which standard C allows for library functions. Unlike
+-- `__builtin_memmove`, this also compiles with MSVC, and GCC and Clang still treat it as their
+-- builtin.
 -- TODO: core has no runtime function that copies a slice of a scalar array with any element size;
 -- `lean_byte_array_copy_slice` only works for bytes. Replace this once core has one.
-@[extern c inline "#1;\n__builtin_memmove(lean_sarray_cptr(#1) + #4, \
-  lean_sarray_cptr(#2) + #3, #5)"]
+@[extern c inline "#1;\n{ extern void * memmove(void *, void const *, size_t); \
+  memmove(lean_sarray_cptr(#1) + #4, lean_sarray_cptr(#2) + #3, #5); }"]
 private unsafe def memmoveUnsafe :
     Raw → @& Raw → (srcOff destOff n : USize) → Raw
   | dest, _, _, _, _ => dest
