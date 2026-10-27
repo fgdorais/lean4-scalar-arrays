@@ -891,8 +891,9 @@ public theorem hash_eq_hash_toArray (a : UInt32Array) :
 
 @[expose] public def toList (a : UInt32Array) : List UInt32 := a.toArray.toList
 
+/-- Prints `ScalarArray.UInt32Array.mk #[...]`, which evaluates to an equal array. -/
 public instance : Repr UInt32Array where
-  reprPrec a _ := "UInt32Array.mk " ++ repr a.toArray
+  reprPrec a prec := Repr.addAppParen ("ScalarArray.UInt32Array.mk " ++ reprArg a.toArray) prec
 
 public instance : ToString UInt32Array where
   toString a := "UInt32Array.mk " ++ toString a.toArray
@@ -1006,8 +1007,12 @@ public def copy (s : UInt32Array.Slice) : UInt32Array :=
 public theorem getElem_eq (s : UInt32Array.Slice) (i : Nat) (h : i < s.size) :
     s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; lia) := rfl
 
+/--
+Prints the array and the bounds in slice notation, `(ScalarArray.UInt32Array.mk #[...])[i...j]`,
+which evaluates to an equal slice: slices are equal when their arrays and bounds are.
+-/
 public instance : Repr UInt32Array.Slice where
-  reprPrec s _ := repr s.copy ++ ".toSlice"
+  reprPrec s _ := reprArg s.array ++ "[" ++ repr s.start ++ "..." ++ repr s.stop ++ "]"
 
 public instance : ToString UInt32Array.Slice where
   toString s := toString s.copy

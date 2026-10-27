@@ -135,7 +135,24 @@ example (a : Float32Array) : Float32 := match a with | ⟨a⟩ => a[0]!
 /-! Printing -/
 
 #guard toString (Float32Array.mk #[1, 2]) == "Float32Array.mk " ++ toString #[(1 : Float32), 2]
-#guard reprStr (Float32Array.mk #[1, 2]) == "Float32Array.mk " ++ reprStr #[(1 : Float32), 2]
+#guard reprStr (Float32Array.mk #[1, 2]) ==
+  "ScalarArray.Float32Array.mk " ++ reprStr #[(1 : Float32), 2]
+#guard reprStr (some (Float32Array.mk #[1, 2])) ==
+  "some (ScalarArray.Float32Array.mk " ++ reprStr #[(1 : Float32), 2] ++ ")"
+#guard reprStr (Float32Array.mk #[1, 2, 3])[1...2] ==
+  "(ScalarArray.Float32Array.mk " ++ reprStr #[(1 : Float32), 2, 3] ++ ")[1...2]"
+#guard reprStr (some (Float32Array.mk #[1, 2, 3])[1...2]) ==
+  "some (ScalarArray.Float32Array.mk " ++ reprStr #[(1 : Float32), 2, 3] ++ ")[1...2]"
+
+-- What `repr` prints evaluates to the input, also as an argument.
+#guard ScalarArray.Float32Array.mk #[1, 2] == Float32Array.mk #[1, 2]
+#guard (some (ScalarArray.Float32Array.mk #[1, 2])) == some (Float32Array.mk #[1, 2])
+#guard
+  let s := (ScalarArray.Float32Array.mk #[1, 2, 3])[1...2]
+  s.array == Float32Array.mk #[1, 2, 3] && s.start == 1 && s.stop == 2
+#guard
+  let s? := some (ScalarArray.Float32Array.mk #[1, 2, 3])[1...2]
+  s?.map (fun s => (s.array.toArray, s.start, s.stop)) == some (#[1, 2, 3], 1, 2)
 
 /-! Every index, through both `Nat` and `USize` indices -/
 

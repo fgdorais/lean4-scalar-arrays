@@ -933,8 +933,9 @@ private theorem beq_eq_beq_toArray (a b : Float32Array) : (a == b) = (a.toArray 
 
 @[expose] public def toList (a : Float32Array) : List Float32 := a.toArray.toList
 
+/-- Prints `ScalarArray.Float32Array.mk #[...]`, which evaluates to an equal array. -/
 public instance : Repr Float32Array where
-  reprPrec a _ := "Float32Array.mk " ++ repr a.toArray
+  reprPrec a prec := Repr.addAppParen ("ScalarArray.Float32Array.mk " ++ reprArg a.toArray) prec
 
 public instance : ToString Float32Array where
   toString a := "Float32Array.mk " ++ toString a.toArray
@@ -1048,8 +1049,12 @@ public def copy (s : Float32Array.Slice) : Float32Array :=
 public theorem getElem_eq (s : Float32Array.Slice) (i : Nat) (h : i < s.size) :
     s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; lia) := rfl
 
+/--
+Prints the array and the bounds in slice notation, `(ScalarArray.Float32Array.mk #[...])[i...j]`,
+which evaluates to an equal slice: slices are equal when their arrays and bounds are.
+-/
 public instance : Repr Float32Array.Slice where
-  reprPrec s _ := repr s.copy ++ ".toSlice"
+  reprPrec s _ := reprArg s.array ++ "[" ++ repr s.start ++ "..." ++ repr s.stop ++ "]"
 
 public instance : ToString Float32Array.Slice where
   toString s := toString s.copy

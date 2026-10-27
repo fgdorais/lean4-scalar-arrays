@@ -891,8 +891,9 @@ public theorem hash_eq_hash_toArray (a : Int8Array) :
 
 @[expose] public def toList (a : Int8Array) : List Int8 := a.toArray.toList
 
+/-- Prints `ScalarArray.Int8Array.mk #[...]`, which evaluates to an equal array. -/
 public instance : Repr Int8Array where
-  reprPrec a _ := "Int8Array.mk " ++ repr a.toArray
+  reprPrec a prec := Repr.addAppParen ("ScalarArray.Int8Array.mk " ++ reprArg a.toArray) prec
 
 public instance : ToString Int8Array where
   toString a := "Int8Array.mk " ++ toString a.toArray
@@ -1006,8 +1007,12 @@ public def copy (s : Int8Array.Slice) : Int8Array :=
 public theorem getElem_eq (s : Int8Array.Slice) (i : Nat) (h : i < s.size) :
     s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; lia) := rfl
 
+/--
+Prints the array and the bounds in slice notation, `(ScalarArray.Int8Array.mk #[...])[i...j]`,
+which evaluates to an equal slice: slices are equal when their arrays and bounds are.
+-/
 public instance : Repr Int8Array.Slice where
-  reprPrec s _ := repr s.copy ++ ".toSlice"
+  reprPrec s _ := reprArg s.array ++ "[" ++ repr s.start ++ "..." ++ repr s.stop ++ "]"
 
 public instance : ToString Int8Array.Slice where
   toString s := toString s.copy

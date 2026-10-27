@@ -135,7 +135,24 @@ example (a : UInt8Array) : UInt8 := match a with | ⟨a⟩ => a[0]!
 /-! Printing -/
 
 #guard toString (UInt8Array.mk #[1, 2]) == "UInt8Array.mk " ++ toString #[(1 : UInt8), 2]
-#guard reprStr (UInt8Array.mk #[1, 2]) == "UInt8Array.mk " ++ reprStr #[(1 : UInt8), 2]
+#guard reprStr (UInt8Array.mk #[1, 2]) ==
+  "ScalarArray.UInt8Array.mk " ++ reprStr #[(1 : UInt8), 2]
+#guard reprStr (some (UInt8Array.mk #[1, 2])) ==
+  "some (ScalarArray.UInt8Array.mk " ++ reprStr #[(1 : UInt8), 2] ++ ")"
+#guard reprStr (UInt8Array.mk #[1, 2, 3])[1...2] ==
+  "(ScalarArray.UInt8Array.mk " ++ reprStr #[(1 : UInt8), 2, 3] ++ ")[1...2]"
+#guard reprStr (some (UInt8Array.mk #[1, 2, 3])[1...2]) ==
+  "some (ScalarArray.UInt8Array.mk " ++ reprStr #[(1 : UInt8), 2, 3] ++ ")[1...2]"
+
+-- What `repr` prints evaluates to the input, also as an argument.
+#guard ScalarArray.UInt8Array.mk #[1, 2] == UInt8Array.mk #[1, 2]
+#guard (some (ScalarArray.UInt8Array.mk #[1, 2])) == some (UInt8Array.mk #[1, 2])
+#guard
+  let s := (ScalarArray.UInt8Array.mk #[1, 2, 3])[1...2]
+  s.array == UInt8Array.mk #[1, 2, 3] && s.start == 1 && s.stop == 2
+#guard
+  let s? := some (ScalarArray.UInt8Array.mk #[1, 2, 3])[1...2]
+  s?.map (fun s => (s.array.toArray, s.start, s.stop)) == some (#[1, 2, 3], 1, 2)
 
 /-! Every index, through both `Nat` and `USize` indices -/
 

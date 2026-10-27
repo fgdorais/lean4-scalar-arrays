@@ -891,8 +891,9 @@ public theorem hash_eq_hash_toArray (a : ISizeArray) :
 
 @[expose] public def toList (a : ISizeArray) : List ISize := a.toArray.toList
 
+/-- Prints `ScalarArray.ISizeArray.mk #[...]`, which evaluates to an equal array. -/
 public instance : Repr ISizeArray where
-  reprPrec a _ := "ISizeArray.mk " ++ repr a.toArray
+  reprPrec a prec := Repr.addAppParen ("ScalarArray.ISizeArray.mk " ++ reprArg a.toArray) prec
 
 public instance : ToString ISizeArray where
   toString a := "ISizeArray.mk " ++ toString a.toArray
@@ -1006,8 +1007,12 @@ public def copy (s : ISizeArray.Slice) : ISizeArray :=
 public theorem getElem_eq (s : ISizeArray.Slice) (i : Nat) (h : i < s.size) :
     s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; lia) := rfl
 
+/--
+Prints the array and the bounds in slice notation, `(ScalarArray.ISizeArray.mk #[...])[i...j]`,
+which evaluates to an equal slice: slices are equal when their arrays and bounds are.
+-/
 public instance : Repr ISizeArray.Slice where
-  reprPrec s _ := repr s.copy ++ ".toSlice"
+  reprPrec s _ := reprArg s.array ++ "[" ++ repr s.start ++ "..." ++ repr s.stop ++ "]"
 
 public instance : ToString ISizeArray.Slice where
   toString s := toString s.copy

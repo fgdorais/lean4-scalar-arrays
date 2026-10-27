@@ -135,7 +135,24 @@ example (a : Float64Array) : Float := match a with | ⟨a⟩ => a[0]!
 /-! Printing -/
 
 #guard toString (Float64Array.mk #[1, 2]) == "Float64Array.mk " ++ toString #[(1 : Float), 2]
-#guard reprStr (Float64Array.mk #[1, 2]) == "Float64Array.mk " ++ reprStr #[(1 : Float), 2]
+#guard reprStr (Float64Array.mk #[1, 2]) ==
+  "ScalarArray.Float64Array.mk " ++ reprStr #[(1 : Float), 2]
+#guard reprStr (some (Float64Array.mk #[1, 2])) ==
+  "some (ScalarArray.Float64Array.mk " ++ reprStr #[(1 : Float), 2] ++ ")"
+#guard reprStr (Float64Array.mk #[1, 2, 3])[1...2] ==
+  "(ScalarArray.Float64Array.mk " ++ reprStr #[(1 : Float), 2, 3] ++ ")[1...2]"
+#guard reprStr (some (Float64Array.mk #[1, 2, 3])[1...2]) ==
+  "some (ScalarArray.Float64Array.mk " ++ reprStr #[(1 : Float), 2, 3] ++ ")[1...2]"
+
+-- What `repr` prints evaluates to the input, also as an argument.
+#guard ScalarArray.Float64Array.mk #[1, 2] == Float64Array.mk #[1, 2]
+#guard (some (ScalarArray.Float64Array.mk #[1, 2])) == some (Float64Array.mk #[1, 2])
+#guard
+  let s := (ScalarArray.Float64Array.mk #[1, 2, 3])[1...2]
+  s.array == Float64Array.mk #[1, 2, 3] && s.start == 1 && s.stop == 2
+#guard
+  let s? := some (ScalarArray.Float64Array.mk #[1, 2, 3])[1...2]
+  s?.map (fun s => (s.array.toArray, s.start, s.stop)) == some (#[1, 2, 3], 1, 2)
 
 /-! Every index, through both `Nat` and `USize` indices -/
 
