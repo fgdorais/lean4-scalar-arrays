@@ -174,7 +174,8 @@ The following are not covered by this promise:
 - `ScalarArray.Internal`, including `ScalarArray.Raw`, and the declarations whose documentation
   says they are for internal use only;
 - the experimental `ScalarArray.Bytes`;
-- which lemmas are `@[simp]`, so `simp` proofs may need adjusting after an upgrade;
+- which lemmas are `@[simp]` or `@[grind]`, so `simp` and `grind` proofs may need adjusting after
+  an upgrade;
 - changes forced by changes to Lean and its core library, which is still evolving; in particular,
   slices and iterators are built on `Std.Slice` and `Std.Iterators`. The release notes will say
   when this happens.
