@@ -13,15 +13,16 @@ placeholders; only the compiled implementations are meaningful, which is what `#
 
 namespace ScalarArrayTest
 
--- Not inlined: in another module, its call to the private `ScalarArray.elemSize` would not compile.
+-- Not inlined: in another module, its call to the private `ScalarArray.Raw.elemSize` would not
+-- compile.
 @[noinline]
-private unsafe def rawElemSizeImpl (a : α) : UInt32 := (unsafeCast a : ScalarArray).elemSize
+private unsafe def rawElemSizeImpl (a : α) : UInt32 := (unsafeCast a : ScalarArray.Raw).elemSize
 
 /-- The element size recorded in the runtime header of a scalar array. -/
 @[implemented_by rawElemSizeImpl]
 public def rawElemSize (_ : α) : UInt32 := 0
 
-private unsafe def rawCapacityImpl (a : α) : Nat := (unsafeCast a : ScalarArray).capacity.toNat
+private unsafe def rawCapacityImpl (a : α) : Nat := (unsafeCast a : ScalarArray.Raw).capacity.toNat
 
 /-- The capacity recorded in the runtime header of a scalar array. -/
 @[implemented_by rawCapacityImpl]

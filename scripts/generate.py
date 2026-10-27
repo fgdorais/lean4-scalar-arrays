@@ -4,10 +4,12 @@
 """
 Generates the array modules and their tests from the `UInt16` versions.
 
-`ScalarArray/UInt16.lean` and `ScalarArrayTest/UInt16.lean` are the templates: make changes there,
-then run this script from anywhere to regenerate the other types and the root import lists.
-`ScalarArray/Bytes.lean` and its tests come from `bytes_template.py`. That module is experimental, so
-the root `ScalarArray.lean` does not import it.
+`ScalarArray/UInt16.lean`, `ScalarArrayTest/UInt16.lean` and their parts in `ScalarArray/UInt16/`
+and `ScalarArrayTest/UInt16/` are the templates: make changes there, then run this script from
+anywhere to regenerate the other types, the root import lists and `.gitattributes`, which marks the
+generated files so that GitHub collapses them in diffs.
+`ScalarArray/Bytes.lean` and its tests come from `bytes_template.py`. That module is experimental,
+so the root `ScalarArray.lean` does not import it.
 With `--check`, it changes nothing and exits with status 1 if any generated file is out of date.
 """
 
@@ -137,11 +139,9 @@ public instance : BEq UInt16Array := ⟨beq⟩
 
 private theorem beq_eq_beq_toArray (a b : UInt16Array) : (a == b) = (a.toArray == b.toArray) := rfl
 """
-# Also left out for the float types, from the first line up to, but not including, the second: the
-# lemmas and instances that need decidable equality or hashing, and their tests.
-FLOAT_DEC = ('/-! ### Decidable membership and slice hashing -/\n',
-             '/-! ### End of the part left out of the float types -/\n')
-FLOAT_TEST_DEC = ('/-! Decidable equality and hashing -/\n', '/-! Iteration -/\n')
+# The parts of each array module and of its tests, in import order. The float types leave out
+# `Decidable`: the lemmas and instances that need decidable equality or hashing, and their tests.
+PARTS = ['Basic', 'Array', 'Slice', 'Lemmas', 'InPlace', 'Decidable']
 # Left out of the `USize` and `ISize` tests: `decide` can't evaluate their literals, since
 # `System.Platform.numBits` is opaque.
 WORD_TEST_DECIDE = ('-- `decide` evaluates', '-- Lemmas that need decidable equality')
@@ -152,6 +152,14 @@ def sub(s, pairs):
         assert a in s, f"template text not found: {a!r}"
         s = s.replace(a, b)
     return s
+
+
+def sub_all(files, pairs):
+    """`sub` on several files at once: each text must be found in at least one of them."""
+    for a, b in pairs:
+        assert any(a in s for s in files.values()), f"template text not found: {a!r}"
+        files = {path: s.replace(a, b) for path, s in files.items()}
+    return files
 
 
 def cut(s, span):
@@ -165,17 +173,25 @@ def cut(s, span):
 
 def generate():
     """Returns a map from paths relative to the repository root to their generated contents."""
-    src = (ROOT / 'ScalarArray/UInt16.lean').read_text()
-    tst = (ROOT / 'ScalarArrayTest/UInt16.lean').read_text()
+    src = {'': (ROOT / 'ScalarArray/UInt16.lean').read_text()}
+    src.update({p: (ROOT / f'ScalarArray/UInt16/{p}.lean').read_text() for p in PARTS})
+    tst = {'': (ROOT / 'ScalarArrayTest/UInt16.lean').read_text()}
+    tst.update({p: (ROOT / f'ScalarArrayTest/UInt16/{p}.lean').read_text() for p in PARTS})
     files = {}
     for name, elem, ctype, alloc, per_elem, big, conv in types:
         is_float = name.startswith('Float')
-        s = src
+        s = dict(src)
         if is_float:
-            s = sub(s, [(FLOAT_EQ_OLD, FLOAT_EQ_NEW),
-                        ('/-! ## Equality and hashing -/', '/-! ## Equality -/')])
-            s = cut(s, FLOAT_DEC)
-        s = sub(s, [
+            del s['Decidable']
+            s = sub_all(s, [
+                (FLOAT_EQ_OLD, FLOAT_EQ_NEW),
+                ('/-! ## Equality and hashing -/', '/-! ## Equality -/'),
+                ('public import ScalarArray.UInt16.Decidable\n', ''),
+            ])
+        s = sub_all(s, [
+            # Module names first: `Float64Array` lives in `ScalarArray.Float64`, not
+            # `ScalarArray.Float`.
+            ('ScalarArray.UInt16.', f'ScalarArray.{name}.'),
             ('UInt16Array', name + 'Array'),
             ('allocate 2 ', f'allocate {alloc} '),
             ('2 bytes per element', per_elem),
@@ -183,24 +199,30 @@ def generate():
             ('UInt16', elem),
         ])
         if name == 'Float64':
-            s = sub(s, [('it otherwise, like `Array` and `ByteArray`.\n',
-                         'it otherwise, like `Array` and `ByteArray`.\n\n'
-                         '`Float64Array` has the same runtime representation as the core '
-                         '`FloatArray`, with the same API\n'
-                         'as the other arrays in this library.\n')])
-        files[f'ScalarArray/{name}.lean'] = s
-        t = cut(tst, FLOAT_TEST_DEC) if is_float else tst
+            s = sub_all(s, [('it otherwise, like `Array` and `ByteArray`.\n',
+                             'it otherwise, like `Array` and `ByteArray`.\n\n'
+                             '`Float64Array` has the same runtime representation as the core '
+                             '`FloatArray`, with the same API\n'
+                             'as the other arrays in this library.\n')])
+        for part, text in s.items():
+            files[f'ScalarArray/{name}{"/" + part if part else ""}.lean'] = text
+        t = dict(tst)
+        if is_float:
+            del t['Decidable']
+            t = sub_all(t, [('import ScalarArrayTest.UInt16.Decidable\n', '')])
         if alloc == WORD:
-            t = cut(t, WORD_TEST_DECIDE)
-        t = sub(t, [
-            ('import ScalarArray.UInt16', 'import ScalarArray.' + name),
+            t['Decidable'] = cut(t['Decidable'], WORD_TEST_DECIDE)
+        t = sub_all(t, [
+            ('ScalarArrayTest.UInt16.', f'ScalarArrayTest.{name}.'),
+            ('import ScalarArray.UInt16\n', f'import ScalarArray.{name}\n'),
             ('elemSize : UInt32 := 2', f'elemSize : UInt32 := {alloc}'),
             ('UInt16Array', name + 'Array'),
             ('toUInt16', conv),
             ('big : UInt16 := 65535', f'big : UInt16 := {big}'),
             ('UInt16', elem),
         ])
-        files[f'ScalarArrayTest/{name}.lean'] = t
+        for part, text in t.items():
+            files[f'ScalarArrayTest/{name}{"/" + part if part else ""}.lean'] = text
     names = [t[0] for t in types]
     root = (ROOT / 'ScalarArray.lean').read_text()
     head = root.split('public import ScalarArray.')[0]
@@ -217,6 +239,13 @@ def generate():
         + 'import ScalarArrayTest.Float\n'
         + 'import ScalarArrayTest.Conversions\n'
         + 'import ScalarArrayTest.Bytes\n')
+    files['.gitattributes'] = (
+        '# Files generated by `scripts/generate.py`, from the `UInt16` templates and\n'
+        '# `bytes_template.py`. GitHub collapses them in diffs.\n'
+        + ''.join(f'{d}/{n}.lean linguist-generated\n{d}/{n}/** linguist-generated\n'
+                  for d in ['ScalarArray', 'ScalarArrayTest'] for n in names if n != 'UInt16')
+        + 'ScalarArray/Bytes.lean linguist-generated\n'
+        + 'ScalarArrayTest/Bytes.lean linguist-generated\n')
     return files
 
 
@@ -228,6 +257,7 @@ def main():
         if not file.exists() or file.read_text() != contents:
             stale.append(path)
             if not check:
+                file.parent.mkdir(parents=True, exist_ok=True)
                 file.write_text(contents)
     if check and stale:
         print('Out of date; run scripts/generate.py:', *stale, sep='\n  ')

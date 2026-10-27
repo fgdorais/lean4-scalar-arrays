@@ -90,7 +90,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Linearity    | `markLinear`, `propagateMark`                                               |
 | Memory       | `ensureExclusive`, `ensureCapacity`, `ensureExclusiveWithCapacity`, which are logically the identity |
 | Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
-| Lemmas       | `ext`, `ext_getElem`, `ext_getElem?`, `toArray_inj` and `Slice.ext`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!` |
+| Lemmas       | `ext`, `ext_getElem`, `ext_getElem?` and `toArray_inj`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!` |
 
 As with `Array`:
 
@@ -147,14 +147,17 @@ to itself and `0.0 == -0.0`.
 
 ## How it works
 
-Each `XArray` is defined as an inductive type wrapping an `Array X`, and every operation is
-defined by what it does to that array. That model is what you reason about in proofs.
+Each `XArray` is defined as a quotient of `Array X` by the empty relation: `XArray.mk` and
+`XArray.toArray` convert between the two, and every operation is defined by what it does to that
+array. That model is what you reason about in proofs. It is a quotient rather than a structure so
+that compiled code can't match on it and run `Array` code on what is really a scalar array.
 
 At runtime, an `XArray` is a Lean scalar array object: a small header (element size, size and
 capacity) followed by the elements stored unboxed. The operations are implemented through
 `extern` (inline C for reads and writes) and `implemented_by`, so the compiled code never
-builds the `Array`. The header is described by an internal type, `ScalarArray`, in
-`ScalarArray.Internal`. Everything in that module is private and not part of the API.
+builds the `Array`. The header is described by an internal type, `ScalarArray.Raw`, in
+`ScalarArray.Internal`. It and the few operations on it that inlined code calls are public, but
+they are not part of the API; the rest of that module is private.
 
 The model and the C implementation are connected only by testing, so the test suite runs
 against the compiled code.
@@ -176,15 +179,30 @@ Lean model. They cover every operation, sharing (writes to a shared array must
 not affect other references to it), indices beyond 16 bits, huge `Nat` indices, the runtime
 element size and capacity, and bit-exact round-trips of special floating-point values.
 
-The source and test files for the twelve types are generated from the `UInt16` versions,
-`ScalarArray/UInt16.lean` and `ScalarArrayTest/UInt16.lean`. Make changes there, then regenerate
-the other types:
+Each type `X` has a module `ScalarArray.X`, which imports its parts:
+
+| Part | Contents |
+|---|---|
+| `ScalarArray.X.Basic` | the type and its model, reads, writes, `push`, capacity, `append`, `copySlice` |
+| `ScalarArray.X.Array` | removing elements, search, building arrays, iteration, equality, hashing, printing |
+| `ScalarArray.X.Slice` | slices: the type, slice notation, reads, iterators, folds, equality |
+| `ScalarArray.X.Lemmas` | lemmas about arrays and slices |
+| `ScalarArray.X.InPlace` | writes through slices and in-place folds |
+| `ScalarArray.X.Decidable` | decidable membership, slice hashing; not for `Float32` and `Float64` |
+
+The tests in `ScalarArrayTest.X` are split the same way.
+
+The source and test files for the twelve types are generated from the `UInt16` versions, in
+`ScalarArray/UInt16/` and `ScalarArrayTest/UInt16/`. Make changes there, then regenerate the other
+types:
 
 ```bash
 python3 scripts/generate.py
 ```
 
 `python3 scripts/generate.py --check` changes nothing and fails if a generated file is out of date.
+The generated files are marked `linguist-generated` in `.gitattributes`, so GitHub collapses them in
+diffs.
 
 -----
 
