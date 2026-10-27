@@ -209,6 +209,23 @@ example (p : ISize → Bool) (a : ISizeArray) :
 #guard ((ISizeArray.mk #[1, 2]).markLinear.push big).toArray == #[1, 2, big]
 #guard ((ISizeArray.mk #[1]).propagateMark (ISizeArray.mk #[2, big])).toArray == #[2, big]
 
+-- The mark goes on an exclusive array: a shared array is copied first and the copy is marked, and
+-- an exclusive one is marked in place. The arrays are built from a parameter so that they aren't
+-- extracted as shared closed terms.
+@[noinline] def ISizeArray.marksCopyOfShared (x : ISize) : Bool :=
+  let a := (ISizeArray.emptyWithCapacity 2).push x
+  let b := a.markLinear
+  rawAddr b != rawAddr a && b.toArray == #[x] && a.toArray == #[x]
+
+@[noinline] def ISizeArray.marksExclusiveInPlace (x : ISize) : Bool :=
+  let a := (ISizeArray.emptyWithCapacity 2).push x
+  let p := rawAddr a
+  let a := a.markLinear
+  rawAddr a == p && a.toArray == #[x]
+
+#guard ISizeArray.marksCopyOfShared 1
+#guard ISizeArray.marksExclusiveInPlace 1
+
 /-! Search -/
 
 #guard (ISizeArray.mk #[1, 2, big, 2]).findIdx? (· == 2) == some 1

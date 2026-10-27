@@ -209,6 +209,23 @@ example (p : Int8 → Bool) (a : Int8Array) :
 #guard ((Int8Array.mk #[1, 2]).markLinear.push big).toArray == #[1, 2, big]
 #guard ((Int8Array.mk #[1]).propagateMark (Int8Array.mk #[2, big])).toArray == #[2, big]
 
+-- The mark goes on an exclusive array: a shared array is copied first and the copy is marked, and
+-- an exclusive one is marked in place. The arrays are built from a parameter so that they aren't
+-- extracted as shared closed terms.
+@[noinline] def Int8Array.marksCopyOfShared (x : Int8) : Bool :=
+  let a := (Int8Array.emptyWithCapacity 2).push x
+  let b := a.markLinear
+  rawAddr b != rawAddr a && b.toArray == #[x] && a.toArray == #[x]
+
+@[noinline] def Int8Array.marksExclusiveInPlace (x : Int8) : Bool :=
+  let a := (Int8Array.emptyWithCapacity 2).push x
+  let p := rawAddr a
+  let a := a.markLinear
+  rawAddr a == p && a.toArray == #[x]
+
+#guard Int8Array.marksCopyOfShared 1
+#guard Int8Array.marksExclusiveInPlace 1
+
 /-! Search -/
 
 #guard (Int8Array.mk #[1, 2, big, 2]).findIdx? (· == 2) == some 1
