@@ -891,8 +891,9 @@ public theorem hash_eq_hash_toArray (a : Int16Array) :
 
 @[expose] public def toList (a : Int16Array) : List Int16 := a.toArray.toList
 
+/-- Prints `ScalarArray.Int16Array.mk #[...]`, which evaluates to an equal array. -/
 public instance : Repr Int16Array where
-  reprPrec a _ := "Int16Array.mk " ++ repr a.toArray
+  reprPrec a prec := Repr.addAppParen ("ScalarArray.Int16Array.mk " ++ reprArg a.toArray) prec
 
 public instance : ToString Int16Array where
   toString a := "Int16Array.mk " ++ toString a.toArray
@@ -939,15 +940,6 @@ public theorem start_le_stop (s : Int16Array.Slice) : s.start ≤ s.stop :=
 @[inherit_doc SliceData.stop_le_array_size]
 public theorem stop_le_array_size (s : Int16Array.Slice) : s.stop ≤ s.array.size :=
   s.internalRepresentation.stop_le_array_size
-
-/-- Two slices are equal when they have the same array, start and stop. -/
-@[ext] public theorem ext {s t : Int16Array.Slice} (h₁ : s.array = t.array)
-    (h₂ : s.start = t.start) (h₃ : s.stop = t.stop) : s = t := by
-  obtain ⟨⟨a, i, j, _, _⟩⟩ := s
-  obtain ⟨⟨b, k, l, _, _⟩⟩ := t
-  simp only [array, start, stop] at h₁ h₂ h₃
-  subst h₁ h₂ h₃
-  rfl
 
 /-- `s.stop.toUSize` bounds the indices of loops over the slice. -/
 private theorem toNat_toUSize_stop_le (s : Int16Array.Slice) :
@@ -1006,8 +998,12 @@ public def copy (s : Int16Array.Slice) : Int16Array :=
 public theorem getElem_eq (s : Int16Array.Slice) (i : Nat) (h : i < s.size) :
     s[i] = s.array[s.start + i]'(by have := s.stop_le_array_size; rw [size_eq] at h; lia) := rfl
 
+/--
+Prints the array and the bounds in slice notation, `(ScalarArray.Int16Array.mk #[...])[i...j]`,
+which evaluates to an equal slice: slices are equal when their arrays and bounds are.
+-/
 public instance : Repr Int16Array.Slice where
-  reprPrec s _ := repr s.copy ++ ".toSlice"
+  reprPrec s _ := reprArg s.array ++ "[" ++ repr s.start ++ "..." ++ repr s.stop ++ "]"
 
 public instance : ToString Int16Array.Slice where
   toString s := toString s.copy
