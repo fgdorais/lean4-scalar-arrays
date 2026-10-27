@@ -209,6 +209,23 @@ example (p : UInt32 → Bool) (a : UInt32Array) :
 #guard ((UInt32Array.mk #[1, 2]).markLinear.push big).toArray == #[1, 2, big]
 #guard ((UInt32Array.mk #[1]).propagateMark (UInt32Array.mk #[2, big])).toArray == #[2, big]
 
+-- The mark goes on an exclusive array: a shared array is copied first and the copy is marked, and
+-- an exclusive one is marked in place. The arrays are built from a parameter so that they aren't
+-- extracted as shared closed terms.
+@[noinline] def UInt32Array.marksCopyOfShared (x : UInt32) : Bool :=
+  let a := (UInt32Array.emptyWithCapacity 2).push x
+  let b := a.markLinear
+  rawAddr b != rawAddr a && b.toArray == #[x] && a.toArray == #[x]
+
+@[noinline] def UInt32Array.marksExclusiveInPlace (x : UInt32) : Bool :=
+  let a := (UInt32Array.emptyWithCapacity 2).push x
+  let p := rawAddr a
+  let a := a.markLinear
+  rawAddr a == p && a.toArray == #[x]
+
+#guard UInt32Array.marksCopyOfShared 1
+#guard UInt32Array.marksExclusiveInPlace 1
+
 /-! Search -/
 
 #guard (UInt32Array.mk #[1, 2, big, 2]).findIdx? (· == 2) == some 1

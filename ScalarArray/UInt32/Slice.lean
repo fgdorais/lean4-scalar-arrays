@@ -114,7 +114,7 @@ public instance : EmptyCollection UInt32Array.Slice := ⟨Slice.empty⟩
 
 public instance : Inhabited UInt32Array.Slice := ⟨Slice.empty⟩
 
-/-- The elements of the slice, copied into a new array with a single `memcpy`. -/
+/-- The elements of the slice, copied into a new array with a single `memmove`. -/
 @[expose]
 public def copy (s : UInt32Array.Slice) : UInt32Array :=
   s.array.extract s.start s.stop

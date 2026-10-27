@@ -411,3 +411,21 @@ example (a : USizeArray) : USize := match a with | ⟨a⟩ => a[0]!
 
 #guard USizeArray.copiesSliceInPlace 1
 #guard USizeArray.copySliceGrowth 1
+
+-- Copying an array onto itself, shifted by one in each direction, so that the two ranges overlap.
+-- The arrays are long enough that a plain `memcpy` would not happen to get them right, and the
+-- expected elements come from `f`, not from the array that was overwritten.
+@[noinline] def USizeArray.copySliceOntoItselfForward (x : USize) : Bool :=
+  let f (i : Nat) : USize := (i % 251).toUSize + x
+  let a := USizeArray.ofFn (n := 10000) fun i => f i
+  let b := a.copySlice 0 a 1 9999
+  b.size == 10000 && b[0]! == f 0 && (List.range 9999).all fun i => b[i + 1]! == f i
+
+@[noinline] def USizeArray.copySliceOntoItselfBackward (x : USize) : Bool :=
+  let f (i : Nat) : USize := (i % 251).toUSize + x
+  let a := USizeArray.ofFn (n := 10000) fun i => f i
+  let b := a.copySlice 1 a 0 9999
+  b.size == 10000 && b[9999]! == f 9999 && (List.range 9999).all fun i => b[i]! == f (i + 1)
+
+#guard USizeArray.copySliceOntoItselfForward 1
+#guard USizeArray.copySliceOntoItselfBackward 1

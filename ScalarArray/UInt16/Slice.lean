@@ -114,7 +114,7 @@ public instance : EmptyCollection UInt16Array.Slice := ⟨Slice.empty⟩
 
 public instance : Inhabited UInt16Array.Slice := ⟨Slice.empty⟩
 
-/-- The elements of the slice, copied into a new array with a single `memcpy`. -/
+/-- The elements of the slice, copied into a new array with a single `memmove`. -/
 @[expose]
 public def copy (s : UInt16Array.Slice) : UInt16Array :=
   s.array.extract s.start s.stop

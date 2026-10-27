@@ -103,8 +103,8 @@ As with `ByteArray`, `set!` returns the array unchanged when the index is out of
 `uget`, `set` and `uset` prove their bounds with `get_elem_tactic` by default, and `foldl` and
 `foldlM` take optional `start` and `stop` indices.
 
-`a ++ b` copies the elements of `b` with a single `memcpy`, into `a` itself when it is not shared
-and has room. `extract` and `copySlice` also copy with a single `memcpy`. Iteration reads the elements
+`a ++ b` copies the elements of `b` with a single `memmove`, into `a` itself when it is not shared
+and has room. `extract` and `copySlice` also copy with a single `memmove`. Iteration reads the elements
 directly, without building an `Array`.
 
 `UInt8Array` converts to and from core's `ByteArray` with `toByteArray`, `ofByteArray` and
@@ -114,7 +114,7 @@ never copy, so core's functions can be used directly on these arrays and vice ve
 
 Slices are `Std.Slice`s, like core's `Subarray`, so they work with the generic slice API and core's
 range notation `a[i...j]` (the older `a[i:j]` notation only applies to `Array`). Taking a slice
-never copies the array; `Slice.copy` makes a new array with a single `memcpy`.
+never copies the array; `Slice.copy` makes a new array with a single `memmove`.
 
 Slices can also be written to. `s.set i v` replaces the element at index `i` of the slice in the
 underlying array, and `s.array` gives back the whole array. The writes work in place when neither

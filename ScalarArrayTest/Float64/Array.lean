@@ -209,6 +209,23 @@ example (p : Float → Bool) (a : Float64Array) :
 #guard ((Float64Array.mk #[1, 2]).markLinear.push big).toArray == #[1, 2, big]
 #guard ((Float64Array.mk #[1]).propagateMark (Float64Array.mk #[2, big])).toArray == #[2, big]
 
+-- The mark goes on an exclusive array: a shared array is copied first and the copy is marked, and
+-- an exclusive one is marked in place. The arrays are built from a parameter so that they aren't
+-- extracted as shared closed terms.
+@[noinline] def Float64Array.marksCopyOfShared (x : Float) : Bool :=
+  let a := (Float64Array.emptyWithCapacity 2).push x
+  let b := a.markLinear
+  rawAddr b != rawAddr a && b.toArray == #[x] && a.toArray == #[x]
+
+@[noinline] def Float64Array.marksExclusiveInPlace (x : Float) : Bool :=
+  let a := (Float64Array.emptyWithCapacity 2).push x
+  let p := rawAddr a
+  let a := a.markLinear
+  rawAddr a == p && a.toArray == #[x]
+
+#guard Float64Array.marksCopyOfShared 1
+#guard Float64Array.marksExclusiveInPlace 1
+
 /-! Search -/
 
 #guard (Float64Array.mk #[1, 2, big, 2]).findIdx? (· == 2) == some 1
