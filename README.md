@@ -166,6 +166,19 @@ The implementations written in safe Lean, such as the loops behind `toArray`, `f
 `implemented_by` code is connected to the model only by testing, so the test suite runs against
 the compiled code.
 
+## Stability
+
+Starting with version 1.0.0, breaking changes to the API are made only in a new major version.
+The following are not covered by this promise:
+
+- `ScalarArray.Internal`, including `ScalarArray.Raw`, and the declarations whose documentation
+  says they are for internal use only;
+- the experimental `ScalarArray.Bytes`;
+- which lemmas are `@[simp]`, so `simp` proofs may need adjusting after an upgrade.
+
+Slices and iterators are built on `Std.Slice` and `Std.Iterators`, which are still evolving in
+Lean core. A change there may force a change here; the release notes will say so.
+
 ## Development
 
 ```bash
