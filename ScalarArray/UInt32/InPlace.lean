@@ -809,6 +809,91 @@ public def foldlInPlaceRangeThen {β : Type v} {γ : Type w} (a : UInt32Array) (
         (a.foldlInPlaceRange start len h init f).2 :=
   rfl
 
+/--
+The loop of `foldlInPlaceRange`, with the accumulator split into two arguments, so that each one
+stays unboxed when its type is a scalar.
+-/
+@[specialize]
+private unsafe def foldlInPlaceRangeWith2AccImpl.loop {β₁ : Type v} {β₂ : Type w} {γ : Type u}
+    (base len : USize)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂)
+    (g : UInt32Array → β₁ → β₂ → γ) (a : UInt32Array) (k : USize) (b₁ : β₁) (b₂ : β₂) : γ :=
+  if k < len then
+    let p := f k lcProof (a.uget (base + k) lcProof) b₁ b₂
+    foldlInPlaceRangeWith2AccImpl.loop base len f g (setUnsafe a (base + k) p.1) (k + 1) p.2.1
+      p.2.2
+  else
+    g a b₁ b₂
+
+@[inline]
+private unsafe def foldlInPlaceRangeWith2AccImpl {β₁ : Type v} {β₂ : Type w} (a : UInt32Array)
+    (start len : USize) (_ : start.toNat + len.toNat ≤ a.size) (init₁ : β₁) (init₂ : β₂)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂) :
+    UInt32Array × β₁ × β₂ :=
+  foldlInPlaceRangeWith2AccImpl.loop start len f (fun a b₁ b₂ => (a, b₁, b₂)) a.ensureExclusive 0
+    init₁ init₂
+
+/--
+`foldlInPlaceRange` with two accumulators: returns the new array and the two last accumulators.
+It is specified as `foldlInPlaceRange` on the pair of accumulators, so the lemmas about that fold
+apply after `foldlInPlaceRangeWith2Acc_eq`. The implementation passes the two accumulators as
+separate arguments of the loop, where a pair would be allocated at every element and would box
+scalar accumulators such as `UInt64` carries.
+-/
+@[implemented_by foldlInPlaceRangeWith2AccImpl, expose]
+public def foldlInPlaceRangeWith2Acc {β₁ : Type v} {β₂ : Type w} (a : UInt32Array)
+    (start len : USize) (h : start.toNat + len.toNat ≤ a.size) (init₁ : β₁) (init₂ : β₂)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂) :
+    UInt32Array × β₁ × β₂ :=
+  a.foldlInPlaceRange start len h (init₁, init₂) fun k hk x b => f k hk x b.1 b.2
+
+@[simp] public theorem foldlInPlaceRangeWith2Acc_eq {β₁ : Type v} {β₂ : Type w}
+    (a : UInt32Array) (start len : USize) (h : start.toNat + len.toNat ≤ a.size) (init₁ : β₁)
+    (init₂ : β₂)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂) :
+    a.foldlInPlaceRangeWith2Acc start len h init₁ init₂ f =
+      a.foldlInPlaceRange start len h (init₁, init₂) fun k hk x b => f k hk x b.1 b.2 :=
+  rfl
+
+@[simp] public theorem size_foldlInPlaceRangeWith2Acc {β₁ : Type v} {β₂ : Type w}
+    (a : UInt32Array) (start len : USize) (h : start.toNat + len.toNat ≤ a.size) (init₁ : β₁)
+    (init₂ : β₂)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂) :
+    (a.foldlInPlaceRangeWith2Acc start len h init₁ init₂ f).1.size = a.size := by
+  simp
+
+@[inline]
+private unsafe def foldlInPlaceRangeWith2AccThenImpl {β₁ : Type v} {β₂ : Type w} {γ : Type u}
+    (a : UInt32Array) (start len : USize) (_ : start.toNat + len.toNat ≤ a.size) (init₁ : β₁)
+    (init₂ : β₂)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂)
+    (g : (a' : UInt32Array) → a'.size = a.size → β₁ → β₂ → γ) : γ :=
+  foldlInPlaceRangeWith2AccImpl.loop start len f (fun a' b₁ b₂ => g a' lcProof b₁ b₂)
+    a.ensureExclusive 0 init₁ init₂
+
+/--
+`foldlInPlaceRangeWith2Acc` followed by `g` on the new array, a proof that its size is unchanged
+and the two last accumulators, like `foldlInPlaceRangeThen`.
+-/
+@[implemented_by foldlInPlaceRangeWith2AccThenImpl, expose]
+public def foldlInPlaceRangeWith2AccThen {β₁ : Type v} {β₂ : Type w} {γ : Type u}
+    (a : UInt32Array) (start len : USize) (h : start.toNat + len.toNat ≤ a.size) (init₁ : β₁)
+    (init₂ : β₂)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂)
+    (g : (a' : UInt32Array) → a'.size = a.size → β₁ → β₂ → γ) : γ :=
+  a.foldlInPlaceRangeThen start len h (init₁, init₂) (fun k hk x b => f k hk x b.1 b.2)
+    fun a' ha b => g a' ha b.1 b.2
+
+@[simp] public theorem foldlInPlaceRangeWith2AccThen_eq {β₁ : Type v} {β₂ : Type w} {γ : Type u}
+    (a : UInt32Array) (start len : USize) (h : start.toNat + len.toNat ≤ a.size) (init₁ : β₁)
+    (init₂ : β₂)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂)
+    (g : (a' : UInt32Array) → a'.size = a.size → β₁ → β₂ → γ) :
+    a.foldlInPlaceRangeWith2AccThen start len h init₁ init₂ f g =
+      a.foldlInPlaceRangeThen start len h (init₁, init₂) (fun k hk x b => f k hk x b.1 b.2)
+        fun a' ha b => g a' ha b.1 b.2 :=
+  rfl
+
 @[inline]
 private unsafe def foldrInPlaceRangeImpl {β : Type v} (a : UInt32Array) (start len : USize)
     (_ : start.toNat + len.toNat ≤ a.size) (init : β)

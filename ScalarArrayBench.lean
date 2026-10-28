@@ -186,6 +186,7 @@ input as an argument, so that the compiler can't compute its result once, outsid
 def extras (rounds n : Nat) : IO (List Row) := do
   let a : UInt32Array := build n
   let bytes := a.toBytesLE
+  let w : UInt64Array := build n
   let one {α : Type} (name : String) (x : α) (f : α → Nat → UInt64) : IO Row := do
     return { name, time := ← time rounds n (f x), core := none }
   return [
@@ -198,7 +199,19 @@ def extras (rounds n : Nat) : IO (List Row) := do
     ← one "UInt32 toBytesLE" a fun a _ => a.toBytesLE.size.toUInt64,
     ← one "UInt32 toBytesBE" a fun a _ => a.toBytesBE.size.toUInt64,
     ← one "UInt32 ofBytesLE!" bytes fun b _ => (UInt32Array.ofBytesLE! b).size.toUInt64,
-    ← one "UInt32 ofBytesBE!" bytes fun b _ => (UInt32Array.ofBytesBE! b).size.toUInt64]
+    ← one "UInt32 ofBytesBE!" bytes fun b _ => (UInt32Array.ofBytesBE! b).size.toUInt64,
+    ← one "UInt64 foldlInPlaceRange, pair" w fun a _ =>
+      let r := a.foldlInPlaceRange 0 a.usize (by simpa using a.toNat_usize_le)
+        ((0 : UInt64), (0 : UInt64)) fun _ _ x c =>
+          let lo := x * 3 + c.1
+          (lo, (c.2 + x * 5, lo >>> 7))
+      r.2.1 + r.2.2,
+    ← one "UInt64 foldlInPlaceRangeWith2Acc" w fun a _ =>
+      let r := a.foldlInPlaceRangeWith2Acc 0 a.usize (by simpa using a.toNat_usize_le)
+        (0 : UInt64) (0 : UInt64) fun _ _ x c₁ c₂ =>
+          let lo := x * 3 + c₁
+          (lo, c₂ + x * 5, lo >>> 7)
+      r.2.1 + r.2.2]
 
 /-- Formats milliseconds with three decimals. -/
 def fmt (t : Float) : String :=

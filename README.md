@@ -30,9 +30,9 @@ in-place updates, and have a simple `Array`-based model for proofs.
 
 ## Installation
 
-The library is a Batteries cell: the `main` branch follows the Lean toolchain of Batteries `main`,
-and the `nightly-testing` branch follows Batteries `nightly-testing` and the latest Lean nightly,
-so it can be used together with Batteries. Add it to your `lakefile.toml`:
+The library depends only on Lean itself. The `main` branch follows the newest Lean release,
+including release candidates, and the `nightly-testing` branch follows the newest Lean nightly.
+Add it to your `lakefile.toml`:
 
 ```toml
 [[require]]
@@ -85,7 +85,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Search       | `findIdx?`, `findFinIdx?`                                                   |
 | Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `get`, `getD`, `get!`, `popFront`, `copy`, `for x in s`, `foldl`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findSomeRevM?`, `toArray`, `toList` |
 | Slice writes | `Slice.set`, `set!`, `modify`, `swap`, `reverse`, `foldlInPlace`, `foldrInPlace`, `foldlInPlaceThen`, `foldrInPlaceThen`, which write into the slice's array; `s.array` gives the whole array back |
-| In-place folds | `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds |
+| In-place folds | `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, and `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array |
 | Equality     | `a == b`; for integer types also `DecidableEq` and `Hashable`               |
 | Linearity    | `markLinear`, `propagateMark`                                               |
