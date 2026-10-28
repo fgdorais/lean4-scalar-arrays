@@ -32,22 +32,22 @@ in-place updates, and have a simple `Array`-based model for proofs.
 
 The library depends only on Lean itself. The `main` branch follows the newest Lean release,
 including release candidates, and the `nightly-testing` branch follows the newest Lean nightly.
-Add it to your `lakefile.toml`:
+Releases are tagged `vX.Y.Z`. Add one to your `lakefile.toml`, or `main` for the latest changes:
 
 ```toml
 [[require]]
 name = "lean4-scalar-arrays"
 git = "https://github.com/fgdorais/lean4-scalar-arrays"
-rev = "main"
+rev = "v1.0.0"
 ```
 
 Then `import ScalarArray` for every type, or `import ScalarArray.UInt32` and so on for just one.
 The experimental `ScalarArray.Bytes`, which converts the arrays to and from `ByteArray` in little-
 or big-endian byte order, is not part of `import ScalarArray` and has to be imported on its own.
 
-The operations are implemented in C, so the library is built with `precompileModules`, and Lake
-loads the compiled code whenever a file that imports it runs `#eval` or `#guard`. This works in the
-editor, with `lake build` and with `lake lean`, but not with a bare `lake env lean`.
+Reads, writes and copies are implemented in C, so the library is built with `precompileModules`,
+and Lake loads the compiled code whenever a file that imports it runs `#eval` or `#guard`. This
+works in the editor, with `lake build` and with `lake lean`, but not with a bare `lake env lean`.
 
 ## Usage
 
@@ -58,7 +58,7 @@ open ScalarArray
 
 def squares (n : Nat) : UInt32Array := Id.run do
   let mut a := UInt32Array.emptyWithCapacity n
-  for i in [0:n] do
+  for i in 0...n do
     a := a.push (i * i).toUInt32
   return a
 
@@ -75,23 +75,26 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 
 | Group        | Declarations                                                                |
 |--------------|-----------------------------------------------------------------------------|
-| Construction | `mk : Array X → XArray`, `empty`, `emptyWithCapacity`, `{}`, `replicate`, `ofFn`, `ofList`, `List.toXArray` |
-| Conversion   | `toArray : XArray → Array X`, `toList`                                         |
+| Construction | `mk : Array X → XArray`, `empty`, `emptyWithCapacity`, `{}`, `replicate`, `ofFn`, `ofList`, `List.toXArray`, `Std.Iter.toXArray`, `Std.Iter.toXArrayWithCapacity` |
+| Conversion   | `toArray : XArray → Array X`, `toList`, `ofList`, `List.toXArray`; `UInt8Array.toByteArray`, `UInt8Array.ofByteArray`, `ByteArray.toUInt8Array`, `Float64Array.toFloatArray`, `Float64Array.ofFloatArray` and `FloatArray.toFloat64Array`, which never copy |
 | Size         | `size : XArray → Nat`, `usize : XArray → USize`, `isEmpty`                  |
 | Reading      | `get`, `uget`, `get!`, `getD`, `back`, `back?`, `back!`, and `a[i]`, `a[i]?`, `a[i]!` with `Nat` or `USize` indices |
-| Writing      | `set`, `uset`, `set!`, `push`, `pop`                                        |
-| Slicing      | `append`, `a ++ b`, `extract`, `copySlice`                                  |
-| Iteration    | `foldl`, `foldr`, `foldlM`, `foldrM`, `forM`, `for x in a`, `any`, `all`, `contains` |
-| Search       | `findIdx?`, `findFinIdx?`                                                   |
-| Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `get`, `getD`, `get!`, `popFront`, `copy`, `for x in s`, `foldl`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findSomeRevM?`, `toArray`, `toList` |
+| Writing      | `set`, `uset`, `set!`, `push`, `pop`, `popWhile`, `copySlice`               |
+| Combining    | `append`, `a ++ b`, `copySlice`                                             |
+| Slicing      | `extract`, `copySlice`, `toSlice` and core's slice notation `a[i...j]`, `Slice.copy` |
+| Iteration    | `foldl`, `foldr`, `foldlM`, `foldrM`, `forM`, `forIn`, `for x in a`, `any`, `all`, `contains`, `iter` |
+| Search       | `findIdx?`, `findFinIdx?`, `any`, `all`, `contains`; for slices also `find?`, `findRev?`, `findRevM?`, `findSomeRevM?`, `count` |
+| Membership   | `x ∈ a`, `x ∈ s`, `contains`; for integer types also `Decidable (x ∈ a)` and `Decidable (x ∈ s)` (`decMem`, `Slice.decMem`) |
+| Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `Slice.empty`, `{}`, `array`, `start`, `stop`, `size`, `get`, `getD`, `get!`, `s[i]`, `popFront`, `slice`, `copy`, `for x in s`, `foldl`, `foldlM`, `forM`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findRevM?`, `findSomeRevM?`, `iter`, `toArray`, `toList`, `s == t` |
 | Slice writes | `Slice.set`, `set!`, `modify`, `swap`, `reverse`, `foldlInPlace`, `foldrInPlace`, `foldlInPlaceThen`, `foldrInPlaceThen`, which write into the slice's array; `s.array` gives the whole array back |
-| In-place folds | `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
+| In-place folds | `Slice.foldlInPlace`, `Slice.foldrInPlace` and their `Then` forms; `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, and `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array |
-| Equality     | `a == b`; for integer types also `DecidableEq` and `Hashable`               |
+| Equality     | `a == b` and `s == t`; for integer types also `DecidableEq` (`decEq`), `Hashable` (`hash`), and for slices `Hashable` (`Slice.hash`), `EquivBEq` and `LawfulHashable` |
 | Linearity    | `markLinear`, `propagateMark`                                               |
 | Memory       | `ensureExclusive`, `ensureCapacity`, `ensureExclusiveWithCapacity`, which are logically the identity |
-| Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
-| Lemmas       | `ext`, `ext_getElem`, `ext_getElem?` and `toArray_inj`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!`; `grind` lemmas for size, elements and membership, where core marks the matching `Array` lemma |
+| Byte order   | In the experimental `ScalarArray.Bytes`, for the 16-, 32- and 64-bit integer and float arrays: `toBytesLE`, `toBytesBE`, `Slice.toBytesLE`, `Slice.toBytesBE`, `ofBytesLE?`, `ofBytesLE!`, `ofBytesBE?`, `ofBytesBE!`; for the integer ones also `byteSwap` |
+| Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `ForM`, `Membership`, `Coe XArray XArray.Slice`, `Repr`, `ToString`; `BEq`, `DecidableEq`, `Hashable`, `EquivBEq` and `LawfulHashable` as under Equality; core's `Sliceable` instances for the slice notation, and `Std.Iterator` for slices |
+| Lemmas       | `ext`, `ext_getElem`, `ext_getElem?` and `toArray_inj`; `casesMk`, the default for `cases` and `induction`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!`; `grind` lemmas for size, elements and membership, where core marks the matching `Array` lemma |
 
 As with `Array`:
 
@@ -166,6 +169,21 @@ The implementations written in safe Lean, such as the loops behind `toArray`, `f
 `implemented_by` code is connected to the model only by testing, so the test suite runs against
 the compiled code.
 
+## Stability
+
+Releases are git tags `vX.Y.Z`, with release notes on GitHub. Starting with version 1.0.0,
+breaking changes to the API are made only in a new major version.
+The following are not covered by this promise:
+
+- `ScalarArray.Internal`, including `ScalarArray.Raw`, and the declarations whose documentation
+  says they are for internal use only;
+- the experimental `ScalarArray.Bytes`;
+- which lemmas are `@[simp]` or `@[grind]`, so `simp` and `grind` proofs may need adjusting after
+  an upgrade;
+- changes forced by changes to Lean and its core library, which is still evolving; in particular,
+  slices and iterators are built on `Std.Slice` and `Std.Iterators`. The release notes will say
+  when this happens.
+
 ## Development
 
 ```bash
@@ -179,9 +197,9 @@ lake test
 The tests in `ScalarArrayTest` are `#guard` checks that run when the test library is built, so
 `lake build` runs them as well, and CI builds with `--wfail`. Both libraries use
 `precompileModules`, so the checks call the compiled C implementation rather than evaluating the
-Lean model. They cover every operation, sharing (writes to a shared array must
-not affect other references to it), indices beyond 16 bits, huge `Nat` indices, the runtime
-element size and capacity, and bit-exact round-trips of special floating-point values.
+Lean model. They cover every operation, sharing (writes to a shared array must not affect other
+references to it), indices beyond 16 bits, huge `Nat` indices, the runtime element size and
+capacity, and bit-exact round-trips of special floating-point values.
 
 Each type `X` has a module `ScalarArray.X`, which imports its parts:
 
@@ -217,4 +235,6 @@ diffs.
 
 -----
 
-* The `Lean 4 / Scalar Arrays` library is copyright © 2026 François G. Dorais. The library is released under the [Apache 2.0 license](http://www.apache.org/licenses/LICENSE-2.0). See the file LICENSE for additional details.
+* The `Lean 4 / Scalar Arrays` library is copyright © 2026 François G. Dorais. The library is
+  released under the [Apache 2.0 license](https://www.apache.org/licenses/LICENSE-2.0). See the
+  file LICENSE for additional details.
