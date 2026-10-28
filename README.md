@@ -207,7 +207,7 @@ Each type `X` has a module `ScalarArray.X`, which imports its parts:
 |---|---|
 | `ScalarArray.X.Basic` | the type and its model, reads, writes, `push`, capacity, `append`, `copySlice` |
 | `ScalarArray.X.Array` | removing elements, search, building arrays, iteration, equality, hashing, printing |
-| `ScalarArray.X.Slice` | slices: the type, slice notation, reads, iterators, folds, equality |
+| `ScalarArray.X.Slice` | slices: the type, reads, slice notation, iterators, folds and searches, membership, equality; collecting iterators into arrays |
 | `ScalarArray.X.Lemmas` | lemmas about arrays and slices |
 | `ScalarArray.X.InPlace` | writes through slices and in-place folds |
 | `ScalarArray.X.Decidable` | decidable membership, slice hashing; not for `Float32` and `Float64` |

@@ -23,7 +23,7 @@ namespace ScalarArray
 
 namespace UInt8Array
 
-/-! ## Writing through slices -/
+/-! ## Writes through slices -/
 
 namespace Slice
 
@@ -244,6 +244,8 @@ private theorem getElem_reverse_loop (s : UInt8Array.Slice) (i j : Nat) (hj : j 
     simp only [getElem_toList, getElem_copy, getElem_reverse, List.getElem_reverse]
     congr 1
     simp
+
+/-! ## In-place folds over slices -/
 
 /-- The loop of `foldlInPlace`, over `Nat` indices. -/
 @[expose]

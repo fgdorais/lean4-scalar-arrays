@@ -279,11 +279,6 @@ public theorem copySlice_eq_append (src : UInt64Array) (srcOff : Nat) (dest : UI
         dest.extract (destOff + min len (src.size - srcOff)) dest.size := by
   simp [UInt64Array.ext_iff]
 
-@[simp] public theorem Slice.size_copy (s : UInt64Array.Slice) : s.copy.size = s.size := by
-  have := s.stop_le_array_size
-  simp only [Slice.copy, size_extract, Slice.size_eq]
-  lia
-
 /-! ## Lists -/
 
 @[simp] public theorem toList_mk (a : Array UInt64) : (mk a).toList = a.toList := rfl
@@ -343,51 +338,6 @@ public theorem ext_getElem? {a b : UInt64Array} (h : ∀ i : Nat, a[i]? = b[i]?)
     List.popWhile_toArray]
   simp
 
-/-! ## Machine-word indices -/
-
-/--
-`usize` is the size when the size fits in a `USize`, which holds for every array in memory. Loops
-over `USize` indices take this as a hypothesis, since the model `Array` has no bound on its size.
--/
-public theorem toNat_usize_of_lt (a : UInt64Array) (h : a.size < USize.size) :
-    a.usize.toNat = a.size := by
-  simp [Nat.mod_eq_of_lt h]
-
-/-- The guard `i < a.usize` of a loop over `USize` indices bounds the index. -/
-public theorem lt_usize_iff (a : UInt64Array) (h : a.size < USize.size) {i : USize} :
-    i < a.usize ↔ i.toNat < a.size := by
-  rw [USize.lt_iff_toNat_lt, toNat_usize_of_lt a h]
-
-/-! ## Last element -/
-
-public theorem back?_eq_getElem? (a : UInt64Array) : a.back? = a[a.size - 1]? := by
-  simp only [back?]
-
-public theorem back!_eq_getElem! (a : UInt64Array) : a.back! = a[a.size - 1]! := by
-  simp only [back!]
-
-public theorem back_eq_getElem (a : UInt64Array) (h : 0 < a.size) :
-    a.back h = a[a.size - 1]'(Nat.sub_lt h Nat.one_pos) := by
-  simp only [back]
-
-@[simp] public theorem getLast?_toList (a : UInt64Array) : a.toList.getLast? = a.back? := by
-  rw [List.getLast?_eq_getElem?, getElem?_toList, length_toList, back?_eq_getElem?]
-
-@[simp] public theorem back?_empty : (empty : UInt64Array).back? = none := by
-  rw [← getLast?_toList, toList_empty, List.getLast?_nil]
-
-@[simp, grind =] public theorem back?_push (a : UInt64Array) (v : UInt64) :
-    (a.push v).back? = some v := by
-  rw [← getLast?_toList, toList_push, List.getLast?_concat]
-
-@[simp] public theorem back!_push (a : UInt64Array) (v : UInt64) : (a.push v).back! = v := by
-  simp [back!_eq_getElem!]
-
-@[simp] public theorem back_push (a : UInt64Array) (v : UInt64) (h) : (a.push v).back h = v := by
-  simp [back_eq_getElem]
-
-/-! ## More lists -/
-
 @[simp] public theorem toList_uset (a : UInt64Array) (i : USize) (v : UInt64) (h) :
     (a.uset i v h).toList = a.toList.set i.toNat v := by
   simp [← toList_toArray]
@@ -421,7 +371,98 @@ public theorem back_eq_getElem (a : UInt64Array) (h : 0 < a.size) :
 @[simp] public theorem isEmpty_iff {a : UInt64Array} : a.isEmpty ↔ a = empty := by
   simp [isEmpty, ← size_eq_zero_iff]
 
-/-! ## Queries -/
+/-! ## Last element -/
+
+public theorem back?_eq_getElem? (a : UInt64Array) : a.back? = a[a.size - 1]? := by
+  simp only [back?]
+
+public theorem back!_eq_getElem! (a : UInt64Array) : a.back! = a[a.size - 1]! := by
+  simp only [back!]
+
+public theorem back_eq_getElem (a : UInt64Array) (h : 0 < a.size) :
+    a.back h = a[a.size - 1]'(Nat.sub_lt h Nat.one_pos) := by
+  simp only [back]
+
+@[simp] public theorem getLast?_toList (a : UInt64Array) : a.toList.getLast? = a.back? := by
+  rw [List.getLast?_eq_getElem?, getElem?_toList, length_toList, back?_eq_getElem?]
+
+@[simp] public theorem back?_empty : (empty : UInt64Array).back? = none := by
+  rw [← getLast?_toList, toList_empty, List.getLast?_nil]
+
+@[simp, grind =] public theorem back?_push (a : UInt64Array) (v : UInt64) :
+    (a.push v).back? = some v := by
+  rw [← getLast?_toList, toList_push, List.getLast?_concat]
+
+@[simp] public theorem back!_push (a : UInt64Array) (v : UInt64) : (a.push v).back! = v := by
+  simp [back!_eq_getElem!]
+
+@[simp] public theorem back_push (a : UInt64Array) (v : UInt64) (h) : (a.push v).back h = v := by
+  simp [back_eq_getElem]
+
+/-! ## Writes -/
+
+@[simp, grind =] public theorem getElem_uset (a : UInt64Array) (i : USize) (v : UInt64) (h) (j : Nat)
+    (hj) : (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
+  simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_set]
+
+@[simp, grind =] public theorem getElem_set! (a : UInt64Array) (i : Nat) (v : UInt64) (j : Nat) (hj) :
+    (a.set! i v)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
+  simp only [getElem_eq_getElem_toArray, toArray_set!, Array.set!_eq_setIfInBounds]
+  rw [Array.getElem_setIfInBounds]
+
+@[simp] public theorem getElem?_set! (a : UInt64Array) (i : Nat) (v : UInt64) (j : Nat) :
+    (a.set! i v)[j]? = if i = j then if i < a.size then some v else none else a[j]? := by
+  by_cases hj : j < a.size <;> by_cases hij : i = j <;> simp_all
+
+public theorem size_popWhile_le (p : UInt64 → Bool) (a : UInt64Array) :
+    (a.popWhile p).size ≤ a.size := by
+  rw [← length_toList, ← length_toList, toList_popWhile, List.length_reverse]
+  simpa using (List.dropWhile_sublist (l := a.toList.reverse) p).length_le
+
+@[simp] public theorem size_copySlice (src : UInt64Array) (srcOff : Nat) (dest : UInt64Array)
+    (destOff len : Nat) (exact : Bool) :
+    (src.copySlice srcOff dest destOff len exact).size =
+      max dest.size (min destOff dest.size + min len (src.size - srcOff)) := by
+  simp [-size_toArray, size_eq_toArray_size]
+  lia
+
+public theorem getElem_copySlice (src : UInt64Array) (srcOff : Nat) (dest : UInt64Array)
+    (destOff len : Nat) (exact : Bool) (i : Nat) (h) :
+    (src.copySlice srcOff dest destOff len exact)[i]'h =
+      if h₁ : i < min destOff dest.size then dest[i]'(by lia)
+      else if h₂ : i - min destOff dest.size < min len (src.size - srcOff) then
+        src[srcOff + (i - min destOff dest.size)]'(by lia)
+      else dest[i]'(by simp at h; lia) := by
+  have hs := size_copySlice src srcOff dest destOff len exact
+  simp only [copySlice_eq_append, getElem_append, getElem_extract, size_append, size_extract,
+    Nat.sub_zero, Nat.zero_add]
+  by_cases h₁ : i < min destOff dest.size
+  · have : i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by lia
+    simp [h₁, this]
+  · by_cases h₂ : i - min destOff dest.size < min len (src.size - srcOff)
+    · have : i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by lia
+      simp [h₁, h₂, this]
+    · have : ¬i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by lia
+      simp only [h₁, h₂, this, ↓reduceDIte]
+      congr 1
+      lia
+
+/-! ## Machine-word indices -/
+
+/--
+`usize` is the size when the size fits in a `USize`, which holds for every array in memory. Loops
+over `USize` indices take this as a hypothesis, since the model `Array` has no bound on its size.
+-/
+public theorem toNat_usize_of_lt (a : UInt64Array) (h : a.size < USize.size) :
+    a.usize.toNat = a.size := by
+  simp [Nat.mod_eq_of_lt h]
+
+/-- The guard `i < a.usize` of a loop over `USize` indices bounds the index. -/
+public theorem lt_usize_iff (a : UInt64Array) (h : a.size < USize.size) {i : USize} :
+    i < a.usize ↔ i.toNat < a.size := by
+  rw [USize.lt_iff_toNat_lt, toNat_usize_of_lt a h]
+
+/-! ## Folds and queries -/
 
 @[simp, grind =] public theorem any_toList (a : UInt64Array) (p : UInt64 → Bool) :
     a.toList.any p = a.any p := by
@@ -480,7 +521,75 @@ private theorem findFinIdx?_loop_eq (a : UInt64Array) (p : UInt64 → Bool) (i :
     (a.findFinIdx? p start).map Fin.val = a.findIdx? p start := by
   simp [findFinIdx?, findIdx?, findFinIdx?_loop_eq]
 
+@[simp] public theorem foldlM_toList {β : Type v} {m : Type v → Type w} [Monad m]
+    (f : β → UInt64 → m β) (init : β) (a : UInt64Array) :
+    a.toList.foldlM f init = a.foldlM f init := by
+  rw [← toList_toArray, Array.foldlM_toList, foldlM, size_eq_toArray_size]
+
+@[simp] public theorem foldrM_toList {β : Type v} {m : Type v → Type w} [Monad m]
+    (f : UInt64 → β → m β) (init : β) (a : UInt64Array) :
+    a.toList.foldrM f init = a.foldrM f init := by
+  rw [← toList_toArray, Array.foldrM_toList]
+  rfl
+
+@[simp] public theorem forM_eq_forM {m : Type v → Type w} [Monad m] (f : UInt64 → m PUnit)
+    (a : UInt64Array) : a.forM f = ForM.forM a f := rfl
+
+@[simp] public theorem forM_toList {m : Type v → Type w} [Monad m] (f : UInt64 → m PUnit)
+    (a : UInt64Array) : ForM.forM a.toList f = ForM.forM a f := by
+  cases a with | mk a
+  rcases a with ⟨l⟩
+  exact (List.forM_toArray l f).symm
+
+/-! ## Membership -/
+
+public theorem mem_def {x : UInt64} {a : UInt64Array} : x ∈ a ↔ x ∈ a.toArray := Iff.rfl
+
+@[simp] public theorem mem_toArray {x : UInt64} {a : UInt64Array} : x ∈ a.toArray ↔ x ∈ a :=
+  Iff.rfl
+
+@[simp] public theorem mem_mk {x : UInt64} {xs : Array UInt64} : x ∈ mk xs ↔ x ∈ xs := Iff.rfl
+
+@[simp] public theorem mem_toList {x : UInt64} {a : UInt64Array} : x ∈ a.toList ↔ x ∈ a := by
+  rw [← toList_toArray, Array.mem_toList_iff, mem_toArray]
+
+public theorem mem_iff_getElem {x : UInt64} {a : UInt64Array} :
+    x ∈ a ↔ ∃ (i : Nat) (h : i < a.size), a[i] = x := by
+  rw [← mem_toArray, Array.mem_iff_getElem]
+  simp
+
+public theorem getElem_mem {a : UInt64Array} {i : Nat} (h : i < a.size) : a[i] ∈ a :=
+  mem_iff_getElem.mpr ⟨i, h, rfl⟩
+
+@[simp, grind ←] public theorem not_mem_empty (x : UInt64) : ¬x ∈ (empty : UInt64Array) := by
+  simp [← mem_toArray]
+
+@[simp, grind =] public theorem mem_push {x v : UInt64} {a : UInt64Array} :
+    x ∈ a.push v ↔ x ∈ a ∨ x = v := by
+  simp [← mem_toArray]
+
+@[simp, grind =] public theorem mem_append {x : UInt64} {a b : UInt64Array} :
+    x ∈ a ++ b ↔ x ∈ a ∨ x ∈ b := by
+  simp [← mem_toArray]
+
+/-! ## Collecting iterators -/
+
+private theorem toList_foldl_push (a : UInt64Array) (l : List UInt64) :
+    (l.foldl (·.push ·) a).toList = a.toList ++ l := by
+  induction l generalizing a <;> simp_all
+
+@[simp] public theorem _root_.Std.Iter.toList_toUInt64Array {α : Type} [Std.Iterator α Id UInt64]
+    [Std.Iterators.Finite α Id] [Std.IteratorLoop α Id Id] [Std.LawfulIteratorLoop α Id Id]
+    (it : Std.Iter (α := α) UInt64) : it.toUInt64Array.toList = it.toList := by
+  rw [Std.Iter.toUInt64Array, ← Std.Iter.foldl_toList, toList_foldl_push, toList_empty,
+    List.nil_append]
+
 /-! ## Slices -/
+
+@[simp] public theorem Slice.size_copy (s : UInt64Array.Slice) : s.copy.size = s.size := by
+  have := s.stop_le_array_size
+  simp only [Slice.copy, size_extract, Slice.size_eq]
+  lia
 
 @[simp] public theorem Slice.getElem_copy (s : UInt64Array.Slice) (i : Nat)
     (h : i < s.copy.size) :
@@ -597,118 +706,7 @@ public theorem Slice.foldr_eq_foldr_toList_copy {β : Type v} (f : UInt64 → β
   rw [Slice.foldr, Slice.foldrM, Id.run, Slice.foldrM_loop_eq,
     List.take_of_length_le (by simp)]
 
-/-! ## Writes -/
-
-@[simp, grind =] public theorem getElem_uset (a : UInt64Array) (i : USize) (v : UInt64) (h) (j : Nat)
-    (hj) : (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
-  simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_set]
-
-@[simp, grind =] public theorem getElem_set! (a : UInt64Array) (i : Nat) (v : UInt64) (j : Nat) (hj) :
-    (a.set! i v)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
-  simp only [getElem_eq_getElem_toArray, toArray_set!, Array.set!_eq_setIfInBounds]
-  rw [Array.getElem_setIfInBounds]
-
-@[simp] public theorem getElem?_set! (a : UInt64Array) (i : Nat) (v : UInt64) (j : Nat) :
-    (a.set! i v)[j]? = if i = j then if i < a.size then some v else none else a[j]? := by
-  by_cases hj : j < a.size <;> by_cases hij : i = j <;> simp_all
-
-public theorem size_popWhile_le (p : UInt64 → Bool) (a : UInt64Array) :
-    (a.popWhile p).size ≤ a.size := by
-  rw [← length_toList, ← length_toList, toList_popWhile, List.length_reverse]
-  simpa using (List.dropWhile_sublist (l := a.toList.reverse) p).length_le
-
-@[simp] public theorem size_copySlice (src : UInt64Array) (srcOff : Nat) (dest : UInt64Array)
-    (destOff len : Nat) (exact : Bool) :
-    (src.copySlice srcOff dest destOff len exact).size =
-      max dest.size (min destOff dest.size + min len (src.size - srcOff)) := by
-  simp [-size_toArray, size_eq_toArray_size]
-  lia
-
-public theorem getElem_copySlice (src : UInt64Array) (srcOff : Nat) (dest : UInt64Array)
-    (destOff len : Nat) (exact : Bool) (i : Nat) (h) :
-    (src.copySlice srcOff dest destOff len exact)[i]'h =
-      if h₁ : i < min destOff dest.size then dest[i]'(by lia)
-      else if h₂ : i - min destOff dest.size < min len (src.size - srcOff) then
-        src[srcOff + (i - min destOff dest.size)]'(by lia)
-      else dest[i]'(by simp at h; lia) := by
-  have hs := size_copySlice src srcOff dest destOff len exact
-  simp only [copySlice_eq_append, getElem_append, getElem_extract, size_append, size_extract,
-    Nat.sub_zero, Nat.zero_add]
-  by_cases h₁ : i < min destOff dest.size
-  · have : i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by lia
-    simp [h₁, this]
-  · by_cases h₂ : i - min destOff dest.size < min len (src.size - srcOff)
-    · have : i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by lia
-      simp [h₁, h₂, this]
-    · have : ¬i < min destOff dest.size + (min (srcOff + len) src.size - srcOff) := by lia
-      simp only [h₁, h₂, this, ↓reduceDIte]
-      congr 1
-      lia
-
-/-! ## Monadic folds -/
-
-@[simp] public theorem foldlM_toList {β : Type v} {m : Type v → Type w} [Monad m]
-    (f : β → UInt64 → m β) (init : β) (a : UInt64Array) :
-    a.toList.foldlM f init = a.foldlM f init := by
-  rw [← toList_toArray, Array.foldlM_toList, foldlM, size_eq_toArray_size]
-
-@[simp] public theorem foldrM_toList {β : Type v} {m : Type v → Type w} [Monad m]
-    (f : UInt64 → β → m β) (init : β) (a : UInt64Array) :
-    a.toList.foldrM f init = a.foldrM f init := by
-  rw [← toList_toArray, Array.foldrM_toList]
-  rfl
-
-@[simp] public theorem forM_eq_forM {m : Type v → Type w} [Monad m] (f : UInt64 → m PUnit)
-    (a : UInt64Array) : a.forM f = ForM.forM a f := rfl
-
-@[simp] public theorem forM_toList {m : Type v → Type w} [Monad m] (f : UInt64 → m PUnit)
-    (a : UInt64Array) : ForM.forM a.toList f = ForM.forM a f := by
-  cases a with | mk a
-  rcases a with ⟨l⟩
-  exact (List.forM_toArray l f).symm
-
-/-! ## Membership -/
-
-public theorem mem_def {x : UInt64} {a : UInt64Array} : x ∈ a ↔ x ∈ a.toArray := Iff.rfl
-
-@[simp] public theorem mem_toArray {x : UInt64} {a : UInt64Array} : x ∈ a.toArray ↔ x ∈ a :=
-  Iff.rfl
-
-@[simp] public theorem mem_mk {x : UInt64} {xs : Array UInt64} : x ∈ mk xs ↔ x ∈ xs := Iff.rfl
-
-@[simp] public theorem mem_toList {x : UInt64} {a : UInt64Array} : x ∈ a.toList ↔ x ∈ a := by
-  rw [← toList_toArray, Array.mem_toList_iff, mem_toArray]
-
-public theorem mem_iff_getElem {x : UInt64} {a : UInt64Array} :
-    x ∈ a ↔ ∃ (i : Nat) (h : i < a.size), a[i] = x := by
-  rw [← mem_toArray, Array.mem_iff_getElem]
-  simp
-
-public theorem getElem_mem {a : UInt64Array} {i : Nat} (h : i < a.size) : a[i] ∈ a :=
-  mem_iff_getElem.mpr ⟨i, h, rfl⟩
-
-@[simp, grind ←] public theorem not_mem_empty (x : UInt64) : ¬x ∈ (empty : UInt64Array) := by
-  simp [← mem_toArray]
-
-@[simp, grind =] public theorem mem_push {x v : UInt64} {a : UInt64Array} :
-    x ∈ a.push v ↔ x ∈ a ∨ x = v := by
-  simp [← mem_toArray]
-
-@[simp, grind =] public theorem mem_append {x : UInt64} {a b : UInt64Array} :
-    x ∈ a ++ b ↔ x ∈ a ∨ x ∈ b := by
-  simp [← mem_toArray]
-
-/-! ## Iterators -/
-
-private theorem toList_foldl_push (a : UInt64Array) (l : List UInt64) :
-    (l.foldl (·.push ·) a).toList = a.toList ++ l := by
-  induction l generalizing a <;> simp_all
-
-@[simp] public theorem _root_.Std.Iter.toList_toUInt64Array {α : Type} [Std.Iterator α Id UInt64]
-    [Std.Iterators.Finite α Id] [Std.IteratorLoop α Id Id] [Std.LawfulIteratorLoop α Id Id]
-    (it : Std.Iter (α := α) UInt64) : it.toUInt64Array.toList = it.toList := by
-  rw [Std.Iter.toUInt64Array, ← Std.Iter.foldl_toList, toList_foldl_push, toList_empty,
-    List.nil_append]
+/-! ## Slices as copies -/
 
 private theorem Slice.cons_take_drop (a : UInt64Array) (s t : Nat) (h : s < t)
     (h' : s < a.size) :
@@ -738,8 +736,6 @@ private theorem SliceIterator.toList_eq (it : Std.Iter (α := UInt64Array.SliceI
       Std.IterStep.mapIterator_done]
     simp [Slice.copy]
     lia
-
-/-! ## Slices as copies -/
 
 @[simp] public theorem Slice.size_empty : (Slice.empty : UInt64Array.Slice).size = 0 := rfl
 
