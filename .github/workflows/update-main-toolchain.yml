@@ -22,18 +22,18 @@ jobs:
 
       - name: Gather revisions and update toolchain
         id: toolchain
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           CURRENT_TOOLCHAIN=$(git show origin/main:lean-toolchain | tr -d '\n')
 
-          BATTERIES_REV=$(git ls-remote --exit-code \
-            https://github.com/leanprover-community/batteries.git \
-            refs/heads/main | cut -f1)
-          REQUESTED_TOOLCHAIN=$(curl --fail --silent --show-error --location \
-            "https://raw.githubusercontent.com/leanprover-community/batteries/${BATTERIES_REV}/lean-toolchain" | tr -d '\n')
-          if [[ "$REQUESTED_TOOLCHAIN" != leanprover/lean4:* ]]; then
-            echo "::error::Unexpected Batteries toolchain: ${REQUESTED_TOOLCHAIN}"
+          # The newest release of Lean, including release candidates.
+          TAG=$(gh api "repos/leanprover/lean4/releases?per_page=1" --jq '.[0].tag_name')
+          if [[ "$TAG" != v[0-9]* ]]; then
+            echo "::error::Unexpected Lean release: ${TAG}"
             exit 1
           fi
+          REQUESTED_TOOLCHAIN="leanprover/lean4:${TAG}"
 
           if [ "$CURRENT_TOOLCHAIN" = "$REQUESTED_TOOLCHAIN" ]; then
             echo "updated=false" >> "$GITHUB_OUTPUT"
