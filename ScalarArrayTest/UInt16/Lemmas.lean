@@ -172,3 +172,15 @@ example (a : UInt16Array) (start len : USize) (h : start.toNat + len.toNat ≤ a
     (a.foldlInPlaceRange start len h 0 f).1.size = a.size ∧
       (a.foldrInPlaceRange start len h 0 f).1.size = a.size := by
   simp
+
+/-! `grind` -/
+
+example (a : UInt16Array) (v w : UInt16) : ((a.push v).push w).size = a.size + 2 := by grind
+example (a : UInt16Array) (i : Nat) (v : UInt16) (h : i < a.size) :
+    (a.set i v h)[i]'(by grind) = v := by grind
+example (a b : UInt16Array) (i : Nat) (h : i < a.size) :
+    (a ++ b)[i]'(by grind) = a[i] := by grind
+example (a : UInt16Array) (v x : UInt16) (h : x ∈ a) : x ∈ a.push v := by grind
+example (a : UInt16Array) (i : Nat) (v : UInt16) (j : Nat) (h : j < a.size) (hij : i ≠ j) :
+    (a.set! i v)[j]'(by grind) = a[j] := by grind
+example (x : UInt16) : ¬x ∈ (UInt16Array.empty) := by grind
