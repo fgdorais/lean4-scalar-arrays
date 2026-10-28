@@ -20,7 +20,7 @@ precompileModules = true
 [[require]]
 name = "batteries"
 git = "https://github.com/leanprover-community/batteries"
-rev = "nightly-testing"
+rev = "main"
 
 [[lean_exe]]
 name = "bench"
