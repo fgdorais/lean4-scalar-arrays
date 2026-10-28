@@ -172,3 +172,15 @@ example (a : USizeArray) (start len : USize) (h : start.toNat + len.toNat ≤ a.
     (a.foldlInPlaceRange start len h 0 f).1.size = a.size ∧
       (a.foldrInPlaceRange start len h 0 f).1.size = a.size := by
   simp
+
+/-! `grind` -/
+
+example (a : USizeArray) (v w : USize) : ((a.push v).push w).size = a.size + 2 := by grind
+example (a : USizeArray) (i : Nat) (v : USize) (h : i < a.size) :
+    (a.set i v h)[i]'(by grind) = v := by grind
+example (a b : USizeArray) (i : Nat) (h : i < a.size) :
+    (a ++ b)[i]'(by grind) = a[i] := by grind
+example (a : USizeArray) (v x : USize) (h : x ∈ a) : x ∈ a.push v := by grind
+example (a : USizeArray) (i : Nat) (v : USize) (j : Nat) (h : j < a.size) (hij : i ≠ j) :
+    (a.set! i v)[j]'(by grind) = a[j] := by grind
+example (x : USize) : ¬x ∈ (USizeArray.empty) := by grind

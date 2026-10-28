@@ -172,3 +172,15 @@ example (a : Int8Array) (start len : USize) (h : start.toNat + len.toNat ≤ a.s
     (a.foldlInPlaceRange start len h 0 f).1.size = a.size ∧
       (a.foldrInPlaceRange start len h 0 f).1.size = a.size := by
   simp
+
+/-! `grind` -/
+
+example (a : Int8Array) (v w : Int8) : ((a.push v).push w).size = a.size + 2 := by grind
+example (a : Int8Array) (i : Nat) (v : Int8) (h : i < a.size) :
+    (a.set i v h)[i]'(by grind) = v := by grind
+example (a b : Int8Array) (i : Nat) (h : i < a.size) :
+    (a ++ b)[i]'(by grind) = a[i] := by grind
+example (a : Int8Array) (v x : Int8) (h : x ∈ a) : x ∈ a.push v := by grind
+example (a : Int8Array) (i : Nat) (v : Int8) (j : Nat) (h : j < a.size) (hij : i ≠ j) :
+    (a.set! i v)[j]'(by grind) = a[j] := by grind
+example (x : Int8) : ¬x ∈ (Int8Array.empty) := by grind

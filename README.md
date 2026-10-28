@@ -91,7 +91,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Linearity    | `markLinear`, `propagateMark`                                               |
 | Memory       | `ensureExclusive`, `ensureCapacity`, `ensureExclusiveWithCapacity`, which are logically the identity |
 | Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
-| Lemmas       | `ext`, `ext_getElem`, `ext_getElem?` and `toArray_inj`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!` |
+| Lemmas       | `ext`, `ext_getElem`, `ext_getElem?` and `toArray_inj`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!`; `grind` lemmas for size, elements and membership, where core marks the matching `Array` lemma |
 
 As with `Array`:
 
@@ -195,6 +195,13 @@ Each type `X` has a module `ScalarArray.X`, which imports its parts:
 | `ScalarArray.X.Decidable` | decidable membership, slice hashing; not for `Float32` and `Float64` |
 
 The tests in `ScalarArrayTest.X` are split the same way.
+
+`lake exe bench` times the main operations of `UInt8Array`, `UInt32Array`, `UInt64Array` and
+`Float64Array`, and compares each with the same operation on core's `ByteArray`, `Array` or
+`FloatArray`. `lake build` compiles it so that it keeps up with the API, but CI doesn't run it.
+To run it on GitHub, add the `benchmark` label to a pull request, which compares the pull request
+with its base, or start the Benchmarks workflow from the Actions tab. The results are in the run's
+summary.
 
 The source and test files for the twelve types are generated from the `UInt16` versions, in
 `ScalarArray/UInt16/` and `ScalarArrayTest/UInt16/`. Make changes there, then regenerate the other

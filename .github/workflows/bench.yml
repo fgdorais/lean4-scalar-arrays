@@ -1,0 +1,73 @@
+name: Benchmarks
+
+# Runs only on request: from the Actions tab, or by adding the `benchmark` label to a pull request.
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Branch, tag or commit to compare with (empty for no comparison)"
+        required: false
+        default: ""
+  pull_request:
+    types: [labeled]
+
+jobs:
+  bench:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'benchmark'
+    runs-on: ubuntu-latest
+    env:
+      BASE: ${{ github.event.pull_request.base.sha || inputs.base }}
+    steps:
+
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: install Lean
+        uses: leanprover/lean-action@f061402b660e0c34644504b324e830f2991d4865 # v1.6.1
+        with:
+          auto-config: false
+
+      - name: build head
+        run: |
+          lake build bench
+          cp .lake/build/bin/bench "$RUNNER_TEMP/bench-head"
+
+      # The base is built with the head's benchmark source, so both run the same benchmarks.
+      - name: build base
+        id: base
+        if: env.BASE != ''
+        continue-on-error: true
+        run: |
+          git worktree add "$RUNNER_TEMP/base" "$BASE"
+          cp ScalarArrayBench.lean "$RUNNER_TEMP/base/"
+          cd "$RUNNER_TEMP/base"
+          if ! grep -q '^name = "bench"' lakefile.toml; then
+            printf '\n[[lean_exe]]\nname = "bench"\nroot = "ScalarArrayBench"\n' >> lakefile.toml
+          fi
+          lake build bench
+          cp .lake/build/bin/bench "$RUNNER_TEMP/bench-base"
+
+      - name: run
+        run: |
+          {
+            echo "## Benchmarks"
+            echo
+            "$RUNNER_TEMP/bench-head"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -x "$RUNNER_TEMP/bench-base" ]; then
+            # Alternate the two builds, so that drift in the runner's speed affects both alike.
+            for _ in 1 2 3; do
+              "$RUNNER_TEMP/bench-base" --tsv >> "$RUNNER_TEMP/base.tsv"
+              "$RUNNER_TEMP/bench-head" --tsv >> "$RUNNER_TEMP/head.tsv"
+            done
+            {
+              echo
+              echo "## Compared with \`$BASE\`"
+              echo
+              python3 scripts/bench_compare.py "$RUNNER_TEMP/base.tsv" "$RUNNER_TEMP/head.tsv"
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$BASE" ]; then
+            echo "The base \`$BASE\` could not be built with this benchmark." >> "$GITHUB_STEP_SUMMARY"
+          fi
