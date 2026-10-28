@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install Lean
+        uses: leanprover/lean-action@f061402b660e0c34644504b324e830f2991d4865 # v1.6.1
+        with:
+          auto-config: false
+
+      - name: Build Docs
+        working-directory: docs
+        run: lake build --keep-toolchain ScalarArray:docs
+
+      - name: Compress Docs
+        working-directory: docs
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          tar -czf "docs-${TAG_NAME}.tar.gz" doc doc-data
+          zip -rq "docs-${TAG_NAME}.zip" doc doc-data
+
+      # Creates the release for the tag, or adds the files to it if it already exists.
+      - name: Release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: |
+            docs/docs-${{ github.ref_name }}.tar.gz
+            docs/docs-${{ github.ref_name }}.zip
+          fail_on_unmatched_files: true
+
+      # GitHub Pages serves the `docs` branch. The generated files are ignored on `main`, hence `-f`.
+      - name: Deploy Docs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b docs
+          git add -f docs/doc docs/doc-data
+          git commit -m "chore: generate docs for ${{ github.ref_name }}"
+          git push origin docs --force
