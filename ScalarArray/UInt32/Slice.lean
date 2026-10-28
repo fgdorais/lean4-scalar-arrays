@@ -14,15 +14,15 @@ import Init.Data.Slice.InternalLemmas
 /-!
 # Slices of `UInt32Array`
 
-Slices of `UInt32Array`: the type, slice notation, reads, iterators, folds and
-equality.
+Slices of `UInt32Array`: the type, reads, slice notation, iterators, folds and searches,
+membership and equality, and collecting iterators into arrays.
 -/
 
 namespace ScalarArray
 
 namespace UInt32Array
 
-/-! ## Slices -/
+/-! ## The slice type -/
 
 /-- Internal representation of `UInt32Array.Slice`. -/
 public protected structure SliceData where
@@ -78,6 +78,8 @@ public instance : Std.Slice.SliceSize UInt32Array.SliceData where
 
 public theorem size_eq (s : UInt32Array.Slice) : s.size = s.stop - s.start := rfl
 
+/-! ## Reads -/
+
 /-- The element at index `i` of the slice, counted from the start of the slice. -/
 @[inline, expose]
 public def get (s : UInt32Array.Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) :
@@ -103,6 +105,8 @@ public def popFront (s : UInt32Array.Slice) : UInt32Array.Slice :=
     ⟨{ s.internalRepresentation with start := s.start + 1, start_le_stop := h }⟩
   else
     s
+
+/-! ## The empty slice, copies and printing -/
 
 /-- The empty slice, backed by an empty array. -/
 @[expose]
@@ -133,6 +137,8 @@ public instance : ToString UInt32Array.Slice where
   toString s := toString s.copy
 
 end Slice
+
+/-! ## Slice notation -/
 
 /--
 The slice of `a` from index `start` up to, but not including, `stop`. If `start` or `stop` are not
@@ -221,6 +227,8 @@ public instance : Std.Rio.Sliceable UInt32Array.Slice Nat UInt32Array.Slice wher
 
 public instance : Std.Rii.Sliceable UInt32Array.Slice Nat UInt32Array.Slice where
   mkSlice s _ := s
+
+/-! ## Iterators -/
 
 /-- The iterator over the elements of a slice, used for `for` loops and the generic slice API. -/
 public protected structure SliceIterator where
@@ -318,6 +326,8 @@ public instance [Monad m] : ForM m UInt32Array.Slice UInt32 where
 @[inline, expose]
 public def iter (a : UInt32Array) : Std.Iter (α := UInt32Array.SliceIterator) UInt32 :=
   a.toSlice.iter
+
+/-! ## Folds and searches -/
 
 namespace Slice
 
@@ -507,6 +517,8 @@ public def contains (s : UInt32Array.Slice) (v : UInt32) : Bool :=
 public def count (s : UInt32Array.Slice) (p : UInt32 → Bool) : Nat :=
   s.iter.fold (fun n x => if p x then n + 1 else n) 0
 
+/-! ## Membership and equality -/
+
 /-- `x ∈ s` when `x` is an element of `s`. -/
 public instance : Membership UInt32 UInt32Array.Slice where
   mem s x := x ∈ s.copy
@@ -637,6 +649,8 @@ private theorem beq_iff (s t : UInt32Array.Slice) :
 public instance : BEq UInt32Array.Slice := ⟨beq⟩
 
 end Slice
+
+/-! ## Collecting iterators into arrays -/
 
 /--
 Collects the values emitted by an iterator into a new array. Together with the `Std.Iterators`

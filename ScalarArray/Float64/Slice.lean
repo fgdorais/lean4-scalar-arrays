@@ -14,15 +14,15 @@ import Init.Data.Slice.InternalLemmas
 /-!
 # Slices of `Float64Array`
 
-Slices of `Float64Array`: the type, slice notation, reads, iterators, folds and
-equality.
+Slices of `Float64Array`: the type, reads, slice notation, iterators, folds and searches,
+membership and equality, and collecting iterators into arrays.
 -/
 
 namespace ScalarArray
 
 namespace Float64Array
 
-/-! ## Slices -/
+/-! ## The slice type -/
 
 /-- Internal representation of `Float64Array.Slice`. -/
 public protected structure SliceData where
@@ -78,6 +78,8 @@ public instance : Std.Slice.SliceSize Float64Array.SliceData where
 
 public theorem size_eq (s : Float64Array.Slice) : s.size = s.stop - s.start := rfl
 
+/-! ## Reads -/
+
 /-- The element at index `i` of the slice, counted from the start of the slice. -/
 @[inline, expose]
 public def get (s : Float64Array.Slice) (i : Nat) (h : i < s.size := by get_elem_tactic) :
@@ -103,6 +105,8 @@ public def popFront (s : Float64Array.Slice) : Float64Array.Slice :=
     ⟨{ s.internalRepresentation with start := s.start + 1, start_le_stop := h }⟩
   else
     s
+
+/-! ## The empty slice, copies and printing -/
 
 /-- The empty slice, backed by an empty array. -/
 @[expose]
@@ -133,6 +137,8 @@ public instance : ToString Float64Array.Slice where
   toString s := toString s.copy
 
 end Slice
+
+/-! ## Slice notation -/
 
 /--
 The slice of `a` from index `start` up to, but not including, `stop`. If `start` or `stop` are not
@@ -221,6 +227,8 @@ public instance : Std.Rio.Sliceable Float64Array.Slice Nat Float64Array.Slice wh
 
 public instance : Std.Rii.Sliceable Float64Array.Slice Nat Float64Array.Slice where
   mkSlice s _ := s
+
+/-! ## Iterators -/
 
 /-- The iterator over the elements of a slice, used for `for` loops and the generic slice API. -/
 public protected structure SliceIterator where
@@ -318,6 +326,8 @@ public instance [Monad m] : ForM m Float64Array.Slice Float where
 @[inline, expose]
 public def iter (a : Float64Array) : Std.Iter (α := Float64Array.SliceIterator) Float :=
   a.toSlice.iter
+
+/-! ## Folds and searches -/
 
 namespace Slice
 
@@ -507,6 +517,8 @@ public def contains (s : Float64Array.Slice) (v : Float) : Bool :=
 public def count (s : Float64Array.Slice) (p : Float → Bool) : Nat :=
   s.iter.fold (fun n x => if p x then n + 1 else n) 0
 
+/-! ## Membership and equality -/
+
 /-- `x ∈ s` when `x` is an element of `s`. -/
 public instance : Membership Float Float64Array.Slice where
   mem s x := x ∈ s.copy
@@ -637,6 +649,8 @@ private theorem beq_iff (s t : Float64Array.Slice) :
 public instance : BEq Float64Array.Slice := ⟨beq⟩
 
 end Slice
+
+/-! ## Collecting iterators into arrays -/
 
 /--
 Collects the values emitted by an iterator into a new array. Together with the `Std.Iterators`
