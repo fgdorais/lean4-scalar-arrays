@@ -233,6 +233,11 @@ python3 scripts/generate.py
 The generated files are marked `linguist-generated` in `.gitattributes`, so GitHub collapses them in
 diffs.
 
+## Documentation
+
+You can generate the API documentation locally with `lake build ScalarArray:docs` in the `docs`
+directory.
+
 -----
 
 * The `Lean 4 / Scalar Arrays` library is copyright © 2026 François G. Dorais. The library is
