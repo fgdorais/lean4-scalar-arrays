@@ -32,15 +32,15 @@ public theorem size_eq_toArray_size (a : Int64Array) : a.size = a.toArray.size :
 @[simp] public theorem size_toArray (a : Int64Array) : a.toArray.size = a.size :=
   (size_eq_toArray_size a).symm
 
-@[simp] public theorem size_uset (a : Int64Array) (i : USize) (v : Int64) (h) :
+@[simp, grind =] public theorem size_uset (a : Int64Array) (i : USize) (v : Int64) (h) :
     (a.uset i v h).size = a.size :=
   Array.size_set (h := h)
 
-@[simp] public theorem size_set (a : Int64Array) (i : Nat) (v : Int64) (h) :
+@[simp, grind =] public theorem size_set (a : Int64Array) (i : Nat) (v : Int64) (h) :
     (a.set i v h).size = a.size :=
   Array.size_set (h := h)
 
-@[simp] public theorem size_push (a : Int64Array) (v : Int64) :
+@[simp, grind =] public theorem size_push (a : Int64Array) (v : Int64) :
     (a.push v).size = a.size + 1 := by
   cases a; simp [push, size]
 
@@ -48,7 +48,7 @@ public theorem size_eq_toArray_size (a : Int64Array) : a.size = a.toArray.size :
     (a ++ b).toArray = a.toArray ++ b.toArray := by
   cases a; cases b; rfl
 
-@[simp] public theorem size_append (a b : Int64Array) : (a ++ b).size = a.size + b.size := by
+@[simp, grind =] public theorem size_append (a b : Int64Array) : (a ++ b).size = a.size + b.size := by
   simp [-size_toArray, size_eq_toArray_size]
 
 @[ext] public theorem ext {a b : Int64Array} (h : a.toArray = b.toArray) : a = b :=
@@ -105,31 +105,31 @@ public theorem ext_getElem {a b : Int64Array} (h₁ : a.size = b.size)
 
 @[simp] public theorem toArray_empty : (empty : Int64Array).toArray = #[] := rfl
 
-@[simp] public theorem size_pop (a : Int64Array) : a.pop.size = a.size - 1 := by
+@[simp, grind =] public theorem size_pop (a : Int64Array) : a.pop.size = a.size - 1 := by
   simp [-size_toArray, size_eq_toArray_size]
 
-@[simp] public theorem size_extract (a : Int64Array) (start stop : Nat) :
+@[simp, grind =] public theorem size_extract (a : Int64Array) (start stop : Nat) :
     (a.extract start stop).size = min stop a.size - start := by
   simp [-size_toArray, size_eq_toArray_size]
 
-@[simp] public theorem size_replicate (n : Nat) (v : Int64) : (replicate n v).size = n := by
+@[simp, grind =] public theorem size_replicate (n : Nat) (v : Int64) : (replicate n v).size = n := by
   simp [-size_toArray, size_eq_toArray_size]
 
 @[simp] public theorem size_ofFn {n : Nat} (f : Fin n → Int64) : (ofFn f).size = n := by
   simp [-size_toArray, size_eq_toArray_size]
 
-@[simp] public theorem size_empty : (empty : Int64Array).size = 0 := rfl
+@[simp, grind =] public theorem size_empty : (empty : Int64Array).size = 0 := rfl
 
-@[simp] public theorem getElem_set (a : Int64Array) (i : Nat) (v : Int64) (h) (j : Nat) (hj) :
+@[simp, grind =] public theorem getElem_set (a : Int64Array) (i : Nat) (v : Int64) (h) (j : Nat) (hj) :
     (a.set i v h)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_set]
 
-@[simp] public theorem getElem_push (a : Int64Array) (v : Int64) (i : Nat) (h) :
+@[simp, grind =] public theorem getElem_push (a : Int64Array) (v : Int64) (i : Nat) (h) :
     (a.push v)[i]'h = if h' : i < a.size then a[i] else v := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_push, -size_toArray,
     size_eq_toArray_size]
 
-@[simp] public theorem getElem_pop (a : Int64Array) (i : Nat) (h) :
+@[simp, grind =] public theorem getElem_pop (a : Int64Array) (i : Nat) (h) :
     a.pop[i]'h = a[i]'(by simp at h; lia) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray]
 
@@ -137,16 +137,16 @@ public theorem ext_getElem {a b : Int64Array} (h₁ : a.size = b.size)
     (a.popWhile p).toArray = a.toArray.popWhile p := by
   cases a; rfl
 
-@[simp] public theorem getElem_append (a b : Int64Array) (i : Nat) (h) :
+@[simp, grind =] public theorem getElem_append (a b : Int64Array) (i : Nat) (h) :
     (a ++ b)[i]'h = if h' : i < a.size then a[i] else b[i - a.size]'(by simp at h; lia) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_append, -size_toArray,
     size_eq_toArray_size]
 
-@[simp] public theorem getElem_extract (a : Int64Array) (start stop i : Nat) (h) :
+@[simp, grind =] public theorem getElem_extract (a : Int64Array) (start stop i : Nat) (h) :
     (a.extract start stop)[i]'h = a[start + i]'(by simp at h; lia) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray]
 
-@[simp] public theorem getElem_replicate (n : Nat) (v : Int64) (i : Nat) (h) :
+@[simp, grind =] public theorem getElem_replicate (n : Nat) (v : Int64) (i : Nat) (h) :
     (replicate n v)[i]'h = v := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray]
 
@@ -178,13 +178,13 @@ public theorem size_eq_zero_iff {a : Int64Array} : a.size = 0 ↔ a = empty := b
   simp only [set!, Array.set!_eq_setIfInBounds, Array.setIfInBounds, size_eq_toArray_size]
   split <;> rfl
 
-@[simp] public theorem size_set! (a : Int64Array) (i : Nat) (v : Int64) :
+@[simp, grind =] public theorem size_set! (a : Int64Array) (i : Nat) (v : Int64) :
     (a.set! i v).size = a.size := by
   simp [-size_toArray, size_eq_toArray_size]
 
 public theorem getElem!_eq_getElem!_toArray (a : Int64Array) (i : Nat) :
     a[i]! = a.toArray[i]! := by
-  by_cases h : i < a.size <;> simp [h] <;> rfl
+  by_cases h : i < a.size <;> simp [h]
 
 @[simp] public theorem toArray_ofList (l : List Int64) : (ofList l).toArray = l.toArray := rfl
 
@@ -206,9 +206,9 @@ public theorem getElem!_eq_getElem!_toArray (a : Int64Array) (i : Nat) :
 @[simp] public theorem ensureExclusiveWithCapacity_eq (a : Int64Array) (n : Nat) :
     a.ensureExclusiveWithCapacity n = a := rfl
 
-@[simp] public theorem markLinear_eq (a : Int64Array) : a.markLinear = a := rfl
+@[simp, grind =] public theorem markLinear_eq (a : Int64Array) : a.markLinear = a := rfl
 
-@[simp] public theorem propagateMark_eq (a b : Int64Array) : a.propagateMark b = b := rfl
+@[simp, grind =] public theorem propagateMark_eq (a b : Int64Array) : a.propagateMark b = b := rfl
 
 @[simp] public theorem append_empty (a : Int64Array) : a ++ empty = a := by
   simp [Int64Array.ext_iff]
@@ -288,14 +288,14 @@ public theorem copySlice_eq_append (src : Int64Array) (srcOff : Nat) (dest : Int
 
 @[simp] public theorem toList_mk (a : Array Int64) : (mk a).toList = a.toList := rfl
 
-@[simp] public theorem length_toList (a : Int64Array) : a.toList.length = a.size := by
+@[simp, grind =] public theorem length_toList (a : Int64Array) : a.toList.length = a.size := by
   simp [← toList_toArray]
 
-@[simp] public theorem getElem_toList (a : Int64Array) (i : Nat) (h : i < a.toList.length) :
+@[simp, grind =] public theorem getElem_toList (a : Int64Array) (i : Nat) (h : i < a.toList.length) :
     a.toList[i] = a[i]'(by simpa using h) := by
   simp [← toList_toArray]
 
-@[simp] public theorem getElem?_toList (a : Int64Array) (i : Nat) : a.toList[i]? = a[i]? := by
+@[simp, grind =] public theorem getElem?_toList (a : Int64Array) (i : Nat) : a.toList[i]? = a[i]? := by
   by_cases h : i < a.size <;> simp [h, ← toList_toArray]
 
 @[simp] public theorem toList_inj {a b : Int64Array} : a.toList = b.toList ↔ a = b :=
@@ -306,14 +306,14 @@ public theorem ext_getElem? {a b : Int64Array} (h : ∀ i : Nat, a[i]? = b[i]?) 
 
 @[simp] public theorem toList_empty : (empty : Int64Array).toList = [] := rfl
 
-@[simp] public theorem toList_push (a : Int64Array) (v : Int64) :
+@[simp, grind =] public theorem toList_push (a : Int64Array) (v : Int64) :
     (a.push v).toList = a.toList ++ [v] := by
   simp [← toList_toArray]
 
 @[simp] public theorem toList_pop (a : Int64Array) : a.pop.toList = a.toList.dropLast := by
   simp [← toList_toArray]
 
-@[simp] public theorem toList_append (a b : Int64Array) :
+@[simp, grind =] public theorem toList_append (a b : Int64Array) :
     (a ++ b).toList = a.toList ++ b.toList := by
   simp [← toList_toArray]
 
@@ -376,7 +376,7 @@ public theorem back_eq_getElem (a : Int64Array) (h : 0 < a.size) :
 @[simp] public theorem back?_empty : (empty : Int64Array).back? = none := by
   rw [← getLast?_toList, toList_empty, List.getLast?_nil]
 
-@[simp] public theorem back?_push (a : Int64Array) (v : Int64) :
+@[simp, grind =] public theorem back?_push (a : Int64Array) (v : Int64) :
     (a.push v).back? = some v := by
   rw [← getLast?_toList, toList_push, List.getLast?_concat]
 
@@ -423,7 +423,7 @@ public theorem back_eq_getElem (a : Int64Array) (h : 0 < a.size) :
 
 /-! ## Queries -/
 
-@[simp] public theorem any_toList (a : Int64Array) (p : Int64 → Bool) :
+@[simp, grind =] public theorem any_toList (a : Int64Array) (p : Int64 → Bool) :
     a.toList.any p = a.any p := by
   simp [any, ← toList_toArray]
 
@@ -435,7 +435,7 @@ public theorem back_eq_getElem (a : Int64Array) (h : 0 < a.size) :
     a.toList.contains v = a.contains v := by
   simp [contains, ← toList_toArray]
 
-@[simp] public theorem foldl_toList {β : Type v} (f : β → Int64 → β) (init : β)
+@[simp, grind =] public theorem foldl_toList {β : Type v} (f : β → Int64 → β) (init : β)
     (a : Int64Array) : a.toList.foldl f init = a.foldl f init := by
   simp [foldl_eq_foldl_toArray, ← toList_toArray]
 
@@ -473,7 +473,8 @@ public theorem findIdx?_eq (a : Int64Array) (p : Int64 → Bool) (start : Nat) :
 
 private theorem findFinIdx?_loop_eq (a : Int64Array) (p : Int64 → Bool) (i : Nat) :
     (findFinIdx?.loop a p i).map Fin.val = findIdx?.loop a p i := by
-  fun_induction findFinIdx?.loop a p i <;> rw [findIdx?.loop] <;> simp_all <;> lia
+  fun_induction findFinIdx?.loop a p i <;> rw [findIdx?.loop] <;> simp_all
+  lia
 
 @[simp] public theorem map_val_findFinIdx? (a : Int64Array) (p : Int64 → Bool) (start : Nat) :
     (a.findFinIdx? p start).map Fin.val = a.findIdx? p start := by
@@ -598,11 +599,11 @@ public theorem Slice.foldr_eq_foldr_toList_copy {β : Type v} (f : Int64 → β 
 
 /-! ## Writes -/
 
-@[simp] public theorem getElem_uset (a : Int64Array) (i : USize) (v : Int64) (h) (j : Nat)
+@[simp, grind =] public theorem getElem_uset (a : Int64Array) (i : USize) (v : Int64) (h) (j : Nat)
     (hj) : (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_set]
 
-@[simp] public theorem getElem_set! (a : Int64Array) (i : Nat) (v : Int64) (j : Nat) (hj) :
+@[simp, grind =] public theorem getElem_set! (a : Int64Array) (i : Nat) (v : Int64) (j : Nat) (hj) :
     (a.set! i v)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
   simp only [getElem_eq_getElem_toArray, toArray_set!, Array.set!_eq_setIfInBounds]
   rw [Array.getElem_setIfInBounds]
@@ -686,14 +687,14 @@ public theorem mem_iff_getElem {x : Int64} {a : Int64Array} :
 public theorem getElem_mem {a : Int64Array} {i : Nat} (h : i < a.size) : a[i] ∈ a :=
   mem_iff_getElem.mpr ⟨i, h, rfl⟩
 
-@[simp] public theorem not_mem_empty (x : Int64) : ¬x ∈ (empty : Int64Array) := by
+@[simp, grind ←] public theorem not_mem_empty (x : Int64) : ¬x ∈ (empty : Int64Array) := by
   simp [← mem_toArray]
 
-@[simp] public theorem mem_push {x v : Int64} {a : Int64Array} :
+@[simp, grind =] public theorem mem_push {x v : Int64} {a : Int64Array} :
     x ∈ a.push v ↔ x ∈ a ∨ x = v := by
   simp [← mem_toArray]
 
-@[simp] public theorem mem_append {x : Int64} {a b : Int64Array} :
+@[simp, grind =] public theorem mem_append {x : Int64} {a b : Int64Array} :
     x ∈ a ++ b ↔ x ∈ a ∨ x ∈ b := by
   simp [← mem_toArray]
 
@@ -818,7 +819,9 @@ private theorem foldl_count_eq (p : Int64 → Bool) (l : List Int64) (n : Nat) :
     l.foldl (fun n x => if p x then n + 1 else n) n = n + l.countP p := by
   induction l generalizing n with
   | nil => rfl
-  | cons x l ih => by_cases hx : p x <;> simp [ih, hx] <;> lia
+  | cons x l ih =>
+    by_cases hx : p x <;> simp [ih, hx]
+    lia
 
 @[simp] public theorem Slice.count_eq_countP_toList_copy (s : Int64Array.Slice)
     (p : Int64 → Bool) : s.count p = s.copy.toList.countP p := by
@@ -834,7 +837,8 @@ private theorem Slice.findSomeRevM?_loop_eq (p : Int64 → Bool) (s : Int64Array
   | succ i ih =>
     have hi : i < s.copy.toList.length := by simp; lia
     rw [Slice.findSomeRevM?.loop, List.take_add_one, List.getElem?_eq_getElem hi]
-    by_cases hp : p s[i] <;> simp [ih, hp] <;> rfl
+    by_cases hp : p s[i] <;> simp [ih, hp]
+    rfl
 
 @[simp] public theorem Slice.findRev?_eq_find?_reverse_toList_copy (s : Int64Array.Slice)
     (p : Int64 → Bool) : s.findRev? p = s.copy.toList.reverse.find? p := by

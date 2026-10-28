@@ -5,7 +5,7 @@ on:
     branches: [ "main", "nightly-testing" ]
 
 concurrency:
-  group: cd-${{ github.head_ref }}
+  group: cd-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -29,6 +29,7 @@ jobs:
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
           git merge origin/main --no-commit --strategy-option ours --allow-unrelated-histories
-          git restore --staged lean-toolchain lakefile.toml lake-manifest.json
+          git restore --staged lean-toolchain
+          git checkout origin/main -- lakefile.toml lake-manifest.json
           git commit --allow-empty -m "chore: merge main into nightly-testing"
           git push origin nightly-testing

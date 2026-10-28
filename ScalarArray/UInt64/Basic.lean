@@ -303,17 +303,17 @@ public unsafe def setImpl : type_of% @set :=
 attribute [implemented_by setImpl] set
 
 /-- The element at index `i`. Panics if `i` is out of bounds, and then returns `default`. -/
-@[expose]
+@[inline, expose]
 public def get! (a : @& UInt64Array) (i : @& Nat) : UInt64 :=
   if h : i < a.size then a.get i h else panic! "index out of bounds"
 
 /-- The element at index `i`, or `v₀` if `i` is out of bounds. -/
-@[expose]
+@[inline, expose]
 public def getD (a : @& UInt64Array) (i : @& Nat) (v₀ : UInt64) : UInt64 :=
   if h : i < a.size then a.get i h else v₀
 
 /-- Replaces the element at index `i`. If `i` is out of bounds, the array is returned unmodified. -/
-@[expose]
+@[inline, expose]
 public def set! (a : UInt64Array) (i : Nat) (v : UInt64) : UInt64Array :=
   if h : i < a.size then a.set i v h else a
 

@@ -172,3 +172,15 @@ example (a : Float32Array) (start len : USize) (h : start.toNat + len.toNat ≤ 
     (a.foldlInPlaceRange start len h 0 f).1.size = a.size ∧
       (a.foldrInPlaceRange start len h 0 f).1.size = a.size := by
   simp
+
+/-! `grind` -/
+
+example (a : Float32Array) (v w : Float32) : ((a.push v).push w).size = a.size + 2 := by grind
+example (a : Float32Array) (i : Nat) (v : Float32) (h : i < a.size) :
+    (a.set i v h)[i]'(by grind) = v := by grind
+example (a b : Float32Array) (i : Nat) (h : i < a.size) :
+    (a ++ b)[i]'(by grind) = a[i] := by grind
+example (a : Float32Array) (v x : Float32) (h : x ∈ a) : x ∈ a.push v := by grind
+example (a : Float32Array) (i : Nat) (v : Float32) (j : Nat) (h : j < a.size) (hij : i ≠ j) :
+    (a.set! i v)[j]'(by grind) = a[j] := by grind
+example (x : Float32) : ¬x ∈ (Float32Array.empty) := by grind

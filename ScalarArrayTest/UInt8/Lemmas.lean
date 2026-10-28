@@ -172,3 +172,15 @@ example (a : UInt8Array) (start len : USize) (h : start.toNat + len.toNat ≤ a.
     (a.foldlInPlaceRange start len h 0 f).1.size = a.size ∧
       (a.foldrInPlaceRange start len h 0 f).1.size = a.size := by
   simp
+
+/-! `grind` -/
+
+example (a : UInt8Array) (v w : UInt8) : ((a.push v).push w).size = a.size + 2 := by grind
+example (a : UInt8Array) (i : Nat) (v : UInt8) (h : i < a.size) :
+    (a.set i v h)[i]'(by grind) = v := by grind
+example (a b : UInt8Array) (i : Nat) (h : i < a.size) :
+    (a ++ b)[i]'(by grind) = a[i] := by grind
+example (a : UInt8Array) (v x : UInt8) (h : x ∈ a) : x ∈ a.push v := by grind
+example (a : UInt8Array) (i : Nat) (v : UInt8) (j : Nat) (h : j < a.size) (hij : i ≠ j) :
+    (a.set! i v)[j]'(by grind) = a[j] := by grind
+example (x : UInt8) : ¬x ∈ (UInt8Array.empty) := by grind

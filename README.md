@@ -30,9 +30,9 @@ in-place updates, and have a simple `Array`-based model for proofs.
 
 ## Installation
 
-The library is a Batteries cell: the `main` branch follows the Lean toolchain of Batteries `main`,
-and the `nightly-testing` branch follows Batteries `nightly-testing` and the latest Lean nightly,
-so it can be used together with Batteries. Add it to your `lakefile.toml`:
+The library depends only on Lean itself. The `main` branch follows the newest Lean release,
+including release candidates, and the `nightly-testing` branch follows the newest Lean nightly.
+Add it to your `lakefile.toml`:
 
 ```toml
 [[require]]
@@ -85,13 +85,13 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Search       | `findIdx?`, `findFinIdx?`                                                   |
 | Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `get`, `getD`, `get!`, `popFront`, `copy`, `for x in s`, `foldl`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findSomeRevM?`, `toArray`, `toList` |
 | Slice writes | `Slice.set`, `set!`, `modify`, `swap`, `reverse`, `foldlInPlace`, `foldrInPlace`, `foldlInPlaceThen`, `foldrInPlaceThen`, which write into the slice's array; `s.array` gives the whole array back |
-| In-place folds | `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds |
+| In-place folds | `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, and `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array |
 | Equality     | `a == b`; for integer types also `DecidableEq` and `Hashable`               |
 | Linearity    | `markLinear`, `propagateMark`                                               |
 | Memory       | `ensureExclusive`, `ensureCapacity`, `ensureExclusiveWithCapacity`, which are logically the identity |
 | Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
-| Lemmas       | `ext`, `ext_getElem`, `ext_getElem?` and `toArray_inj`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!` |
+| Lemmas       | `ext`, `ext_getElem`, `ext_getElem?` and `toArray_inj`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!`; `grind` lemmas for size, elements and membership, where core marks the matching `Array` lemma |
 
 As with `Array`:
 
@@ -209,6 +209,13 @@ Each type `X` has a module `ScalarArray.X`, which imports its parts:
 | `ScalarArray.X.Decidable` | decidable membership, slice hashing; not for `Float32` and `Float64` |
 
 The tests in `ScalarArrayTest.X` are split the same way.
+
+`lake exe bench` times the main operations of `UInt8Array`, `UInt32Array`, `UInt64Array` and
+`Float64Array`, and compares each with the same operation on core's `ByteArray`, `Array` or
+`FloatArray`. `lake build` compiles it so that it keeps up with the API, but CI doesn't run it.
+To run it on GitHub, add the `benchmark` label to a pull request, which compares the pull request
+with its base, or start the Benchmarks workflow from the Actions tab. The results are in the run's
+summary.
 
 The source and test files for the twelve types are generated from the `UInt16` versions, in
 `ScalarArray/UInt16/` and `ScalarArrayTest/UInt16/`. Make changes there, then regenerate the other

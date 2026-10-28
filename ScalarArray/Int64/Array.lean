@@ -39,12 +39,15 @@ public def pop (a : Int64Array) : Int64Array :=
   mk a.toArray.pop
 
 /-- The last element of `a`, or `none` if `a` is empty. -/
+@[inline]
 public def back? (a : @& Int64Array) : Option Int64 := a[a.size - 1]?
 
 /-- The last element of `a`. Panics if `a` is empty, and then returns `default`. -/
+@[inline]
 public def back! (a : @& Int64Array) : Int64 := a[a.size - 1]!
 
 /-- The last element of `a`, which is not empty. -/
+@[inline]
 public def back (a : @& Int64Array) (h : 0 < a.size) : Int64 :=
   a[a.size - 1]'(Nat.sub_lt h Nat.one_pos)
 

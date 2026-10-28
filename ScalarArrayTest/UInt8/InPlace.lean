@@ -297,6 +297,43 @@ private def shift (k : USize) (x : UInt8) (b : UInt8 × List Nat) :
         (a'.set 2 b (by rw [ha]; simp at h; lia)).toArray) == #[2, 3, 1, 4]
   else false
 
+-- With two accumulators, the same as `foldlInPlaceRange` on the pair, here a Fibonacci-like
+-- carry through the elements.
+private def step2 (_ : USize) (x : UInt8) (b₁ b₂ : UInt8) : UInt8 × UInt8 × UInt8 :=
+  (x + b₁, b₂, b₁ + x)
+
+#guard
+  let a := UInt8Array.mk #[1, 2, 3, 4, 5, big]
+  [(0, 6), (1, 3), (2, 0), (6, 0), (5, 1)].all fun (start, len) =>
+    let start := (start : Nat).toUSize
+    let len := (len : Nat).toUSize
+    if h : start.toNat + len.toNat ≤ a.size then
+      let r := a.foldlInPlaceRangeWith2Acc start len h (7 : UInt8) (big : UInt8)
+        fun k _ x b₁ b₂ => step2 k x b₁ b₂
+      let r' := a.foldlInPlaceRange start len h ((7 : UInt8), (big : UInt8))
+        fun k _ x b => step2 k x b.1 b.2
+      r.1.toArray == r'.1.toArray && r.2 == r'.2 && a.toArray == #[1, 2, 3, 4, 5, big]
+    else false
+
+#guard
+  let a := UInt8Array.mk #[1, 2, 3, 4]
+  if h : (1 : USize).toNat + (2 : USize).toNat ≤ a.size then
+    let r := a.foldlInPlaceRangeWith2Acc 1 2 h (10 : UInt8) (20 : UInt8)
+      fun _ _ x b₁ b₂ => (b₁, b₂, x)
+    r.1.toArray == #[1, 10, 20, 4] && r.2 == (2, 3)
+  else false
+
+-- The `Then` version hands both accumulators to `g`, with the size of the new array.
+#guard
+  let a := UInt8Array.mk #[1, 2, 3, 4]
+  if h : (0 : USize).toNat + (2 : USize).toNat ≤ a.size ∧ 4 ≤ a.size then
+    (a.foldlInPlaceRangeWith2AccThen 0 2 h.1 (10 : UInt8) (20 : UInt8)
+        (fun _ _ x b₁ b₂ => (b₁, b₂, x)) fun a' ha b₁ b₂ =>
+          ((a'.set 2 b₁ (by have := h.2; rw [ha]; lia)).set 3 b₂
+            (by have := h.2; simp only [UInt8Array.size_set, ha]; lia)).toArray) ==
+      #[10, 20, 1, 2]
+  else false
+
 -- A shared array is left unchanged, and an exclusive one is written in place.
 #guard
   let a := UInt8Array.mk #[1, 2, 3, 4]

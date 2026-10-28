@@ -32,15 +32,15 @@ public theorem size_eq_toArray_size (a : USizeArray) : a.size = a.toArray.size :
 @[simp] public theorem size_toArray (a : USizeArray) : a.toArray.size = a.size :=
   (size_eq_toArray_size a).symm
 
-@[simp] public theorem size_uset (a : USizeArray) (i : USize) (v : USize) (h) :
+@[simp, grind =] public theorem size_uset (a : USizeArray) (i : USize) (v : USize) (h) :
     (a.uset i v h).size = a.size :=
   Array.size_set (h := h)
 
-@[simp] public theorem size_set (a : USizeArray) (i : Nat) (v : USize) (h) :
+@[simp, grind =] public theorem size_set (a : USizeArray) (i : Nat) (v : USize) (h) :
     (a.set i v h).size = a.size :=
   Array.size_set (h := h)
 
-@[simp] public theorem size_push (a : USizeArray) (v : USize) :
+@[simp, grind =] public theorem size_push (a : USizeArray) (v : USize) :
     (a.push v).size = a.size + 1 := by
   cases a; simp [push, size]
 
@@ -48,7 +48,7 @@ public theorem size_eq_toArray_size (a : USizeArray) : a.size = a.toArray.size :
     (a ++ b).toArray = a.toArray ++ b.toArray := by
   cases a; cases b; rfl
 
-@[simp] public theorem size_append (a b : USizeArray) : (a ++ b).size = a.size + b.size := by
+@[simp, grind =] public theorem size_append (a b : USizeArray) : (a ++ b).size = a.size + b.size := by
   simp [-size_toArray, size_eq_toArray_size]
 
 @[ext] public theorem ext {a b : USizeArray} (h : a.toArray = b.toArray) : a = b :=
@@ -105,31 +105,31 @@ public theorem ext_getElem {a b : USizeArray} (h₁ : a.size = b.size)
 
 @[simp] public theorem toArray_empty : (empty : USizeArray).toArray = #[] := rfl
 
-@[simp] public theorem size_pop (a : USizeArray) : a.pop.size = a.size - 1 := by
+@[simp, grind =] public theorem size_pop (a : USizeArray) : a.pop.size = a.size - 1 := by
   simp [-size_toArray, size_eq_toArray_size]
 
-@[simp] public theorem size_extract (a : USizeArray) (start stop : Nat) :
+@[simp, grind =] public theorem size_extract (a : USizeArray) (start stop : Nat) :
     (a.extract start stop).size = min stop a.size - start := by
   simp [-size_toArray, size_eq_toArray_size]
 
-@[simp] public theorem size_replicate (n : Nat) (v : USize) : (replicate n v).size = n := by
+@[simp, grind =] public theorem size_replicate (n : Nat) (v : USize) : (replicate n v).size = n := by
   simp [-size_toArray, size_eq_toArray_size]
 
 @[simp] public theorem size_ofFn {n : Nat} (f : Fin n → USize) : (ofFn f).size = n := by
   simp [-size_toArray, size_eq_toArray_size]
 
-@[simp] public theorem size_empty : (empty : USizeArray).size = 0 := rfl
+@[simp, grind =] public theorem size_empty : (empty : USizeArray).size = 0 := rfl
 
-@[simp] public theorem getElem_set (a : USizeArray) (i : Nat) (v : USize) (h) (j : Nat) (hj) :
+@[simp, grind =] public theorem getElem_set (a : USizeArray) (i : Nat) (v : USize) (h) (j : Nat) (hj) :
     (a.set i v h)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_set]
 
-@[simp] public theorem getElem_push (a : USizeArray) (v : USize) (i : Nat) (h) :
+@[simp, grind =] public theorem getElem_push (a : USizeArray) (v : USize) (i : Nat) (h) :
     (a.push v)[i]'h = if h' : i < a.size then a[i] else v := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_push, -size_toArray,
     size_eq_toArray_size]
 
-@[simp] public theorem getElem_pop (a : USizeArray) (i : Nat) (h) :
+@[simp, grind =] public theorem getElem_pop (a : USizeArray) (i : Nat) (h) :
     a.pop[i]'h = a[i]'(by simp at h; lia) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray]
 
@@ -137,16 +137,16 @@ public theorem ext_getElem {a b : USizeArray} (h₁ : a.size = b.size)
     (a.popWhile p).toArray = a.toArray.popWhile p := by
   cases a; rfl
 
-@[simp] public theorem getElem_append (a b : USizeArray) (i : Nat) (h) :
+@[simp, grind =] public theorem getElem_append (a b : USizeArray) (i : Nat) (h) :
     (a ++ b)[i]'h = if h' : i < a.size then a[i] else b[i - a.size]'(by simp at h; lia) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_append, -size_toArray,
     size_eq_toArray_size]
 
-@[simp] public theorem getElem_extract (a : USizeArray) (start stop i : Nat) (h) :
+@[simp, grind =] public theorem getElem_extract (a : USizeArray) (start stop i : Nat) (h) :
     (a.extract start stop)[i]'h = a[start + i]'(by simp at h; lia) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray]
 
-@[simp] public theorem getElem_replicate (n : Nat) (v : USize) (i : Nat) (h) :
+@[simp, grind =] public theorem getElem_replicate (n : Nat) (v : USize) (i : Nat) (h) :
     (replicate n v)[i]'h = v := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray]
 
@@ -178,13 +178,13 @@ public theorem size_eq_zero_iff {a : USizeArray} : a.size = 0 ↔ a = empty := b
   simp only [set!, Array.set!_eq_setIfInBounds, Array.setIfInBounds, size_eq_toArray_size]
   split <;> rfl
 
-@[simp] public theorem size_set! (a : USizeArray) (i : Nat) (v : USize) :
+@[simp, grind =] public theorem size_set! (a : USizeArray) (i : Nat) (v : USize) :
     (a.set! i v).size = a.size := by
   simp [-size_toArray, size_eq_toArray_size]
 
 public theorem getElem!_eq_getElem!_toArray (a : USizeArray) (i : Nat) :
     a[i]! = a.toArray[i]! := by
-  by_cases h : i < a.size <;> simp [h] <;> rfl
+  by_cases h : i < a.size <;> simp [h]
 
 @[simp] public theorem toArray_ofList (l : List USize) : (ofList l).toArray = l.toArray := rfl
 
@@ -206,9 +206,9 @@ public theorem getElem!_eq_getElem!_toArray (a : USizeArray) (i : Nat) :
 @[simp] public theorem ensureExclusiveWithCapacity_eq (a : USizeArray) (n : Nat) :
     a.ensureExclusiveWithCapacity n = a := rfl
 
-@[simp] public theorem markLinear_eq (a : USizeArray) : a.markLinear = a := rfl
+@[simp, grind =] public theorem markLinear_eq (a : USizeArray) : a.markLinear = a := rfl
 
-@[simp] public theorem propagateMark_eq (a b : USizeArray) : a.propagateMark b = b := rfl
+@[simp, grind =] public theorem propagateMark_eq (a b : USizeArray) : a.propagateMark b = b := rfl
 
 @[simp] public theorem append_empty (a : USizeArray) : a ++ empty = a := by
   simp [USizeArray.ext_iff]
@@ -288,14 +288,14 @@ public theorem copySlice_eq_append (src : USizeArray) (srcOff : Nat) (dest : USi
 
 @[simp] public theorem toList_mk (a : Array USize) : (mk a).toList = a.toList := rfl
 
-@[simp] public theorem length_toList (a : USizeArray) : a.toList.length = a.size := by
+@[simp, grind =] public theorem length_toList (a : USizeArray) : a.toList.length = a.size := by
   simp [← toList_toArray]
 
-@[simp] public theorem getElem_toList (a : USizeArray) (i : Nat) (h : i < a.toList.length) :
+@[simp, grind =] public theorem getElem_toList (a : USizeArray) (i : Nat) (h : i < a.toList.length) :
     a.toList[i] = a[i]'(by simpa using h) := by
   simp [← toList_toArray]
 
-@[simp] public theorem getElem?_toList (a : USizeArray) (i : Nat) : a.toList[i]? = a[i]? := by
+@[simp, grind =] public theorem getElem?_toList (a : USizeArray) (i : Nat) : a.toList[i]? = a[i]? := by
   by_cases h : i < a.size <;> simp [h, ← toList_toArray]
 
 @[simp] public theorem toList_inj {a b : USizeArray} : a.toList = b.toList ↔ a = b :=
@@ -306,14 +306,14 @@ public theorem ext_getElem? {a b : USizeArray} (h : ∀ i : Nat, a[i]? = b[i]?) 
 
 @[simp] public theorem toList_empty : (empty : USizeArray).toList = [] := rfl
 
-@[simp] public theorem toList_push (a : USizeArray) (v : USize) :
+@[simp, grind =] public theorem toList_push (a : USizeArray) (v : USize) :
     (a.push v).toList = a.toList ++ [v] := by
   simp [← toList_toArray]
 
 @[simp] public theorem toList_pop (a : USizeArray) : a.pop.toList = a.toList.dropLast := by
   simp [← toList_toArray]
 
-@[simp] public theorem toList_append (a b : USizeArray) :
+@[simp, grind =] public theorem toList_append (a b : USizeArray) :
     (a ++ b).toList = a.toList ++ b.toList := by
   simp [← toList_toArray]
 
@@ -376,7 +376,7 @@ public theorem back_eq_getElem (a : USizeArray) (h : 0 < a.size) :
 @[simp] public theorem back?_empty : (empty : USizeArray).back? = none := by
   rw [← getLast?_toList, toList_empty, List.getLast?_nil]
 
-@[simp] public theorem back?_push (a : USizeArray) (v : USize) :
+@[simp, grind =] public theorem back?_push (a : USizeArray) (v : USize) :
     (a.push v).back? = some v := by
   rw [← getLast?_toList, toList_push, List.getLast?_concat]
 
@@ -423,7 +423,7 @@ public theorem back_eq_getElem (a : USizeArray) (h : 0 < a.size) :
 
 /-! ## Queries -/
 
-@[simp] public theorem any_toList (a : USizeArray) (p : USize → Bool) :
+@[simp, grind =] public theorem any_toList (a : USizeArray) (p : USize → Bool) :
     a.toList.any p = a.any p := by
   simp [any, ← toList_toArray]
 
@@ -435,7 +435,7 @@ public theorem back_eq_getElem (a : USizeArray) (h : 0 < a.size) :
     a.toList.contains v = a.contains v := by
   simp [contains, ← toList_toArray]
 
-@[simp] public theorem foldl_toList {β : Type v} (f : β → USize → β) (init : β)
+@[simp, grind =] public theorem foldl_toList {β : Type v} (f : β → USize → β) (init : β)
     (a : USizeArray) : a.toList.foldl f init = a.foldl f init := by
   simp [foldl_eq_foldl_toArray, ← toList_toArray]
 
@@ -473,7 +473,8 @@ public theorem findIdx?_eq (a : USizeArray) (p : USize → Bool) (start : Nat) :
 
 private theorem findFinIdx?_loop_eq (a : USizeArray) (p : USize → Bool) (i : Nat) :
     (findFinIdx?.loop a p i).map Fin.val = findIdx?.loop a p i := by
-  fun_induction findFinIdx?.loop a p i <;> rw [findIdx?.loop] <;> simp_all <;> lia
+  fun_induction findFinIdx?.loop a p i <;> rw [findIdx?.loop] <;> simp_all
+  lia
 
 @[simp] public theorem map_val_findFinIdx? (a : USizeArray) (p : USize → Bool) (start : Nat) :
     (a.findFinIdx? p start).map Fin.val = a.findIdx? p start := by
@@ -598,11 +599,11 @@ public theorem Slice.foldr_eq_foldr_toList_copy {β : Type v} (f : USize → β 
 
 /-! ## Writes -/
 
-@[simp] public theorem getElem_uset (a : USizeArray) (i : USize) (v : USize) (h) (j : Nat)
+@[simp, grind =] public theorem getElem_uset (a : USizeArray) (i : USize) (v : USize) (h) (j : Nat)
     (hj) : (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_set]
 
-@[simp] public theorem getElem_set! (a : USizeArray) (i : Nat) (v : USize) (j : Nat) (hj) :
+@[simp, grind =] public theorem getElem_set! (a : USizeArray) (i : Nat) (v : USize) (j : Nat) (hj) :
     (a.set! i v)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
   simp only [getElem_eq_getElem_toArray, toArray_set!, Array.set!_eq_setIfInBounds]
   rw [Array.getElem_setIfInBounds]
@@ -686,14 +687,14 @@ public theorem mem_iff_getElem {x : USize} {a : USizeArray} :
 public theorem getElem_mem {a : USizeArray} {i : Nat} (h : i < a.size) : a[i] ∈ a :=
   mem_iff_getElem.mpr ⟨i, h, rfl⟩
 
-@[simp] public theorem not_mem_empty (x : USize) : ¬x ∈ (empty : USizeArray) := by
+@[simp, grind ←] public theorem not_mem_empty (x : USize) : ¬x ∈ (empty : USizeArray) := by
   simp [← mem_toArray]
 
-@[simp] public theorem mem_push {x v : USize} {a : USizeArray} :
+@[simp, grind =] public theorem mem_push {x v : USize} {a : USizeArray} :
     x ∈ a.push v ↔ x ∈ a ∨ x = v := by
   simp [← mem_toArray]
 
-@[simp] public theorem mem_append {x : USize} {a b : USizeArray} :
+@[simp, grind =] public theorem mem_append {x : USize} {a b : USizeArray} :
     x ∈ a ++ b ↔ x ∈ a ∨ x ∈ b := by
   simp [← mem_toArray]
 
@@ -818,7 +819,9 @@ private theorem foldl_count_eq (p : USize → Bool) (l : List USize) (n : Nat) :
     l.foldl (fun n x => if p x then n + 1 else n) n = n + l.countP p := by
   induction l generalizing n with
   | nil => rfl
-  | cons x l ih => by_cases hx : p x <;> simp [ih, hx] <;> lia
+  | cons x l ih =>
+    by_cases hx : p x <;> simp [ih, hx]
+    lia
 
 @[simp] public theorem Slice.count_eq_countP_toList_copy (s : USizeArray.Slice)
     (p : USize → Bool) : s.count p = s.copy.toList.countP p := by
@@ -834,7 +837,8 @@ private theorem Slice.findSomeRevM?_loop_eq (p : USize → Bool) (s : USizeArray
   | succ i ih =>
     have hi : i < s.copy.toList.length := by simp; lia
     rw [Slice.findSomeRevM?.loop, List.take_add_one, List.getElem?_eq_getElem hi]
-    by_cases hp : p s[i] <;> simp [ih, hp] <;> rfl
+    by_cases hp : p s[i] <;> simp [ih, hp]
+    rfl
 
 @[simp] public theorem Slice.findRev?_eq_find?_reverse_toList_copy (s : USizeArray.Slice)
     (p : USize → Bool) : s.findRev? p = s.copy.toList.reverse.find? p := by
