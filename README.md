@@ -75,24 +75,26 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 
 | Group        | Declarations                                                                |
 |--------------|-----------------------------------------------------------------------------|
-| Construction | `mk : Array X → XArray`, `empty`, `emptyWithCapacity`, `{}`, `replicate`, `ofFn`, `ofList`, `List.toXArray` |
-| Conversion   | `toArray : XArray → Array X`, `toList`                                         |
+| Construction | `mk : Array X → XArray`, `empty`, `emptyWithCapacity`, `{}`, `replicate`, `ofFn`, `ofList`, `List.toXArray`, `Std.Iter.toXArray`, `Std.Iter.toXArrayWithCapacity` |
+| Conversion   | `toArray : XArray → Array X`, `toList`, `ofList`, `List.toXArray`; `UInt8Array.toByteArray`, `UInt8Array.ofByteArray`, `ByteArray.toUInt8Array`, `Float64Array.toFloatArray`, `Float64Array.ofFloatArray` and `FloatArray.toFloat64Array`, which never copy |
 | Size         | `size : XArray → Nat`, `usize : XArray → USize`, `isEmpty`                  |
 | Reading      | `get`, `uget`, `get!`, `getD`, `back`, `back?`, `back!`, and `a[i]`, `a[i]?`, `a[i]!` with `Nat` or `USize` indices |
-| Writing      | `set`, `uset`, `set!`, `push`, `pop`                                        |
+| Writing      | `set`, `uset`, `set!`, `push`, `pop`, `popWhile`, `copySlice`               |
 | Combining    | `append`, `a ++ b`, `copySlice`                                             |
-| Slicing      | `extract`, `copySlice`, `toSlice` and core's slice notation `a[i...j]`      |
-| Iteration    | `foldl`, `foldr`, `foldlM`, `foldrM`, `forM`, `for x in a`, `any`, `all`, `contains` |
-| Search       | `findIdx?`, `findFinIdx?`                                                   |
-| Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `get`, `getD`, `get!`, `popFront`, `copy`, `for x in s`, `foldl`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findSomeRevM?`, `toArray`, `toList` |
+| Slicing      | `extract`, `copySlice`, `toSlice` and core's slice notation `a[i...j]`, `Slice.copy` |
+| Iteration    | `foldl`, `foldr`, `foldlM`, `foldrM`, `forM`, `forIn`, `for x in a`, `any`, `all`, `contains`, `iter` |
+| Search       | `findIdx?`, `findFinIdx?`, `any`, `all`, `contains`; for slices also `find?`, `findRev?`, `findRevM?`, `findSomeRevM?`, `count` |
+| Membership   | `x ∈ a`, `x ∈ s`, `contains`; for integer types also `Decidable (x ∈ a)` and `Decidable (x ∈ s)` (`decMem`, `Slice.decMem`) |
+| Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `Slice.empty`, `{}`, `array`, `start`, `stop`, `size`, `get`, `getD`, `get!`, `s[i]`, `popFront`, `slice`, `copy`, `for x in s`, `foldl`, `foldlM`, `forM`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findRevM?`, `findSomeRevM?`, `iter`, `toArray`, `toList`, `s == t` |
 | Slice writes | `Slice.set`, `set!`, `modify`, `swap`, `reverse`, `foldlInPlace`, `foldrInPlace`, `foldlInPlaceThen`, `foldrInPlaceThen`, which write into the slice's array; `s.array` gives the whole array back |
-| In-place folds | `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
+| In-place folds | `Slice.foldlInPlace`, `Slice.foldrInPlace` and their `Then` forms; `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, and `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array |
-| Equality     | `a == b`; for integer types also `DecidableEq` and `Hashable`               |
+| Equality     | `a == b` and `s == t`; for integer types also `DecidableEq` (`decEq`), `Hashable` (`hash`), and for slices `Hashable` (`Slice.hash`), `EquivBEq` and `LawfulHashable` |
 | Linearity    | `markLinear`, `propagateMark`                                               |
 | Memory       | `ensureExclusive`, `ensureCapacity`, `ensureExclusiveWithCapacity`, which are logically the identity |
-| Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `Repr`, `ToString` |
-| Lemmas       | `ext`, `ext_getElem`, `ext_getElem?` and `toArray_inj`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!`; `grind` lemmas for size, elements and membership, where core marks the matching `Array` lemma |
+| Byte order   | In the experimental `ScalarArray.Bytes`, for the 16-, 32- and 64-bit integer and float arrays: `toBytesLE`, `toBytesBE`, `Slice.toBytesLE`, `Slice.toBytesBE`, `ofBytesLE?`, `ofBytesLE!`, `ofBytesBE?`, `ofBytesBE!`; for the integer ones also `byteSwap` |
+| Instances    | `Inhabited`, `EmptyCollection`, `GetElem`, `Append`, `ForIn`, `ForM`, `Membership`, `Coe XArray XArray.Slice`, `Repr`, `ToString`; `BEq`, `DecidableEq`, `Hashable`, `EquivBEq` and `LawfulHashable` as under Equality; core's `Sliceable` instances for the slice notation, and `Std.Iterator` for slices |
+| Lemmas       | `ext`, `ext_getElem`, `ext_getElem?` and `toArray_inj`; `casesMk`, the default for `cases` and `induction`; `toArray_*`, `size_*` and `getElem_*` simp lemmas for every operation that builds or changes an array; core's `ByteArray` lemmas about `++`, `extract`, `copySlice` and `set!`; `grind` lemmas for size, elements and membership, where core marks the matching `Array` lemma |
 
 As with `Array`:
 
