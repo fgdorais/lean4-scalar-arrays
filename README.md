@@ -235,7 +235,11 @@ diffs.
 
 ## Documentation
 
-You can generate the API documentation locally with `lake build ScalarArray:docs` in the `docs`
+The documentation of the latest release is at
+[www.dorais.org/lean4-scalar-arrays/doc](https://www.dorais.org/lean4-scalar-arrays/doc/). Each
+release, starting with 1.0.0, also has its documentation attached on GitHub.
+
+You can also generate the documentation locally with `lake build ScalarArray:docs` in the `docs`
 directory.
 
 -----
