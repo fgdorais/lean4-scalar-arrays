@@ -17,11 +17,6 @@ precompileModules = true
 name = "ScalarArrayTest"
 precompileModules = true
 
-[[require]]
-name = "batteries"
-git = "https://github.com/leanprover-community/batteries"
-rev = "main"
-
 [[lean_exe]]
 name = "bench"
 root = "ScalarArrayBench"

@@ -30,9 +30,9 @@ in-place updates, and have a simple `Array`-based model for proofs.
 
 ## Installation
 
-The library is a Batteries cell: the `main` branch follows the Lean toolchain of Batteries `main`,
-and the `nightly-testing` branch follows Batteries `nightly-testing` and the latest Lean nightly,
-so it can be used together with Batteries. Add it to your `lakefile.toml`:
+The library depends only on Lean itself. The `main` branch follows the newest Lean release,
+including release candidates, and the `nightly-testing` branch follows the newest Lean nightly.
+Add it to your `lakefile.toml`:
 
 ```toml
 [[require]]
