@@ -182,12 +182,13 @@ public def byteSwap (a : {A}) : {A} :=
             f'\n        |>.setUnsafe j (u >>> {shift(order, n, 0)}).toUInt8'
             for k in range(n))
         stores = stores.replace('(u >>> 0).toUInt8', 'u.toUInt8')
-        combine = ' |||\n        '.join(
-            (f'(b[{idx(n, k)}]\'(by lia)).to{u}' if shift(order, n, k) == 0 else
-             f'((b[{idx(n, k)}]\'(by lia)).to{u} <<< {shift(order, n, k)})')
-            for k in range(n))
-        slice_combine = of_u.format('(' + combine + ')') if wrap else combine
-        slice_combine = slice_combine.replace('(b[', '(s[')
+        def element(src):
+            """The element read from the bytes of `src` starting at `n * i`."""
+            combine = ' |||\n        '.join(
+                (f'({src}[{idx(n, k)}]\'(by lia)).to{u}' if shift(order, n, k) == 0 else
+                 f'(({src}[{idx(n, k)}]\'(by lia)).to{u} <<< {shift(order, n, k)})')
+                for k in range(n))
+            return of_u.format('(' + combine + ')') if wrap else combine
         out.append(f'''
 private unsafe def Slice.toBytes{order}Impl (s : {A}.Slice) : ByteArray :=
   if {host} then
@@ -236,7 +237,7 @@ Returns `none` if the size of `b` is not a multiple of {n}.
 public def ofBytes{order}? (b : ByteArray) : Option {A} :=
   if b.size % {n} = 0 then
     some <| ofFn (n := b.size / {n}) fun ⟨i, hi⟩ =>
-      {of_u.format('(' + combine + ')') if wrap else combine}
+      {element('b')}
   else
     none
 
@@ -268,7 +269,7 @@ Returns `none` if the size of `s` is not a multiple of {n}.
 public def Slice.ofBytes{order}? (s : UInt8Array.Slice) : Option {A} :=
   if s.size % {n} = 0 then
     some <| ofFn (n := s.size / {n}) fun ⟨i, hi⟩ =>
-      {slice_combine}
+      {element('s')}
   else
     none
 
