@@ -35,6 +35,15 @@ def UInt16BytesLE : ByteArray :=
 #guard UInt16Array.ofBytesLE? ByteArray.empty == some UInt16Array.empty
 #guard UInt16Array.ofBytesLE? (UInt16BytesLE.extract 0 3) == none
 #guard UInt16Array.ofBytesLE! UInt16BytesLE == UInt16Pair
+#guard UInt16Array.Slice.ofBytesLE? UInt16BytesLE.toUInt8Array == some UInt16Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ UInt16BytesLE.data ++ #[0xEE])
+  UInt16Array.Slice.ofBytesLE? b.toUInt8Array[1...5] == some UInt16Pair
+#guard UInt16Array.Slice.ofBytesLE? UInt16BytesLE.toUInt8Array[0...3] == none
+#guard UInt16Array.Slice.ofBytesLE? UInt16BytesLE.toUInt8Array[1...1] == some UInt16Array.empty
+#guard
+  UInt16Array.Slice.ofBytesLE! UInt16BytesLE.toUInt8Array[2...*] ==
+    UInt16Array.mk #[0xA0B0]
 #guard
   let a := UInt16Array.ofFn (n := 1000) fun i => (i.val * 2654435761).toUInt16
   UInt16Array.ofBytesLE! a.toBytesLE == a
@@ -50,6 +59,15 @@ def UInt16BytesBE : ByteArray :=
 #guard UInt16Array.ofBytesBE? ByteArray.empty == some UInt16Array.empty
 #guard UInt16Array.ofBytesBE? (UInt16BytesBE.extract 0 3) == none
 #guard UInt16Array.ofBytesBE! UInt16BytesBE == UInt16Pair
+#guard UInt16Array.Slice.ofBytesBE? UInt16BytesBE.toUInt8Array == some UInt16Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ UInt16BytesBE.data ++ #[0xEE])
+  UInt16Array.Slice.ofBytesBE? b.toUInt8Array[1...5] == some UInt16Pair
+#guard UInt16Array.Slice.ofBytesBE? UInt16BytesBE.toUInt8Array[0...3] == none
+#guard UInt16Array.Slice.ofBytesBE? UInt16BytesBE.toUInt8Array[1...1] == some UInt16Array.empty
+#guard
+  UInt16Array.Slice.ofBytesBE! UInt16BytesBE.toUInt8Array[2...*] ==
+    UInt16Array.mk #[0xA0B0]
 #guard
   let a := UInt16Array.ofFn (n := 1000) fun i => (i.val * 2654435761).toUInt16
   UInt16Array.ofBytesBE! a.toBytesBE == a
@@ -89,6 +107,15 @@ def UInt32BytesLE : ByteArray :=
 #guard UInt32Array.ofBytesLE? ByteArray.empty == some UInt32Array.empty
 #guard UInt32Array.ofBytesLE? (UInt32BytesLE.extract 0 7) == none
 #guard UInt32Array.ofBytesLE! UInt32BytesLE == UInt32Pair
+#guard UInt32Array.Slice.ofBytesLE? UInt32BytesLE.toUInt8Array == some UInt32Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ UInt32BytesLE.data ++ #[0xEE])
+  UInt32Array.Slice.ofBytesLE? b.toUInt8Array[1...9] == some UInt32Pair
+#guard UInt32Array.Slice.ofBytesLE? UInt32BytesLE.toUInt8Array[0...7] == none
+#guard UInt32Array.Slice.ofBytesLE? UInt32BytesLE.toUInt8Array[1...1] == some UInt32Array.empty
+#guard
+  UInt32Array.Slice.ofBytesLE! UInt32BytesLE.toUInt8Array[4...*] ==
+    UInt32Array.mk #[0xA0B0C0D0]
 #guard
   let a := UInt32Array.ofFn (n := 1000) fun i => (i.val * 2654435761).toUInt32
   UInt32Array.ofBytesLE! a.toBytesLE == a
@@ -104,6 +131,15 @@ def UInt32BytesBE : ByteArray :=
 #guard UInt32Array.ofBytesBE? ByteArray.empty == some UInt32Array.empty
 #guard UInt32Array.ofBytesBE? (UInt32BytesBE.extract 0 7) == none
 #guard UInt32Array.ofBytesBE! UInt32BytesBE == UInt32Pair
+#guard UInt32Array.Slice.ofBytesBE? UInt32BytesBE.toUInt8Array == some UInt32Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ UInt32BytesBE.data ++ #[0xEE])
+  UInt32Array.Slice.ofBytesBE? b.toUInt8Array[1...9] == some UInt32Pair
+#guard UInt32Array.Slice.ofBytesBE? UInt32BytesBE.toUInt8Array[0...7] == none
+#guard UInt32Array.Slice.ofBytesBE? UInt32BytesBE.toUInt8Array[1...1] == some UInt32Array.empty
+#guard
+  UInt32Array.Slice.ofBytesBE! UInt32BytesBE.toUInt8Array[4...*] ==
+    UInt32Array.mk #[0xA0B0C0D0]
 #guard
   let a := UInt32Array.ofFn (n := 1000) fun i => (i.val * 2654435761).toUInt32
   UInt32Array.ofBytesBE! a.toBytesBE == a
@@ -144,6 +180,15 @@ def UInt64BytesLE : ByteArray :=
 #guard UInt64Array.ofBytesLE? ByteArray.empty == some UInt64Array.empty
 #guard UInt64Array.ofBytesLE? (UInt64BytesLE.extract 0 15) == none
 #guard UInt64Array.ofBytesLE! UInt64BytesLE == UInt64Pair
+#guard UInt64Array.Slice.ofBytesLE? UInt64BytesLE.toUInt8Array == some UInt64Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ UInt64BytesLE.data ++ #[0xEE])
+  UInt64Array.Slice.ofBytesLE? b.toUInt8Array[1...17] == some UInt64Pair
+#guard UInt64Array.Slice.ofBytesLE? UInt64BytesLE.toUInt8Array[0...15] == none
+#guard UInt64Array.Slice.ofBytesLE? UInt64BytesLE.toUInt8Array[1...1] == some UInt64Array.empty
+#guard
+  UInt64Array.Slice.ofBytesLE! UInt64BytesLE.toUInt8Array[8...*] ==
+    UInt64Array.mk #[0xA0B0C0D0E0F01020]
 #guard
   let a := UInt64Array.ofFn (n := 1000) fun i => (i.val * 2654435761).toUInt64
   UInt64Array.ofBytesLE! a.toBytesLE == a
@@ -160,6 +205,15 @@ def UInt64BytesBE : ByteArray :=
 #guard UInt64Array.ofBytesBE? ByteArray.empty == some UInt64Array.empty
 #guard UInt64Array.ofBytesBE? (UInt64BytesBE.extract 0 15) == none
 #guard UInt64Array.ofBytesBE! UInt64BytesBE == UInt64Pair
+#guard UInt64Array.Slice.ofBytesBE? UInt64BytesBE.toUInt8Array == some UInt64Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ UInt64BytesBE.data ++ #[0xEE])
+  UInt64Array.Slice.ofBytesBE? b.toUInt8Array[1...17] == some UInt64Pair
+#guard UInt64Array.Slice.ofBytesBE? UInt64BytesBE.toUInt8Array[0...15] == none
+#guard UInt64Array.Slice.ofBytesBE? UInt64BytesBE.toUInt8Array[1...1] == some UInt64Array.empty
+#guard
+  UInt64Array.Slice.ofBytesBE! UInt64BytesBE.toUInt8Array[8...*] ==
+    UInt64Array.mk #[0xA0B0C0D0E0F01020]
 #guard
   let a := UInt64Array.ofFn (n := 1000) fun i => (i.val * 2654435761).toUInt64
   UInt64Array.ofBytesBE! a.toBytesBE == a
@@ -199,6 +253,15 @@ def Int16BytesLE : ByteArray :=
 #guard Int16Array.ofBytesLE? ByteArray.empty == some Int16Array.empty
 #guard Int16Array.ofBytesLE? (Int16BytesLE.extract 0 3) == none
 #guard Int16Array.ofBytesLE! Int16BytesLE == Int16Pair
+#guard Int16Array.Slice.ofBytesLE? Int16BytesLE.toUInt8Array == some Int16Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ Int16BytesLE.data ++ #[0xEE])
+  Int16Array.Slice.ofBytesLE? b.toUInt8Array[1...5] == some Int16Pair
+#guard Int16Array.Slice.ofBytesLE? Int16BytesLE.toUInt8Array[0...3] == none
+#guard Int16Array.Slice.ofBytesLE? Int16BytesLE.toUInt8Array[1...1] == some Int16Array.empty
+#guard
+  Int16Array.Slice.ofBytesLE! Int16BytesLE.toUInt8Array[2...*] ==
+    Int16Array.mk #[-2]
 #guard
   let a := Int16Array.ofFn (n := 1000) fun i => ((i.val * 2654435761).toUInt16).toInt16
   Int16Array.ofBytesLE! a.toBytesLE == a
@@ -214,6 +277,15 @@ def Int16BytesBE : ByteArray :=
 #guard Int16Array.ofBytesBE? ByteArray.empty == some Int16Array.empty
 #guard Int16Array.ofBytesBE? (Int16BytesBE.extract 0 3) == none
 #guard Int16Array.ofBytesBE! Int16BytesBE == Int16Pair
+#guard Int16Array.Slice.ofBytesBE? Int16BytesBE.toUInt8Array == some Int16Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ Int16BytesBE.data ++ #[0xEE])
+  Int16Array.Slice.ofBytesBE? b.toUInt8Array[1...5] == some Int16Pair
+#guard Int16Array.Slice.ofBytesBE? Int16BytesBE.toUInt8Array[0...3] == none
+#guard Int16Array.Slice.ofBytesBE? Int16BytesBE.toUInt8Array[1...1] == some Int16Array.empty
+#guard
+  Int16Array.Slice.ofBytesBE! Int16BytesBE.toUInt8Array[2...*] ==
+    Int16Array.mk #[-2]
 #guard
   let a := Int16Array.ofFn (n := 1000) fun i => ((i.val * 2654435761).toUInt16).toInt16
   Int16Array.ofBytesBE! a.toBytesBE == a
@@ -253,6 +325,15 @@ def Int32BytesLE : ByteArray :=
 #guard Int32Array.ofBytesLE? ByteArray.empty == some Int32Array.empty
 #guard Int32Array.ofBytesLE? (Int32BytesLE.extract 0 7) == none
 #guard Int32Array.ofBytesLE! Int32BytesLE == Int32Pair
+#guard Int32Array.Slice.ofBytesLE? Int32BytesLE.toUInt8Array == some Int32Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ Int32BytesLE.data ++ #[0xEE])
+  Int32Array.Slice.ofBytesLE? b.toUInt8Array[1...9] == some Int32Pair
+#guard Int32Array.Slice.ofBytesLE? Int32BytesLE.toUInt8Array[0...7] == none
+#guard Int32Array.Slice.ofBytesLE? Int32BytesLE.toUInt8Array[1...1] == some Int32Array.empty
+#guard
+  Int32Array.Slice.ofBytesLE! Int32BytesLE.toUInt8Array[4...*] ==
+    Int32Array.mk #[-2]
 #guard
   let a := Int32Array.ofFn (n := 1000) fun i => ((i.val * 2654435761).toUInt32).toInt32
   Int32Array.ofBytesLE! a.toBytesLE == a
@@ -268,6 +349,15 @@ def Int32BytesBE : ByteArray :=
 #guard Int32Array.ofBytesBE? ByteArray.empty == some Int32Array.empty
 #guard Int32Array.ofBytesBE? (Int32BytesBE.extract 0 7) == none
 #guard Int32Array.ofBytesBE! Int32BytesBE == Int32Pair
+#guard Int32Array.Slice.ofBytesBE? Int32BytesBE.toUInt8Array == some Int32Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ Int32BytesBE.data ++ #[0xEE])
+  Int32Array.Slice.ofBytesBE? b.toUInt8Array[1...9] == some Int32Pair
+#guard Int32Array.Slice.ofBytesBE? Int32BytesBE.toUInt8Array[0...7] == none
+#guard Int32Array.Slice.ofBytesBE? Int32BytesBE.toUInt8Array[1...1] == some Int32Array.empty
+#guard
+  Int32Array.Slice.ofBytesBE! Int32BytesBE.toUInt8Array[4...*] ==
+    Int32Array.mk #[-2]
 #guard
   let a := Int32Array.ofFn (n := 1000) fun i => ((i.val * 2654435761).toUInt32).toInt32
   Int32Array.ofBytesBE! a.toBytesBE == a
@@ -308,6 +398,15 @@ def Int64BytesLE : ByteArray :=
 #guard Int64Array.ofBytesLE? ByteArray.empty == some Int64Array.empty
 #guard Int64Array.ofBytesLE? (Int64BytesLE.extract 0 15) == none
 #guard Int64Array.ofBytesLE! Int64BytesLE == Int64Pair
+#guard Int64Array.Slice.ofBytesLE? Int64BytesLE.toUInt8Array == some Int64Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ Int64BytesLE.data ++ #[0xEE])
+  Int64Array.Slice.ofBytesLE? b.toUInt8Array[1...17] == some Int64Pair
+#guard Int64Array.Slice.ofBytesLE? Int64BytesLE.toUInt8Array[0...15] == none
+#guard Int64Array.Slice.ofBytesLE? Int64BytesLE.toUInt8Array[1...1] == some Int64Array.empty
+#guard
+  Int64Array.Slice.ofBytesLE! Int64BytesLE.toUInt8Array[8...*] ==
+    Int64Array.mk #[-2]
 #guard
   let a := Int64Array.ofFn (n := 1000) fun i => ((i.val * 2654435761).toUInt64).toInt64
   Int64Array.ofBytesLE! a.toBytesLE == a
@@ -324,6 +423,15 @@ def Int64BytesBE : ByteArray :=
 #guard Int64Array.ofBytesBE? ByteArray.empty == some Int64Array.empty
 #guard Int64Array.ofBytesBE? (Int64BytesBE.extract 0 15) == none
 #guard Int64Array.ofBytesBE! Int64BytesBE == Int64Pair
+#guard Int64Array.Slice.ofBytesBE? Int64BytesBE.toUInt8Array == some Int64Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ Int64BytesBE.data ++ #[0xEE])
+  Int64Array.Slice.ofBytesBE? b.toUInt8Array[1...17] == some Int64Pair
+#guard Int64Array.Slice.ofBytesBE? Int64BytesBE.toUInt8Array[0...15] == none
+#guard Int64Array.Slice.ofBytesBE? Int64BytesBE.toUInt8Array[1...1] == some Int64Array.empty
+#guard
+  Int64Array.Slice.ofBytesBE! Int64BytesBE.toUInt8Array[8...*] ==
+    Int64Array.mk #[-2]
 #guard
   let a := Int64Array.ofFn (n := 1000) fun i => ((i.val * 2654435761).toUInt64).toInt64
   Int64Array.ofBytesBE! a.toBytesBE == a
@@ -363,6 +471,15 @@ def Float32BytesLE : ByteArray :=
 #guard Float32Array.ofBytesLE? ByteArray.empty == some Float32Array.empty
 #guard Float32Array.ofBytesLE? (Float32BytesLE.extract 0 7) == none
 #guard Float32Array.ofBytesLE! Float32BytesLE == Float32Pair
+#guard Float32Array.Slice.ofBytesLE? Float32BytesLE.toUInt8Array == some Float32Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ Float32BytesLE.data ++ #[0xEE])
+  Float32Array.Slice.ofBytesLE? b.toUInt8Array[1...9] == some Float32Pair
+#guard Float32Array.Slice.ofBytesLE? Float32BytesLE.toUInt8Array[0...7] == none
+#guard Float32Array.Slice.ofBytesLE? Float32BytesLE.toUInt8Array[1...1] == some Float32Array.empty
+#guard
+  Float32Array.Slice.ofBytesLE! Float32BytesLE.toUInt8Array[4...*] ==
+    Float32Array.mk #[-2.0]
 #guard
   let a := Float32Array.ofFn (n := 1000) fun i => Float32.ofNat i.val / 7
   Float32Array.ofBytesLE! a.toBytesLE == a
@@ -378,6 +495,15 @@ def Float32BytesBE : ByteArray :=
 #guard Float32Array.ofBytesBE? ByteArray.empty == some Float32Array.empty
 #guard Float32Array.ofBytesBE? (Float32BytesBE.extract 0 7) == none
 #guard Float32Array.ofBytesBE! Float32BytesBE == Float32Pair
+#guard Float32Array.Slice.ofBytesBE? Float32BytesBE.toUInt8Array == some Float32Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ Float32BytesBE.data ++ #[0xEE])
+  Float32Array.Slice.ofBytesBE? b.toUInt8Array[1...9] == some Float32Pair
+#guard Float32Array.Slice.ofBytesBE? Float32BytesBE.toUInt8Array[0...7] == none
+#guard Float32Array.Slice.ofBytesBE? Float32BytesBE.toUInt8Array[1...1] == some Float32Array.empty
+#guard
+  Float32Array.Slice.ofBytesBE! Float32BytesBE.toUInt8Array[4...*] ==
+    Float32Array.mk #[-2.0]
 #guard
   let a := Float32Array.ofFn (n := 1000) fun i => Float32.ofNat i.val / 7
   Float32Array.ofBytesBE! a.toBytesBE == a
@@ -412,6 +538,15 @@ def Float64BytesLE : ByteArray :=
 #guard Float64Array.ofBytesLE? ByteArray.empty == some Float64Array.empty
 #guard Float64Array.ofBytesLE? (Float64BytesLE.extract 0 15) == none
 #guard Float64Array.ofBytesLE! Float64BytesLE == Float64Pair
+#guard Float64Array.Slice.ofBytesLE? Float64BytesLE.toUInt8Array == some Float64Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ Float64BytesLE.data ++ #[0xEE])
+  Float64Array.Slice.ofBytesLE? b.toUInt8Array[1...17] == some Float64Pair
+#guard Float64Array.Slice.ofBytesLE? Float64BytesLE.toUInt8Array[0...15] == none
+#guard Float64Array.Slice.ofBytesLE? Float64BytesLE.toUInt8Array[1...1] == some Float64Array.empty
+#guard
+  Float64Array.Slice.ofBytesLE! Float64BytesLE.toUInt8Array[8...*] ==
+    Float64Array.mk #[-2.0]
 #guard
   let a := Float64Array.ofFn (n := 1000) fun i => Float.ofNat i.val / 7
   Float64Array.ofBytesLE! a.toBytesLE == a
@@ -428,6 +563,15 @@ def Float64BytesBE : ByteArray :=
 #guard Float64Array.ofBytesBE? ByteArray.empty == some Float64Array.empty
 #guard Float64Array.ofBytesBE? (Float64BytesBE.extract 0 15) == none
 #guard Float64Array.ofBytesBE! Float64BytesBE == Float64Pair
+#guard Float64Array.Slice.ofBytesBE? Float64BytesBE.toUInt8Array == some Float64Pair
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ Float64BytesBE.data ++ #[0xEE])
+  Float64Array.Slice.ofBytesBE? b.toUInt8Array[1...17] == some Float64Pair
+#guard Float64Array.Slice.ofBytesBE? Float64BytesBE.toUInt8Array[0...15] == none
+#guard Float64Array.Slice.ofBytesBE? Float64BytesBE.toUInt8Array[1...1] == some Float64Array.empty
+#guard
+  Float64Array.Slice.ofBytesBE! Float64BytesBE.toUInt8Array[8...*] ==
+    Float64Array.mk #[-2.0]
 #guard
   let a := Float64Array.ofFn (n := 1000) fun i => Float.ofNat i.val / 7
   Float64Array.ofBytesBE! a.toBytesBE == a
