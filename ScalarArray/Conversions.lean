@@ -41,6 +41,10 @@ public def ofByteArray (b : ByteArray) : UInt8Array := mk b.data
 @[simp] public theorem size_ofByteArray (b : ByteArray) : (ofByteArray b).size = b.size := by
   simp [← ByteArray.size_data, -size_toArray, size_eq_toArray_size]
 
+@[simp] public theorem getElem_ofByteArray (b : ByteArray) (i : Nat)
+    (h : i < (ofByteArray b).size) : (ofByteArray b)[i] = b[i]'(by simpa using h) := by
+  simp [ofByteArray, ByteArray.getElem_eq_getElem_data]; rfl
+
 @[simp] public theorem ofByteArray_toByteArray (a : UInt8Array) :
     ofByteArray a.toByteArray = a := by
   simp [UInt8Array.ext_iff]
@@ -86,6 +90,13 @@ end ScalarArray
 @[inline, expose]
 public def ByteArray.toUInt8Array (b : ByteArray) : ScalarArray.UInt8Array :=
   ScalarArray.UInt8Array.ofByteArray b
+
+@[simp] public theorem ByteArray.size_toUInt8Array (b : ByteArray) : b.toUInt8Array.size = b.size :=
+  ScalarArray.UInt8Array.size_ofByteArray b
+
+@[simp] public theorem ByteArray.getElem_toUInt8Array (b : ByteArray) (i : Nat)
+    (h : i < b.toUInt8Array.size) : b.toUInt8Array[i] = b[i]'(by simpa using h) :=
+  ScalarArray.UInt8Array.getElem_ofByteArray b i h
 
 /-- The same array as a `Float64Array`, without copying. -/
 @[inline, expose]

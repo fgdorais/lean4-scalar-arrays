@@ -38,6 +38,8 @@ import Std.Tactic.BVDecide
 Conversions between the arrays with elements wider than a byte and `ByteArray`, in little-endian
 (`LE`, least significant byte first) or big-endian (`BE`, most significant byte first) order, and
 in-place byte swaps of the integer arrays. Floats are converted through their IEEE 754 bits.
+`Slice.ofBytes…` reads the bytes of a `UInt8Array.Slice` instead, such as the part of a
+`ByteArray` after a header, without copying the rest.
 
 The results do not depend on the byte order of the machine. That byte order is computed once, when
 the module is initialized: when a conversion asks for the machine's own order, it copies the whole
@@ -180,10 +182,13 @@ public def byteSwap (a : {A}) : {A} :=
             f'\n        |>.setUnsafe j (u >>> {shift(order, n, 0)}).toUInt8'
             for k in range(n))
         stores = stores.replace('(u >>> 0).toUInt8', 'u.toUInt8')
-        combine = ' |||\n        '.join(
-            (f'(b[{idx(n, k)}]\'(by lia)).to{u}' if shift(order, n, k) == 0 else
-             f'((b[{idx(n, k)}]\'(by lia)).to{u} <<< {shift(order, n, k)})')
-            for k in range(n))
+        def element(src):
+            """The element read from the bytes of `src` starting at `n * i`."""
+            combine = ' |||\n        '.join(
+                (f'({src}[{idx(n, k)}]\'(by lia)).to{u}' if shift(order, n, k) == 0 else
+                 f'(({src}[{idx(n, k)}]\'(by lia)).to{u} <<< {shift(order, n, k)})')
+                for k in range(n))
+            return of_u.format('(' + combine + ')') if wrap else combine
         out.append(f'''
 private unsafe def Slice.toBytes{order}Impl (s : {A}.Slice) : ByteArray :=
   if {host} then
@@ -232,7 +237,7 @@ Returns `none` if the size of `b` is not a multiple of {n}.
 public def ofBytes{order}? (b : ByteArray) : Option {A} :=
   if b.size % {n} = 0 then
     some <| ofFn (n := b.size / {n}) fun ⟨i, hi⟩ =>
-      {of_u.format('(' + combine + ')') if wrap else combine}
+      {element('b')}
   else
     none
 
@@ -244,6 +249,50 @@ public def ofBytes{order}! (b : ByteArray) : {A} :=
   match ofBytes{order}? b with
   | some a => a
   | none => panic! "byte array size is not a multiple of {n}"
+
+private unsafe def Slice.ofBytes{order}?Impl (s : UInt8Array.Slice) : Option {A} :=
+  if s.size % {n} = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes {n} (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if {host} then
+      some (unsafeCast r)
+    else
+      some (unsafeCast ({u}Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in {doc}.
+Returns `none` if the size of `s` is not a multiple of {n}.
+-/
+@[implemented_by Slice.ofBytes{order}?Impl, expose]
+public def Slice.ofBytes{order}? (s : UInt8Array.Slice) : Option {A} :=
+  if s.size % {n} = 0 then
+    some <| ofFn (n := s.size / {n}) fun ⟨i, hi⟩ =>
+      {element('s')}
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in {doc}.
+Panics if the size of `s` is not a multiple of {n}.
+-/
+public def Slice.ofBytes{order}! (s : UInt8Array.Slice) : {A} :=
+  match Slice.ofBytes{order}? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of {n}"
+
+@[simp] public theorem Slice.ofBytes{order}?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytes{order}? b.toUInt8Array = {A}.ofBytes{order}? b := by
+  unfold Slice.ofBytes{order}? {A}.ofBytes{order}?
+  by_cases h : b.size % {n} = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
 
 @[simp] public theorem Slice.size_toBytes{order} (s : {A}.Slice) :
     s.toBytes{order}.size = {n} * s.size := by
@@ -356,6 +405,15 @@ def {bytes_} : ByteArray :=
 #guard {A}.ofBytes{order}? ByteArray.empty == some {A}.empty
 #guard {A}.ofBytes{order}? ({bytes_}.extract 0 {2 * n - 1}) == none
 #guard {A}.ofBytes{order}! {bytes_} == {P}
+#guard {A}.Slice.ofBytes{order}? {bytes_}.toUInt8Array == some {P}
+#guard
+  let b := ByteArray.mk (#[0xEE] ++ {bytes_}.data ++ #[0xEE])
+  {A}.Slice.ofBytes{order}? b.toUInt8Array[1...{2 * n + 1}] == some {P}
+#guard {A}.Slice.ofBytes{order}? {bytes_}.toUInt8Array[0...{2 * n - 1}] == none
+#guard {A}.Slice.ofBytes{order}? {bytes_}.toUInt8Array[1...1] == some {A}.empty
+#guard
+  {A}.Slice.ofBytes{order}! {bytes_}.toUInt8Array[{n}...*] ==
+    {A}.mk #[{y}]
 #guard
   let a := {A}.ofFn (n := 1000) fun i => {gen}
   {A}.ofBytes{order}! a.toBytes{order} == a

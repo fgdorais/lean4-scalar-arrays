@@ -21,6 +21,8 @@ import Std.Tactic.BVDecide
 Conversions between the arrays with elements wider than a byte and `ByteArray`, in little-endian
 (`LE`, least significant byte first) or big-endian (`BE`, most significant byte first) order, and
 in-place byte swaps of the integer arrays. Floats are converted through their IEEE 754 bits.
+`Slice.ofBytes…` reads the bytes of a `UInt8Array.Slice` instead, such as the part of a
+`ByteArray` after a header, without copying the rest.
 
 The results do not depend on the byte order of the machine. That byte order is computed once, when
 the module is initialized: when a conversion asks for the machine's own order, it copies the whole
@@ -182,6 +184,51 @@ public def ofBytesLE! (b : ByteArray) : UInt16Array :=
   | some a => a
   | none => panic! "byte array size is not a multiple of 2"
 
+private unsafe def Slice.ofBytesLE?Impl (s : UInt8Array.Slice) : Option UInt16Array :=
+  if s.size % 2 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 2 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt16Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Returns `none` if the size of `s` is not a multiple of 2.
+-/
+@[implemented_by Slice.ofBytesLE?Impl, expose]
+public def Slice.ofBytesLE? (s : UInt8Array.Slice) : Option UInt16Array :=
+  if s.size % 2 = 0 then
+    some <| ofFn (n := s.size / 2) fun ⟨i, hi⟩ =>
+      (s[2 * i]'(by lia)).toUInt16 |||
+        ((s[2 * i + 1]'(by lia)).toUInt16 <<< 8)
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Panics if the size of `s` is not a multiple of 2.
+-/
+public def Slice.ofBytesLE! (s : UInt8Array.Slice) : UInt16Array :=
+  match Slice.ofBytesLE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 2"
+
+@[simp] public theorem Slice.ofBytesLE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesLE? b.toUInt8Array = UInt16Array.ofBytesLE? b := by
+  unfold Slice.ofBytesLE? UInt16Array.ofBytesLE?
+  by_cases h : b.size % 2 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
+
 @[simp] public theorem Slice.size_toBytesLE (s : UInt16Array.Slice) :
     s.toBytesLE.size = 2 * s.size := by
   simp [Slice.toBytesLE, ← ByteArray.size_data]
@@ -277,6 +324,51 @@ public def ofBytesBE! (b : ByteArray) : UInt16Array :=
   match ofBytesBE? b with
   | some a => a
   | none => panic! "byte array size is not a multiple of 2"
+
+private unsafe def Slice.ofBytesBE?Impl (s : UInt8Array.Slice) : Option UInt16Array :=
+  if s.size % 2 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 2 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt16Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Returns `none` if the size of `s` is not a multiple of 2.
+-/
+@[implemented_by Slice.ofBytesBE?Impl, expose]
+public def Slice.ofBytesBE? (s : UInt8Array.Slice) : Option UInt16Array :=
+  if s.size % 2 = 0 then
+    some <| ofFn (n := s.size / 2) fun ⟨i, hi⟩ =>
+      ((s[2 * i]'(by lia)).toUInt16 <<< 8) |||
+        (s[2 * i + 1]'(by lia)).toUInt16
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Panics if the size of `s` is not a multiple of 2.
+-/
+public def Slice.ofBytesBE! (s : UInt8Array.Slice) : UInt16Array :=
+  match Slice.ofBytesBE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 2"
+
+@[simp] public theorem Slice.ofBytesBE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesBE? b.toUInt8Array = UInt16Array.ofBytesBE? b := by
+  unfold Slice.ofBytesBE? UInt16Array.ofBytesBE?
+  by_cases h : b.size % 2 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
 
 @[simp] public theorem Slice.size_toBytesBE (s : UInt16Array.Slice) :
     s.toBytesBE.size = 2 * s.size := by
@@ -405,6 +497,53 @@ public def ofBytesLE! (b : ByteArray) : UInt32Array :=
   | some a => a
   | none => panic! "byte array size is not a multiple of 4"
 
+private unsafe def Slice.ofBytesLE?Impl (s : UInt8Array.Slice) : Option UInt32Array :=
+  if s.size % 4 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 4 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt32Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Returns `none` if the size of `s` is not a multiple of 4.
+-/
+@[implemented_by Slice.ofBytesLE?Impl, expose]
+public def Slice.ofBytesLE? (s : UInt8Array.Slice) : Option UInt32Array :=
+  if s.size % 4 = 0 then
+    some <| ofFn (n := s.size / 4) fun ⟨i, hi⟩ =>
+      (s[4 * i]'(by lia)).toUInt32 |||
+        ((s[4 * i + 1]'(by lia)).toUInt32 <<< 8) |||
+        ((s[4 * i + 2]'(by lia)).toUInt32 <<< 16) |||
+        ((s[4 * i + 3]'(by lia)).toUInt32 <<< 24)
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Panics if the size of `s` is not a multiple of 4.
+-/
+public def Slice.ofBytesLE! (s : UInt8Array.Slice) : UInt32Array :=
+  match Slice.ofBytesLE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 4"
+
+@[simp] public theorem Slice.ofBytesLE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesLE? b.toUInt8Array = UInt32Array.ofBytesLE? b := by
+  unfold Slice.ofBytesLE? UInt32Array.ofBytesLE?
+  by_cases h : b.size % 4 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
+
 @[simp] public theorem Slice.size_toBytesLE (s : UInt32Array.Slice) :
     s.toBytesLE.size = 4 * s.size := by
   simp [Slice.toBytesLE, ← ByteArray.size_data]
@@ -506,6 +645,53 @@ public def ofBytesBE! (b : ByteArray) : UInt32Array :=
   match ofBytesBE? b with
   | some a => a
   | none => panic! "byte array size is not a multiple of 4"
+
+private unsafe def Slice.ofBytesBE?Impl (s : UInt8Array.Slice) : Option UInt32Array :=
+  if s.size % 4 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 4 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt32Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Returns `none` if the size of `s` is not a multiple of 4.
+-/
+@[implemented_by Slice.ofBytesBE?Impl, expose]
+public def Slice.ofBytesBE? (s : UInt8Array.Slice) : Option UInt32Array :=
+  if s.size % 4 = 0 then
+    some <| ofFn (n := s.size / 4) fun ⟨i, hi⟩ =>
+      ((s[4 * i]'(by lia)).toUInt32 <<< 24) |||
+        ((s[4 * i + 1]'(by lia)).toUInt32 <<< 16) |||
+        ((s[4 * i + 2]'(by lia)).toUInt32 <<< 8) |||
+        (s[4 * i + 3]'(by lia)).toUInt32
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Panics if the size of `s` is not a multiple of 4.
+-/
+public def Slice.ofBytesBE! (s : UInt8Array.Slice) : UInt32Array :=
+  match Slice.ofBytesBE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 4"
+
+@[simp] public theorem Slice.ofBytesBE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesBE? b.toUInt8Array = UInt32Array.ofBytesBE? b := by
+  unfold Slice.ofBytesBE? UInt32Array.ofBytesBE?
+  by_cases h : b.size % 4 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
 
 @[simp] public theorem Slice.size_toBytesBE (s : UInt32Array.Slice) :
     s.toBytesBE.size = 4 * s.size := by
@@ -644,6 +830,57 @@ public def ofBytesLE! (b : ByteArray) : UInt64Array :=
   | some a => a
   | none => panic! "byte array size is not a multiple of 8"
 
+private unsafe def Slice.ofBytesLE?Impl (s : UInt8Array.Slice) : Option UInt64Array :=
+  if s.size % 8 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 8 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt64Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Returns `none` if the size of `s` is not a multiple of 8.
+-/
+@[implemented_by Slice.ofBytesLE?Impl, expose]
+public def Slice.ofBytesLE? (s : UInt8Array.Slice) : Option UInt64Array :=
+  if s.size % 8 = 0 then
+    some <| ofFn (n := s.size / 8) fun ⟨i, hi⟩ =>
+      (s[8 * i]'(by lia)).toUInt64 |||
+        ((s[8 * i + 1]'(by lia)).toUInt64 <<< 8) |||
+        ((s[8 * i + 2]'(by lia)).toUInt64 <<< 16) |||
+        ((s[8 * i + 3]'(by lia)).toUInt64 <<< 24) |||
+        ((s[8 * i + 4]'(by lia)).toUInt64 <<< 32) |||
+        ((s[8 * i + 5]'(by lia)).toUInt64 <<< 40) |||
+        ((s[8 * i + 6]'(by lia)).toUInt64 <<< 48) |||
+        ((s[8 * i + 7]'(by lia)).toUInt64 <<< 56)
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Panics if the size of `s` is not a multiple of 8.
+-/
+public def Slice.ofBytesLE! (s : UInt8Array.Slice) : UInt64Array :=
+  match Slice.ofBytesLE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 8"
+
+@[simp] public theorem Slice.ofBytesLE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesLE? b.toUInt8Array = UInt64Array.ofBytesLE? b := by
+  unfold Slice.ofBytesLE? UInt64Array.ofBytesLE?
+  by_cases h : b.size % 8 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
+
 @[simp] public theorem Slice.size_toBytesLE (s : UInt64Array.Slice) :
     s.toBytesLE.size = 8 * s.size := by
   simp [Slice.toBytesLE, ← ByteArray.size_data]
@@ -757,6 +994,57 @@ public def ofBytesBE! (b : ByteArray) : UInt64Array :=
   match ofBytesBE? b with
   | some a => a
   | none => panic! "byte array size is not a multiple of 8"
+
+private unsafe def Slice.ofBytesBE?Impl (s : UInt8Array.Slice) : Option UInt64Array :=
+  if s.size % 8 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 8 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt64Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Returns `none` if the size of `s` is not a multiple of 8.
+-/
+@[implemented_by Slice.ofBytesBE?Impl, expose]
+public def Slice.ofBytesBE? (s : UInt8Array.Slice) : Option UInt64Array :=
+  if s.size % 8 = 0 then
+    some <| ofFn (n := s.size / 8) fun ⟨i, hi⟩ =>
+      ((s[8 * i]'(by lia)).toUInt64 <<< 56) |||
+        ((s[8 * i + 1]'(by lia)).toUInt64 <<< 48) |||
+        ((s[8 * i + 2]'(by lia)).toUInt64 <<< 40) |||
+        ((s[8 * i + 3]'(by lia)).toUInt64 <<< 32) |||
+        ((s[8 * i + 4]'(by lia)).toUInt64 <<< 24) |||
+        ((s[8 * i + 5]'(by lia)).toUInt64 <<< 16) |||
+        ((s[8 * i + 6]'(by lia)).toUInt64 <<< 8) |||
+        (s[8 * i + 7]'(by lia)).toUInt64
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Panics if the size of `s` is not a multiple of 8.
+-/
+public def Slice.ofBytesBE! (s : UInt8Array.Slice) : UInt64Array :=
+  match Slice.ofBytesBE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 8"
+
+@[simp] public theorem Slice.ofBytesBE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesBE? b.toUInt8Array = UInt64Array.ofBytesBE? b := by
+  unfold Slice.ofBytesBE? UInt64Array.ofBytesBE?
+  by_cases h : b.size % 8 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
 
 @[simp] public theorem Slice.size_toBytesBE (s : UInt64Array.Slice) :
     s.toBytesBE.size = 8 * s.size := by
@@ -887,6 +1175,51 @@ public def ofBytesLE! (b : ByteArray) : Int16Array :=
   | some a => a
   | none => panic! "byte array size is not a multiple of 2"
 
+private unsafe def Slice.ofBytesLE?Impl (s : UInt8Array.Slice) : Option Int16Array :=
+  if s.size % 2 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 2 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt16Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Returns `none` if the size of `s` is not a multiple of 2.
+-/
+@[implemented_by Slice.ofBytesLE?Impl, expose]
+public def Slice.ofBytesLE? (s : UInt8Array.Slice) : Option Int16Array :=
+  if s.size % 2 = 0 then
+    some <| ofFn (n := s.size / 2) fun ⟨i, hi⟩ =>
+      ((s[2 * i]'(by lia)).toUInt16 |||
+        ((s[2 * i + 1]'(by lia)).toUInt16 <<< 8)).toInt16
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Panics if the size of `s` is not a multiple of 2.
+-/
+public def Slice.ofBytesLE! (s : UInt8Array.Slice) : Int16Array :=
+  match Slice.ofBytesLE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 2"
+
+@[simp] public theorem Slice.ofBytesLE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesLE? b.toUInt8Array = Int16Array.ofBytesLE? b := by
+  unfold Slice.ofBytesLE? Int16Array.ofBytesLE?
+  by_cases h : b.size % 2 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
+
 @[simp] public theorem Slice.size_toBytesLE (s : Int16Array.Slice) :
     s.toBytesLE.size = 2 * s.size := by
   simp [Slice.toBytesLE, ← ByteArray.size_data]
@@ -984,6 +1317,51 @@ public def ofBytesBE! (b : ByteArray) : Int16Array :=
   match ofBytesBE? b with
   | some a => a
   | none => panic! "byte array size is not a multiple of 2"
+
+private unsafe def Slice.ofBytesBE?Impl (s : UInt8Array.Slice) : Option Int16Array :=
+  if s.size % 2 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 2 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt16Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Returns `none` if the size of `s` is not a multiple of 2.
+-/
+@[implemented_by Slice.ofBytesBE?Impl, expose]
+public def Slice.ofBytesBE? (s : UInt8Array.Slice) : Option Int16Array :=
+  if s.size % 2 = 0 then
+    some <| ofFn (n := s.size / 2) fun ⟨i, hi⟩ =>
+      (((s[2 * i]'(by lia)).toUInt16 <<< 8) |||
+        (s[2 * i + 1]'(by lia)).toUInt16).toInt16
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Panics if the size of `s` is not a multiple of 2.
+-/
+public def Slice.ofBytesBE! (s : UInt8Array.Slice) : Int16Array :=
+  match Slice.ofBytesBE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 2"
+
+@[simp] public theorem Slice.ofBytesBE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesBE? b.toUInt8Array = Int16Array.ofBytesBE? b := by
+  unfold Slice.ofBytesBE? Int16Array.ofBytesBE?
+  by_cases h : b.size % 2 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
 
 @[simp] public theorem Slice.size_toBytesBE (s : Int16Array.Slice) :
     s.toBytesBE.size = 2 * s.size := by
@@ -1114,6 +1492,53 @@ public def ofBytesLE! (b : ByteArray) : Int32Array :=
   | some a => a
   | none => panic! "byte array size is not a multiple of 4"
 
+private unsafe def Slice.ofBytesLE?Impl (s : UInt8Array.Slice) : Option Int32Array :=
+  if s.size % 4 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 4 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt32Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Returns `none` if the size of `s` is not a multiple of 4.
+-/
+@[implemented_by Slice.ofBytesLE?Impl, expose]
+public def Slice.ofBytesLE? (s : UInt8Array.Slice) : Option Int32Array :=
+  if s.size % 4 = 0 then
+    some <| ofFn (n := s.size / 4) fun ⟨i, hi⟩ =>
+      ((s[4 * i]'(by lia)).toUInt32 |||
+        ((s[4 * i + 1]'(by lia)).toUInt32 <<< 8) |||
+        ((s[4 * i + 2]'(by lia)).toUInt32 <<< 16) |||
+        ((s[4 * i + 3]'(by lia)).toUInt32 <<< 24)).toInt32
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Panics if the size of `s` is not a multiple of 4.
+-/
+public def Slice.ofBytesLE! (s : UInt8Array.Slice) : Int32Array :=
+  match Slice.ofBytesLE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 4"
+
+@[simp] public theorem Slice.ofBytesLE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesLE? b.toUInt8Array = Int32Array.ofBytesLE? b := by
+  unfold Slice.ofBytesLE? Int32Array.ofBytesLE?
+  by_cases h : b.size % 4 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
+
 @[simp] public theorem Slice.size_toBytesLE (s : Int32Array.Slice) :
     s.toBytesLE.size = 4 * s.size := by
   simp [Slice.toBytesLE, ← ByteArray.size_data]
@@ -1217,6 +1642,53 @@ public def ofBytesBE! (b : ByteArray) : Int32Array :=
   match ofBytesBE? b with
   | some a => a
   | none => panic! "byte array size is not a multiple of 4"
+
+private unsafe def Slice.ofBytesBE?Impl (s : UInt8Array.Slice) : Option Int32Array :=
+  if s.size % 4 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 4 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt32Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Returns `none` if the size of `s` is not a multiple of 4.
+-/
+@[implemented_by Slice.ofBytesBE?Impl, expose]
+public def Slice.ofBytesBE? (s : UInt8Array.Slice) : Option Int32Array :=
+  if s.size % 4 = 0 then
+    some <| ofFn (n := s.size / 4) fun ⟨i, hi⟩ =>
+      (((s[4 * i]'(by lia)).toUInt32 <<< 24) |||
+        ((s[4 * i + 1]'(by lia)).toUInt32 <<< 16) |||
+        ((s[4 * i + 2]'(by lia)).toUInt32 <<< 8) |||
+        (s[4 * i + 3]'(by lia)).toUInt32).toInt32
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Panics if the size of `s` is not a multiple of 4.
+-/
+public def Slice.ofBytesBE! (s : UInt8Array.Slice) : Int32Array :=
+  match Slice.ofBytesBE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 4"
+
+@[simp] public theorem Slice.ofBytesBE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesBE? b.toUInt8Array = Int32Array.ofBytesBE? b := by
+  unfold Slice.ofBytesBE? Int32Array.ofBytesBE?
+  by_cases h : b.size % 4 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
 
 @[simp] public theorem Slice.size_toBytesBE (s : Int32Array.Slice) :
     s.toBytesBE.size = 4 * s.size := by
@@ -1357,6 +1829,57 @@ public def ofBytesLE! (b : ByteArray) : Int64Array :=
   | some a => a
   | none => panic! "byte array size is not a multiple of 8"
 
+private unsafe def Slice.ofBytesLE?Impl (s : UInt8Array.Slice) : Option Int64Array :=
+  if s.size % 8 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 8 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt64Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Returns `none` if the size of `s` is not a multiple of 8.
+-/
+@[implemented_by Slice.ofBytesLE?Impl, expose]
+public def Slice.ofBytesLE? (s : UInt8Array.Slice) : Option Int64Array :=
+  if s.size % 8 = 0 then
+    some <| ofFn (n := s.size / 8) fun ⟨i, hi⟩ =>
+      ((s[8 * i]'(by lia)).toUInt64 |||
+        ((s[8 * i + 1]'(by lia)).toUInt64 <<< 8) |||
+        ((s[8 * i + 2]'(by lia)).toUInt64 <<< 16) |||
+        ((s[8 * i + 3]'(by lia)).toUInt64 <<< 24) |||
+        ((s[8 * i + 4]'(by lia)).toUInt64 <<< 32) |||
+        ((s[8 * i + 5]'(by lia)).toUInt64 <<< 40) |||
+        ((s[8 * i + 6]'(by lia)).toUInt64 <<< 48) |||
+        ((s[8 * i + 7]'(by lia)).toUInt64 <<< 56)).toInt64
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Panics if the size of `s` is not a multiple of 8.
+-/
+public def Slice.ofBytesLE! (s : UInt8Array.Slice) : Int64Array :=
+  match Slice.ofBytesLE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 8"
+
+@[simp] public theorem Slice.ofBytesLE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesLE? b.toUInt8Array = Int64Array.ofBytesLE? b := by
+  unfold Slice.ofBytesLE? Int64Array.ofBytesLE?
+  by_cases h : b.size % 8 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
+
 @[simp] public theorem Slice.size_toBytesLE (s : Int64Array.Slice) :
     s.toBytesLE.size = 8 * s.size := by
   simp [Slice.toBytesLE, ← ByteArray.size_data]
@@ -1473,6 +1996,57 @@ public def ofBytesBE! (b : ByteArray) : Int64Array :=
   | some a => a
   | none => panic! "byte array size is not a multiple of 8"
 
+private unsafe def Slice.ofBytesBE?Impl (s : UInt8Array.Slice) : Option Int64Array :=
+  if s.size % 8 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 8 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt64Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Returns `none` if the size of `s` is not a multiple of 8.
+-/
+@[implemented_by Slice.ofBytesBE?Impl, expose]
+public def Slice.ofBytesBE? (s : UInt8Array.Slice) : Option Int64Array :=
+  if s.size % 8 = 0 then
+    some <| ofFn (n := s.size / 8) fun ⟨i, hi⟩ =>
+      (((s[8 * i]'(by lia)).toUInt64 <<< 56) |||
+        ((s[8 * i + 1]'(by lia)).toUInt64 <<< 48) |||
+        ((s[8 * i + 2]'(by lia)).toUInt64 <<< 40) |||
+        ((s[8 * i + 3]'(by lia)).toUInt64 <<< 32) |||
+        ((s[8 * i + 4]'(by lia)).toUInt64 <<< 24) |||
+        ((s[8 * i + 5]'(by lia)).toUInt64 <<< 16) |||
+        ((s[8 * i + 6]'(by lia)).toUInt64 <<< 8) |||
+        (s[8 * i + 7]'(by lia)).toUInt64).toInt64
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Panics if the size of `s` is not a multiple of 8.
+-/
+public def Slice.ofBytesBE! (s : UInt8Array.Slice) : Int64Array :=
+  match Slice.ofBytesBE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 8"
+
+@[simp] public theorem Slice.ofBytesBE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesBE? b.toUInt8Array = Int64Array.ofBytesBE? b := by
+  unfold Slice.ofBytesBE? Int64Array.ofBytesBE?
+  by_cases h : b.size % 8 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
+
 @[simp] public theorem Slice.size_toBytesBE (s : Int64Array.Slice) :
     s.toBytesBE.size = 8 * s.size := by
   simp [Slice.toBytesBE, ← ByteArray.size_data]
@@ -1585,6 +2159,53 @@ public def ofBytesLE! (b : ByteArray) : Float32Array :=
   | some a => a
   | none => panic! "byte array size is not a multiple of 4"
 
+private unsafe def Slice.ofBytesLE?Impl (s : UInt8Array.Slice) : Option Float32Array :=
+  if s.size % 4 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 4 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt32Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Returns `none` if the size of `s` is not a multiple of 4.
+-/
+@[implemented_by Slice.ofBytesLE?Impl, expose]
+public def Slice.ofBytesLE? (s : UInt8Array.Slice) : Option Float32Array :=
+  if s.size % 4 = 0 then
+    some <| ofFn (n := s.size / 4) fun ⟨i, hi⟩ =>
+      Float32.ofBits ((s[4 * i]'(by lia)).toUInt32 |||
+        ((s[4 * i + 1]'(by lia)).toUInt32 <<< 8) |||
+        ((s[4 * i + 2]'(by lia)).toUInt32 <<< 16) |||
+        ((s[4 * i + 3]'(by lia)).toUInt32 <<< 24))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Panics if the size of `s` is not a multiple of 4.
+-/
+public def Slice.ofBytesLE! (s : UInt8Array.Slice) : Float32Array :=
+  match Slice.ofBytesLE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 4"
+
+@[simp] public theorem Slice.ofBytesLE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesLE? b.toUInt8Array = Float32Array.ofBytesLE? b := by
+  unfold Slice.ofBytesLE? Float32Array.ofBytesLE?
+  by_cases h : b.size % 4 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
+
 @[simp] public theorem Slice.size_toBytesLE (s : Float32Array.Slice) :
     s.toBytesLE.size = 4 * s.size := by
   simp [Slice.toBytesLE, ← ByteArray.size_data]
@@ -1664,6 +2285,53 @@ public def ofBytesBE! (b : ByteArray) : Float32Array :=
   match ofBytesBE? b with
   | some a => a
   | none => panic! "byte array size is not a multiple of 4"
+
+private unsafe def Slice.ofBytesBE?Impl (s : UInt8Array.Slice) : Option Float32Array :=
+  if s.size % 4 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 4 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt32Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Returns `none` if the size of `s` is not a multiple of 4.
+-/
+@[implemented_by Slice.ofBytesBE?Impl, expose]
+public def Slice.ofBytesBE? (s : UInt8Array.Slice) : Option Float32Array :=
+  if s.size % 4 = 0 then
+    some <| ofFn (n := s.size / 4) fun ⟨i, hi⟩ =>
+      Float32.ofBits (((s[4 * i]'(by lia)).toUInt32 <<< 24) |||
+        ((s[4 * i + 1]'(by lia)).toUInt32 <<< 16) |||
+        ((s[4 * i + 2]'(by lia)).toUInt32 <<< 8) |||
+        (s[4 * i + 3]'(by lia)).toUInt32)
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Panics if the size of `s` is not a multiple of 4.
+-/
+public def Slice.ofBytesBE! (s : UInt8Array.Slice) : Float32Array :=
+  match Slice.ofBytesBE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 4"
+
+@[simp] public theorem Slice.ofBytesBE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesBE? b.toUInt8Array = Float32Array.ofBytesBE? b := by
+  unfold Slice.ofBytesBE? Float32Array.ofBytesBE?
+  by_cases h : b.size % 4 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
 
 @[simp] public theorem Slice.size_toBytesBE (s : Float32Array.Slice) :
     s.toBytesBE.size = 4 * s.size := by
@@ -1757,6 +2425,57 @@ public def ofBytesLE! (b : ByteArray) : Float64Array :=
   | some a => a
   | none => panic! "byte array size is not a multiple of 8"
 
+private unsafe def Slice.ofBytesLE?Impl (s : UInt8Array.Slice) : Option Float64Array :=
+  if s.size % 8 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 8 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt64Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Returns `none` if the size of `s` is not a multiple of 8.
+-/
+@[implemented_by Slice.ofBytesLE?Impl, expose]
+public def Slice.ofBytesLE? (s : UInt8Array.Slice) : Option Float64Array :=
+  if s.size % 8 = 0 then
+    some <| ofFn (n := s.size / 8) fun ⟨i, hi⟩ =>
+      Float.ofBits ((s[8 * i]'(by lia)).toUInt64 |||
+        ((s[8 * i + 1]'(by lia)).toUInt64 <<< 8) |||
+        ((s[8 * i + 2]'(by lia)).toUInt64 <<< 16) |||
+        ((s[8 * i + 3]'(by lia)).toUInt64 <<< 24) |||
+        ((s[8 * i + 4]'(by lia)).toUInt64 <<< 32) |||
+        ((s[8 * i + 5]'(by lia)).toUInt64 <<< 40) |||
+        ((s[8 * i + 6]'(by lia)).toUInt64 <<< 48) |||
+        ((s[8 * i + 7]'(by lia)).toUInt64 <<< 56))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in little-endian order, least significant byte first.
+Panics if the size of `s` is not a multiple of 8.
+-/
+public def Slice.ofBytesLE! (s : UInt8Array.Slice) : Float64Array :=
+  match Slice.ofBytesLE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 8"
+
+@[simp] public theorem Slice.ofBytesLE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesLE? b.toUInt8Array = Float64Array.ofBytesLE? b := by
+  unfold Slice.ofBytesLE? Float64Array.ofBytesLE?
+  by_cases h : b.size % 8 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
+
 @[simp] public theorem Slice.size_toBytesLE (s : Float64Array.Slice) :
     s.toBytesLE.size = 8 * s.size := by
   simp [Slice.toBytesLE, ← ByteArray.size_data]
@@ -1844,6 +2563,57 @@ public def ofBytesBE! (b : ByteArray) : Float64Array :=
   match ofBytesBE? b with
   | some a => a
   | none => panic! "byte array size is not a multiple of 8"
+
+private unsafe def Slice.ofBytesBE?Impl (s : UInt8Array.Slice) : Option Float64Array :=
+  if s.size % 8 = 0 then
+    -- One copy, then, unless the byte order is the machine's, a byte swap in place.
+    let r := copyBytes 8 (unsafeCast s.array) s.start.toUSize s.size.toUSize
+    if !hostLittleEndian then
+      some (unsafeCast r)
+    else
+      some (unsafeCast (UInt64Array.byteSwap (unsafeCast r)))
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Returns `none` if the size of `s` is not a multiple of 8.
+-/
+@[implemented_by Slice.ofBytesBE?Impl, expose]
+public def Slice.ofBytesBE? (s : UInt8Array.Slice) : Option Float64Array :=
+  if s.size % 8 = 0 then
+    some <| ofFn (n := s.size / 8) fun ⟨i, hi⟩ =>
+      Float.ofBits (((s[8 * i]'(by lia)).toUInt64 <<< 56) |||
+        ((s[8 * i + 1]'(by lia)).toUInt64 <<< 48) |||
+        ((s[8 * i + 2]'(by lia)).toUInt64 <<< 40) |||
+        ((s[8 * i + 3]'(by lia)).toUInt64 <<< 32) |||
+        ((s[8 * i + 4]'(by lia)).toUInt64 <<< 24) |||
+        ((s[8 * i + 5]'(by lia)).toUInt64 <<< 16) |||
+        ((s[8 * i + 6]'(by lia)).toUInt64 <<< 8) |||
+        (s[8 * i + 7]'(by lia)).toUInt64)
+  else
+    none
+
+/--
+Reads the bytes of `s` as elements, each in big-endian order, most significant byte first.
+Panics if the size of `s` is not a multiple of 8.
+-/
+public def Slice.ofBytesBE! (s : UInt8Array.Slice) : Float64Array :=
+  match Slice.ofBytesBE? s with
+  | some a => a
+  | none => panic! "byte slice size is not a multiple of 8"
+
+@[simp] public theorem Slice.ofBytesBE?_toUInt8Array (b : ByteArray) :
+    Slice.ofBytesBE? b.toUInt8Array = Float64Array.ofBytesBE? b := by
+  unfold Slice.ofBytesBE? Float64Array.ofBytesBE?
+  by_cases h : b.size % 8 = 0
+  · rw [ite_eq_left (by simpa using h), ite_eq_left h]
+    congr 1
+    apply ext_getElem
+    · simp
+    · intro i _ _
+      simp [UInt8Array.Slice.getElem_eq]
+  · rw [ite_eq_right (by simpa using h), ite_eq_right h]
 
 @[simp] public theorem Slice.size_toBytesBE (s : Float64Array.Slice) :
     s.toBytesBE.size = 8 * s.size := by
