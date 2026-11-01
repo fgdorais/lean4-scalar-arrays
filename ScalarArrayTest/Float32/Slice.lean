@@ -202,6 +202,11 @@ example (s : Float32Array.Slice) : s.copy.size = s.size := by simp
   | ⟨.yield it x, _⟩ =>
     x == 1 && it.toFloat32Slice.start == 1 && it.toFloat32Slice.copy == Float32Array.mk #[2, 3]
   | _ => false
+example (it : Std.Iter (α := Float32Array.SliceIterator) Float32) : it.toFloat32Slice.iter = it := by
+  simp
+example (it : Std.Iter (α := Float32Array.SliceIterator) Float32) :
+    it.toList = it.toFloat32Slice.copy.toList := by
+  simp [Std.Iter.toList_eq_toList_toFloat32Slice]
 #guard Float32Array.empty.iter.toFloat32Array == Float32Array.empty
 #guard
   let xs := (Array.range 100000).map Nat.toFloat32

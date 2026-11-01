@@ -202,6 +202,11 @@ example (s : UInt32Array.Slice) : s.copy.size = s.size := by simp
   | ⟨.yield it x, _⟩ =>
     x == 1 && it.toUInt32Slice.start == 1 && it.toUInt32Slice.copy == UInt32Array.mk #[2, 3]
   | _ => false
+example (it : Std.Iter (α := UInt32Array.SliceIterator) UInt32) : it.toUInt32Slice.iter = it := by
+  simp
+example (it : Std.Iter (α := UInt32Array.SliceIterator) UInt32) :
+    it.toList = it.toUInt32Slice.copy.toList := by
+  simp [Std.Iter.toList_eq_toList_toUInt32Slice]
 #guard UInt32Array.empty.iter.toUInt32Array == UInt32Array.empty
 #guard
   let xs := (Array.range 100000).map Nat.toUInt32

@@ -202,6 +202,11 @@ example (s : USizeArray.Slice) : s.copy.size = s.size := by simp
   | ⟨.yield it x, _⟩ =>
     x == 1 && it.toUSizeSlice.start == 1 && it.toUSizeSlice.copy == USizeArray.mk #[2, 3]
   | _ => false
+example (it : Std.Iter (α := USizeArray.SliceIterator) USize) : it.toUSizeSlice.iter = it := by
+  simp
+example (it : Std.Iter (α := USizeArray.SliceIterator) USize) :
+    it.toList = it.toUSizeSlice.copy.toList := by
+  simp [Std.Iter.toList_eq_toList_toUSizeSlice]
 #guard USizeArray.empty.iter.toUSizeArray == USizeArray.empty
 #guard
   let xs := (Array.range 100000).map Nat.toUSize

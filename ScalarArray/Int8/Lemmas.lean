@@ -755,6 +755,17 @@ private theorem SliceIterator.toList_eq (it : Std.Iter (α := Int8Array.SliceIte
   rw [Std.Slice.iter, Std.Slice.Internal.iter_eq_toIteratorIter, Std.ToIterator.iter_eq]
   rfl
 
+@[simp] public theorem _root_.Std.Iter.iter_toInt8Slice
+    (it : Std.Iter (α := Int8Array.SliceIterator) Int8) : it.toInt8Slice.iter = it := by
+  rw [Std.Slice.iter, Std.Slice.Internal.iter_eq_toIteratorIter, Std.ToIterator.iter_eq]
+  rfl
+
+public theorem _root_.Std.Iter.toList_eq_toList_toInt8Slice
+    (it : Std.Iter (α := Int8Array.SliceIterator) Int8) :
+    it.toList = it.toInt8Slice.toList := by
+  rw [SliceIterator.toList_eq, Slice.toList_eq_toList_copy]
+  rfl
+
 @[simp] public theorem Slice.toInt8Array_iter (s : Int8Array.Slice) :
     s.iter.toInt8Array = s.copy := by
   rw [← toList_inj, Std.Iter.toList_toInt8Array, Std.Slice.toList_iter, toList_eq_toList_copy]

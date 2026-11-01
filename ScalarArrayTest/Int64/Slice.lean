@@ -202,6 +202,11 @@ example (s : Int64Array.Slice) : s.copy.size = s.size := by simp
   | ⟨.yield it x, _⟩ =>
     x == 1 && it.toInt64Slice.start == 1 && it.toInt64Slice.copy == Int64Array.mk #[2, 3]
   | _ => false
+example (it : Std.Iter (α := Int64Array.SliceIterator) Int64) : it.toInt64Slice.iter = it := by
+  simp
+example (it : Std.Iter (α := Int64Array.SliceIterator) Int64) :
+    it.toList = it.toInt64Slice.copy.toList := by
+  simp [Std.Iter.toList_eq_toList_toInt64Slice]
 #guard Int64Array.empty.iter.toInt64Array == Int64Array.empty
 #guard
   let xs := (Array.range 100000).map Nat.toInt64
