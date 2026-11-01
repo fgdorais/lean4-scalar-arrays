@@ -322,6 +322,15 @@ public instance [Monad m] : ForIn m UInt16Array.Slice UInt16 := inferInstance
 public instance [Monad m] : ForM m UInt16Array.Slice UInt16 where
   forM s f := s.foldlM (fun _ x => f x) ⟨⟩
 
+/--
+The elements that the slice iterator `it` has yet to yield, as a slice of the same array, without
+copying. The start of the slice is the index of the next element in the array.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toUInt16Slice (it : Std.Iter (α := UInt16Array.SliceIterator) UInt16) :
+    UInt16Array.Slice :=
+  it.internalState.xs
+
 /-- An iterator over the elements of `a`, for use with the `Std.Iterators` API. -/
 @[inline, expose]
 public def iter (a : UInt16Array) : Std.Iter (α := UInt16Array.SliceIterator) UInt16 :=

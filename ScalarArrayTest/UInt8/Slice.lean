@@ -194,6 +194,19 @@ example (s : UInt8Array.Slice) : s.copy.size = s.size := by simp
 #guard ((UInt8Array.mk #[1, 2, 3, big])[1...3].iter.map (· + 1)).toUInt8Array ==
   UInt8Array.mk #[3, 4]
 #guard (UInt8Array.mk #[1, 2, 3]).iter.length == 3
+#guard
+  let s := (UInt8Array.mk #[1, 2, 3, big])[1...3]
+  s.iter.toUInt8Slice.start == 1 && s.iter.toUInt8Slice.copy == UInt8Array.mk #[2, 3]
+#guard
+  match (UInt8Array.mk #[1, 2, 3]).iter.step with
+  | ⟨.yield it x, _⟩ =>
+    x == 1 && it.toUInt8Slice.start == 1 && it.toUInt8Slice.copy == UInt8Array.mk #[2, 3]
+  | _ => false
+example (it : Std.Iter (α := UInt8Array.SliceIterator) UInt8) : it.toUInt8Slice.iter = it := by
+  simp
+example (it : Std.Iter (α := UInt8Array.SliceIterator) UInt8) :
+    it.toList = it.toUInt8Slice.copy.toList := by
+  simp [Std.Iter.toList_eq_toList_toUInt8Slice]
 #guard UInt8Array.empty.iter.toUInt8Array == UInt8Array.empty
 #guard
   let xs := (Array.range 100000).map Nat.toUInt8

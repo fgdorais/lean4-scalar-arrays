@@ -194,6 +194,19 @@ example (s : Int16Array.Slice) : s.copy.size = s.size := by simp
 #guard ((Int16Array.mk #[1, 2, 3, big])[1...3].iter.map (· + 1)).toInt16Array ==
   Int16Array.mk #[3, 4]
 #guard (Int16Array.mk #[1, 2, 3]).iter.length == 3
+#guard
+  let s := (Int16Array.mk #[1, 2, 3, big])[1...3]
+  s.iter.toInt16Slice.start == 1 && s.iter.toInt16Slice.copy == Int16Array.mk #[2, 3]
+#guard
+  match (Int16Array.mk #[1, 2, 3]).iter.step with
+  | ⟨.yield it x, _⟩ =>
+    x == 1 && it.toInt16Slice.start == 1 && it.toInt16Slice.copy == Int16Array.mk #[2, 3]
+  | _ => false
+example (it : Std.Iter (α := Int16Array.SliceIterator) Int16) : it.toInt16Slice.iter = it := by
+  simp
+example (it : Std.Iter (α := Int16Array.SliceIterator) Int16) :
+    it.toList = it.toInt16Slice.copy.toList := by
+  simp [Std.Iter.toList_eq_toList_toInt16Slice]
 #guard Int16Array.empty.iter.toInt16Array == Int16Array.empty
 #guard
   let xs := (Array.range 100000).map Nat.toInt16
