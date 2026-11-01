@@ -322,6 +322,15 @@ public instance [Monad m] : ForIn m ISizeArray.Slice ISize := inferInstance
 public instance [Monad m] : ForM m ISizeArray.Slice ISize where
   forM s f := s.foldlM (fun _ x => f x) ⟨⟩
 
+/--
+The elements that the slice iterator `it` has yet to yield, as a slice of the same array, without
+copying. The start of the slice is the index of the next element in the array.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toISizeSlice (it : Std.Iter (α := ISizeArray.SliceIterator) ISize) :
+    ISizeArray.Slice :=
+  it.internalState.xs
+
 /-- An iterator over the elements of `a`, for use with the `Std.Iterators` API. -/
 @[inline, expose]
 public def iter (a : ISizeArray) : Std.Iter (α := ISizeArray.SliceIterator) ISize :=

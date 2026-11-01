@@ -322,6 +322,15 @@ public instance [Monad m] : ForIn m Int32Array.Slice Int32 := inferInstance
 public instance [Monad m] : ForM m Int32Array.Slice Int32 where
   forM s f := s.foldlM (fun _ x => f x) ⟨⟩
 
+/--
+The elements that the slice iterator `it` has yet to yield, as a slice of the same array, without
+copying. The start of the slice is the index of the next element in the array.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toInt32Slice (it : Std.Iter (α := Int32Array.SliceIterator) Int32) :
+    Int32Array.Slice :=
+  it.internalState.xs
+
 /-- An iterator over the elements of `a`, for use with the `Std.Iterators` API. -/
 @[inline, expose]
 public def iter (a : Int32Array) : Std.Iter (α := Int32Array.SliceIterator) Int32 :=

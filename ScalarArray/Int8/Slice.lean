@@ -322,6 +322,15 @@ public instance [Monad m] : ForIn m Int8Array.Slice Int8 := inferInstance
 public instance [Monad m] : ForM m Int8Array.Slice Int8 where
   forM s f := s.foldlM (fun _ x => f x) ⟨⟩
 
+/--
+The elements that the slice iterator `it` has yet to yield, as a slice of the same array, without
+copying. The start of the slice is the index of the next element in the array.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toInt8Slice (it : Std.Iter (α := Int8Array.SliceIterator) Int8) :
+    Int8Array.Slice :=
+  it.internalState.xs
+
 /-- An iterator over the elements of `a`, for use with the `Std.Iterators` API. -/
 @[inline, expose]
 public def iter (a : Int8Array) : Std.Iter (α := Int8Array.SliceIterator) Int8 :=

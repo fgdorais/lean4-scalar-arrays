@@ -194,6 +194,14 @@ example (s : UInt32Array.Slice) : s.copy.size = s.size := by simp
 #guard ((UInt32Array.mk #[1, 2, 3, big])[1...3].iter.map (· + 1)).toUInt32Array ==
   UInt32Array.mk #[3, 4]
 #guard (UInt32Array.mk #[1, 2, 3]).iter.length == 3
+#guard
+  let s := (UInt32Array.mk #[1, 2, 3, big])[1...3]
+  s.iter.toUInt32Slice.start == 1 && s.iter.toUInt32Slice.copy == UInt32Array.mk #[2, 3]
+#guard
+  match (UInt32Array.mk #[1, 2, 3]).iter.step with
+  | ⟨.yield it x, _⟩ =>
+    x == 1 && it.toUInt32Slice.start == 1 && it.toUInt32Slice.copy == UInt32Array.mk #[2, 3]
+  | _ => false
 #guard UInt32Array.empty.iter.toUInt32Array == UInt32Array.empty
 #guard
   let xs := (Array.range 100000).map Nat.toUInt32

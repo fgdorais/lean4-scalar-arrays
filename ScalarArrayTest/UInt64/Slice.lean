@@ -194,6 +194,14 @@ example (s : UInt64Array.Slice) : s.copy.size = s.size := by simp
 #guard ((UInt64Array.mk #[1, 2, 3, big])[1...3].iter.map (· + 1)).toUInt64Array ==
   UInt64Array.mk #[3, 4]
 #guard (UInt64Array.mk #[1, 2, 3]).iter.length == 3
+#guard
+  let s := (UInt64Array.mk #[1, 2, 3, big])[1...3]
+  s.iter.toUInt64Slice.start == 1 && s.iter.toUInt64Slice.copy == UInt64Array.mk #[2, 3]
+#guard
+  match (UInt64Array.mk #[1, 2, 3]).iter.step with
+  | ⟨.yield it x, _⟩ =>
+    x == 1 && it.toUInt64Slice.start == 1 && it.toUInt64Slice.copy == UInt64Array.mk #[2, 3]
+  | _ => false
 #guard UInt64Array.empty.iter.toUInt64Array == UInt64Array.empty
 #guard
   let xs := (Array.range 100000).map Nat.toUInt64

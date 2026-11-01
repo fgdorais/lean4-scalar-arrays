@@ -322,6 +322,15 @@ public instance [Monad m] : ForIn m Float64Array.Slice Float := inferInstance
 public instance [Monad m] : ForM m Float64Array.Slice Float where
   forM s f := s.foldlM (fun _ x => f x) ⟨⟩
 
+/--
+The elements that the slice iterator `it` has yet to yield, as a slice of the same array, without
+copying. The start of the slice is the index of the next element in the array.
+-/
+@[inline, expose]
+public def _root_.Std.Iter.toFloatSlice (it : Std.Iter (α := Float64Array.SliceIterator) Float) :
+    Float64Array.Slice :=
+  it.internalState.xs
+
 /-- An iterator over the elements of `a`, for use with the `Std.Iterators` API. -/
 @[inline, expose]
 public def iter (a : Float64Array) : Std.Iter (α := Float64Array.SliceIterator) Float :=

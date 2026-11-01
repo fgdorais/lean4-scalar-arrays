@@ -194,6 +194,14 @@ example (s : ISizeArray.Slice) : s.copy.size = s.size := by simp
 #guard ((ISizeArray.mk #[1, 2, 3, big])[1...3].iter.map (· + 1)).toISizeArray ==
   ISizeArray.mk #[3, 4]
 #guard (ISizeArray.mk #[1, 2, 3]).iter.length == 3
+#guard
+  let s := (ISizeArray.mk #[1, 2, 3, big])[1...3]
+  s.iter.toISizeSlice.start == 1 && s.iter.toISizeSlice.copy == ISizeArray.mk #[2, 3]
+#guard
+  match (ISizeArray.mk #[1, 2, 3]).iter.step with
+  | ⟨.yield it x, _⟩ =>
+    x == 1 && it.toISizeSlice.start == 1 && it.toISizeSlice.copy == ISizeArray.mk #[2, 3]
+  | _ => false
 #guard ISizeArray.empty.iter.toISizeArray == ISizeArray.empty
 #guard
   let xs := (Array.range 100000).map Nat.toISize

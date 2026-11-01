@@ -750,6 +750,11 @@ private theorem SliceIterator.toList_eq (it : Std.Iter (α := USizeArray.SliceIt
     Std.Slice.Internal.iter_eq_toIteratorIter, Std.ToIterator.iter_eq]
   rfl
 
+@[simp] public theorem Slice.toUSizeSlice_iter (s : USizeArray.Slice) :
+    s.iter.toUSizeSlice = s := by
+  rw [Std.Slice.iter, Std.Slice.Internal.iter_eq_toIteratorIter, Std.ToIterator.iter_eq]
+  rfl
+
 @[simp] public theorem Slice.toUSizeArray_iter (s : USizeArray.Slice) :
     s.iter.toUSizeArray = s.copy := by
   rw [← toList_inj, Std.Iter.toList_toUSizeArray, Std.Slice.toList_iter, toList_eq_toList_copy]

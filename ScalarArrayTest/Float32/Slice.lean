@@ -194,6 +194,14 @@ example (s : Float32Array.Slice) : s.copy.size = s.size := by simp
 #guard ((Float32Array.mk #[1, 2, 3, big])[1...3].iter.map (· + 1)).toFloat32Array ==
   Float32Array.mk #[3, 4]
 #guard (Float32Array.mk #[1, 2, 3]).iter.length == 3
+#guard
+  let s := (Float32Array.mk #[1, 2, 3, big])[1...3]
+  s.iter.toFloat32Slice.start == 1 && s.iter.toFloat32Slice.copy == Float32Array.mk #[2, 3]
+#guard
+  match (Float32Array.mk #[1, 2, 3]).iter.step with
+  | ⟨.yield it x, _⟩ =>
+    x == 1 && it.toFloat32Slice.start == 1 && it.toFloat32Slice.copy == Float32Array.mk #[2, 3]
+  | _ => false
 #guard Float32Array.empty.iter.toFloat32Array == Float32Array.empty
 #guard
   let xs := (Array.range 100000).map Nat.toFloat32

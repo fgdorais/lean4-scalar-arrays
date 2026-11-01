@@ -750,6 +750,11 @@ private theorem SliceIterator.toList_eq (it : Std.Iter (α := Int32Array.SliceIt
     Std.Slice.Internal.iter_eq_toIteratorIter, Std.ToIterator.iter_eq]
   rfl
 
+@[simp] public theorem Slice.toInt32Slice_iter (s : Int32Array.Slice) :
+    s.iter.toInt32Slice = s := by
+  rw [Std.Slice.iter, Std.Slice.Internal.iter_eq_toIteratorIter, Std.ToIterator.iter_eq]
+  rfl
+
 @[simp] public theorem Slice.toInt32Array_iter (s : Int32Array.Slice) :
     s.iter.toInt32Array = s.copy := by
   rw [← toList_inj, Std.Iter.toList_toInt32Array, Std.Slice.toList_iter, toList_eq_toList_copy]
