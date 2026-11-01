@@ -274,7 +274,9 @@ public instance : Std.Iterators.Finite USizeArray.SliceIterator Id :=
   .of_finitenessRelation SliceIterator.finitenessRelation
 
 -- Each element goes through `lift`, like each step of the iterator in the default implementation,
--- so the two agree for every lawful `lift`, which is what core's consumers pass.
+-- so the two agree for every lawful `lift`, which is what core's consumers pass. The loop recurses
+-- after `bind`, not inside the function passed to `lift`: when `lift` is not inlined, a recursive
+-- call there takes a stack frame for each element.
 @[inline]
 private unsafe def SliceIterator.forInImpl {n : Type x → Type x'} [Monad n]
     (lift : (γ : Type) → (δ : Type x) → (γ → n δ) → Id γ → n δ) (γ : Type x)
@@ -286,11 +288,11 @@ private unsafe def SliceIterator.forInImpl {n : Type x → Type x'} [Monad n]
   loop xs.array xs.stop.toUSize xs.start.toUSize init
 where
   @[specialize] loop (a : USizeArray) (stop i : USize) (c : γ) : n γ :=
-    if i < stop then
-      lift _ _ (fun x => do
-        match ← f x lcProof c with
-        | ⟨.yield c, _⟩ => loop a stop (i + 1) c
-        | ⟨.done c, _⟩ => pure c) (pure (a.uget i lcProof))
+    if i < stop then do
+      let x := a.uget i lcProof
+      match ← lift _ _ (fun _ => f x lcProof c) (pure x) with
+      | ⟨.yield c, _⟩ => loop a stop (i + 1) c
+      | ⟨.done c, _⟩ => pure c
     else pure c
 
 /--
