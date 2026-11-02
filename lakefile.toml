@@ -1,5 +1,4 @@
 name = "«lean4-scalar-arrays»"
-version = "1.0.0"
 defaultTargets = ["ScalarArray", "ScalarArrayTest", "bench"]
 testDriver = "ScalarArrayTest"
 
