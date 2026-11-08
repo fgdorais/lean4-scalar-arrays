@@ -6,15 +6,32 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: build (${{ matrix.name }})
+    # The tests precompile the library, so each platform compiles the `extern` C code natively.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-latest
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+          - name: macOS arm64
+            os: macos-latest
+          - name: macOS x86_64
+            os: macos-15-intel
+          - name: Windows x86_64
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
     steps:
 
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: build
+      - name: build and test
         uses: leanprover/lean-action@f061402b660e0c34644504b324e830f2991d4865 # v1.6.1
         with:
           auto-config: false
           build: true
           build-args: "--wfail"
+          test: true
