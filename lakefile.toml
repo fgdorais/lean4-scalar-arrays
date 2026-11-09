@@ -12,6 +12,10 @@ name = "ScalarArray"
 roots = ["ScalarArray", "ScalarArray.Bytes"]
 # Lets the interpreter run the `extern` C code in downstream files, for `#eval` and `#guard`.
 precompileModules = true
+# Aligns loops to 64 bytes, so that a loop's speed doesn't depend on where unrelated code shifts it.
+# Benchmarked across code layouts, the same loop varied by up to 1.5x without it and by about 1%
+# with it, at no cost in average speed.
+moreLeancArgs = ["-falign-loops=64"]
 
 [[lean_lib]]
 name = "ScalarArrayTest"
@@ -20,3 +24,5 @@ precompileModules = true
 [[lean_exe]]
 name = "bench"
 root = "ScalarArrayBench"
+# As for `ScalarArray`, since the benchmarked loops are mostly inlined here.
+moreLeancArgs = ["-falign-loops=64"]
