@@ -12,22 +12,38 @@ import all ScalarArray.Float64.Lemmas
 # In-place programs on `Float64Array`
 
 `Float64Array.InPlace n α` is a program that reads and writes an array of size `n` in place and
-returns a value of type `α`. Programs are built from `read`, `write`, the monad operations and the
-loops `forIn`, `forIn2`, `forInRev` and `forInRev2`, then run on an array with `runInPlace` or
-`InPlace.run`, which make the array exclusive once, before the program runs.
-A loop followed by more of the program is best written with `forInBind` and its variants, whose
-loop calls the rest itself, so that its last accumulators stay unboxed.
+returns a value of type `α`. It is a monad, and programs are built from:
+
+* `read i h`, `readThen i h k` and `write i h v`, at a `USize` index `i` with its bound `h`
+  (`toNat_add_lt_of_window` gives the bound of `off + j` in a window);
+* `InPlace.ite` and `InPlace.dite`, which branch inside one program;
+* the loops `forIn lo hi` and `forInRev lo hi`, which run a body for each `j` from `lo` up to
+  `hi - 1`, or from `hi - 1` down to `lo`, threading an accumulator. The body gets both bounds of
+  `j`, `lo.toNat ≤ j.toNat` and `j.toNat < hi.toNat`. `forIn2` and `forInRev2` thread two
+  accumulators as separate arguments, so that scalars such as carries stay unboxed;
+* `forInBind`, `forIn2Bind`, `forInRevBind` and `forInRev2Bind`, a loop followed by the rest of
+  the program, which the loop calls itself, so that its last accumulators reach the rest unboxed.
+
+A program runs on an array with `a.runInPlace m` or `m.run a h`, which make the array exclusive
+once, before the program runs. `runForInThen`, `runForInRevThen` and `runForIn2Then` run a single
+loop and hand its last accumulators and the new array to a continuation, without a result pair.
 
 The array is never visible to a program: `InPlace` and its state have private constructors, so the
 only code that touches the state is the code in this module, which passes it on linearly. That is
 what lets `write` store without checking that the array is exclusive. The in-place folds of
-`ScalarArray.X.InPlace` are programs of this kind.
+`ScalarArray.Float64.InPlace` are programs of this kind, and the experimental notation
+`inplace a do …` of `ScalarArray.InPlaceSyntax` writes programs of this kind.
 
 The loops must be the loops of this module. A program that calls itself recursively compiles to a
 closure for each step, and `for` in `do` notation boxes its mutable variables at each step, so both
 are much slower than `forIn`, whose step is inlined into one loop with unboxed accumulators.
+Likewise, `if c then t else e` on programs builds both branches as closures, where `InPlace.ite`
+branches inside the program.
 
-Programs are specified by `InPlace.run`, whose behavior the `run_*` lemmas give.
+Programs are specified by `InPlace.run`, whose behavior the `run_*` lemmas give. Each loop has a
+one-step equation (`forInFrom_eq`, `forInRevFrom_eq`, …), and each `Bind` loop and `runFor*Then`
+an `_eq` lemma in terms of the plain loop. `bind_eq` and `pure_eq` turn `InPlace.bind` and
+`InPlace.pure`, which the notation writes, into `>>=` and `pure`.
 -/
 
 namespace ScalarArray
