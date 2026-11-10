@@ -210,7 +210,7 @@ passes, one `foldlInPlace2Then` for each result.
     have hy : len.toNat + len.toNat ≤ a.size := by lia
     have ht : (2 * len).toNat + len.toNat ≤ a.size := by lia
     let r := a.runInPlace <| UInt64Array.InPlace.forIn2 0 len (0 : UInt64) (0 : UInt64)
-      fun j hj c b => do
+      fun j _ hj c b => do
         let x ← UInt64Array.InPlace.read (0 + j) (UInt64Array.InPlace.toNat_add_lt_of_window hx hj)
         let y ← UInt64Array.InPlace.read (len + j) (UInt64Array.InPlace.toNat_add_lt_of_window hy hj)
         let s := x + y + c

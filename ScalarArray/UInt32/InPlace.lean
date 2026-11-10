@@ -289,7 +289,7 @@ private theorem slice_ext {s t : UInt32Array.Slice} (ha : s.array = t.array)
 private def foldInPlaceBody {β : Type v} {n : Nat} (start len : USize)
     (hw : start.toNat + len.toNat ≤ n)
     (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) (k : USize)
-    (hk : k.toNat < len.toNat) (b : β) : InPlace n β :=
+    (_ : (0 : USize).toNat ≤ k.toNat) (hk : k.toNat < len.toNat) (b : β) : InPlace n β :=
   InPlace.readThen (start + k) (InPlace.toNat_add_lt_of_window hw hk) fun x =>
   let p := f k hk x b
   InPlace.write (start + k) (InPlace.toNat_add_lt_of_window hw hk) p.1 >>= fun _ => pure p.2
@@ -302,7 +302,7 @@ private def foldlInPlaceProg {β : Type v} {n : Nat} (start len : USize)
     (hw : start.toNat + len.toNat ≤ n)
     (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) (j : USize) (b : β) :
     InPlace n β :=
-  InPlace.forIn j len b (foldInPlaceBody start len hw f)
+  InPlace.forInFrom 0 len j (by simp) b (foldInPlaceBody start len hw f)
 
 private theorem run_foldlInPlaceProg {β : Type v} (start len : USize) (N m : Nat)
     (hN : N < USize.size) (hw : start.toNat + len.toNat ≤ N) (hm : len.toNat = m)
@@ -313,7 +313,7 @@ private theorem run_foldlInPlaceProg {β : Type v} (start len : USize) (N m : Na
       ((foldlInPlace.loop m f s hs j.toNat b).2, (foldlInPlace.loop m f s hs j.toNat b).1.array) := by
   subst hca
   unfold foldlInPlaceProg
-  rw [InPlace.forIn_eq, foldlInPlace.loop]
+  rw [InPlace.forInFrom_eq, foldlInPlace.loop]
   unfold foldInPlaceBody
   by_cases hjl : j < len
   · have hjl' : j.toNat < len.toNat := hjl
@@ -829,8 +829,7 @@ public def foldrInPlaceThenImpl {β : Type v} {γ : Type w} (s : UInt32Array.Sli
   dsimp only
   split
   · rename_i hN
-    rw [InPlace.runForInRevThen_eq, InPlace.forInRev_eq, foldrInPlaceThen_eq,
-      foldrInPlace_eq_foldrInPlaceImpl]
+    rw [InPlace.runForInRevThen_eq, foldrInPlaceThen_eq, foldrInPlace_eq_foldrInPlaceImpl]
     unfold foldrInPlaceImpl
     split
     · rfl
@@ -914,7 +913,7 @@ private def foldlInPlace2Body {β : Type v} {n : Nat} (xs ys rs len : USize)
     (hx : xs.toNat + len.toNat ≤ n) (hy : ys.toNat + len.toNat ≤ n)
     (hr : rs.toNat + len.toNat ≤ n)
     (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β) (j : USize)
-    (hj : j.toNat < len.toNat) (b : β) : InPlace n β :=
+    (_ : (0 : USize).toNat ≤ j.toNat) (hj : j.toNat < len.toNat) (b : β) : InPlace n β :=
   InPlace.readThen (xs + j) (InPlace.toNat_add_lt_of_window hx hj) fun x =>
   InPlace.readThen (ys + j) (InPlace.toNat_add_lt_of_window hy hj) fun y =>
   let p := f j hj x y b
@@ -927,7 +926,7 @@ private def foldlInPlace2Prog {β : Type v} {n : Nat} (xs ys rs len : USize)
     (hr : rs.toNat + len.toNat ≤ n)
     (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β) (j : USize)
     (b : β) : InPlace n β :=
-  InPlace.forIn j len b (foldlInPlace2Body xs ys rs len hx hy hr f)
+  InPlace.forInFrom 0 len j (by simp) b (foldlInPlace2Body xs ys rs len hx hy hr f)
 
 private theorem run_foldlInPlace2Prog {β : Type v} (xs ys rs len : USize) (n : Nat)
     (hn : n < USize.size) (hx : xs.toNat + len.toNat ≤ n) (hy : ys.toNat + len.toNat ≤ n)
@@ -940,7 +939,7 @@ private theorem run_foldlInPlace2Prog {β : Type v} (xs ys rs len : USize) (n : 
         (foldlInPlace2.loop xs.toNat ys.toNat rs.toNat len.toNat f c (hc ▸ hx) (hc ▸ hy)
           (hc ▸ hr) j.toNat b).1) := by
   unfold foldlInPlace2Prog
-  rw [InPlace.forIn_eq, foldlInPlace2.loop]
+  rw [InPlace.forInFrom_eq, foldlInPlace2.loop]
   unfold foldlInPlace2Body
   by_cases hjl : j < len
   · have hjl' : j.toNat < len.toNat := hjl
@@ -1185,7 +1184,8 @@ public def foldlInPlaceRangeWith2Acc {β₁ : Type v} {β₂ : Type w} (a : UInt
 private def foldlInPlaceRangeWith2AccBody {β₁ : Type v} {β₂ : Type w} {n : Nat}
     (start len : USize) (hw : start.toNat + len.toNat ≤ n)
     (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂) (k : USize)
-    (hk : k.toNat < len.toNat) (b₁ : β₁) (b₂ : β₂) : InPlace n (β₁ × β₂) :=
+    (_ : (0 : USize).toNat ≤ k.toNat) (hk : k.toNat < len.toNat) (b₁ : β₁) (b₂ : β₂) :
+    InPlace n (β₁ × β₂) :=
   InPlace.readThen (start + k) (InPlace.toNat_add_lt_of_window hw hk) fun x =>
   let p := f k hk x b₁ b₂
   InPlace.write (start + k) (InPlace.toNat_add_lt_of_window hw hk) p.1 >>= fun _ =>
@@ -1388,7 +1388,7 @@ public def foldrInPlaceRangeThenImpl {β : Type v} {γ : Type w} (a : UInt32Arra
   split
   · rename_i hN
     have key := foldrInPlaceRange_eq_run a start len h init f hN
-    rw [InPlace.runForInRevThen_eq, InPlace.forInRev_eq, foldrInPlaceRangeThen_eq]
+    rw [InPlace.runForInRevThen_eq, foldrInPlaceRangeThen_eq]
     exact congr_then g (congrArg Prod.fst key) (congrArg Prod.snd key) _ _
   · rfl
 
