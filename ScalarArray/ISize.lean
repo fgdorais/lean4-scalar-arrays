@@ -8,8 +8,8 @@ public import ScalarArray.ISize.Basic
 public import ScalarArray.ISize.Array
 public import ScalarArray.ISize.Slice
 public import ScalarArray.ISize.Lemmas
-public import ScalarArray.ISize.InPlace
 public import ScalarArray.ISize.Program
+public import ScalarArray.ISize.InPlace
 public import ScalarArray.ISize.Decidable
 
 /-!

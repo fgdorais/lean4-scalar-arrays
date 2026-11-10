@@ -8,5 +8,5 @@ import ScalarArrayTest.Float32.Basic
 import ScalarArrayTest.Float32.Array
 import ScalarArrayTest.Float32.Slice
 import ScalarArrayTest.Float32.Lemmas
-import ScalarArrayTest.Float32.InPlace
 import ScalarArrayTest.Float32.Program
+import ScalarArrayTest.Float32.InPlace

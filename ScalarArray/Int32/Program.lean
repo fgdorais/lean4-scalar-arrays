@@ -18,8 +18,8 @@ loops `forUp`, `forUp2`, `forDown` and `forDown2`, then run on an array with `ru
 
 The array is never visible to a program: `InPlace` and its state have private constructors, so the
 only code that touches the state is the code in this module, which passes it on linearly. That is
-what lets `write` store without checking that the array is exclusive, like the loops of the
-in-place folds.
+what lets `write` store without checking that the array is exclusive. The in-place folds of
+`ScalarArray.X.InPlace` are programs of this kind.
 
 The loops must be the loops of this module. A program that calls itself recursively compiles to a
 closure for each step, and `for` in `do` notation boxes its mutable variables at each step, so both
@@ -73,6 +73,14 @@ public def read (i : USize) (h : i.toNat < n) : InPlace n Int32 :=
   ⟨fun s => (s.array.uget i (by rw [s.size_array]; exact h), s)⟩
 
 /--
+`read i h` followed by `k` on the element, for a program `k` in any universe: `read` itself returns
+a `Int32`, so in `do` notation it binds only in programs whose results are in `Type`.
+-/
+@[inline]
+public def readThen (i : USize) (h : i.toNat < n) (k : Int32 → InPlace n α) : InPlace n α :=
+  ⟨fun s => (k (s.array.uget i (by rw [s.size_array]; exact h))).fn s⟩
+
+/--
 The index `off + j` of the window of `len` elements at `off` is in bounds, for `j < len`. This is
 the bound that `read` and `write` need in a loop over a window.
 -/
@@ -82,16 +90,17 @@ public theorem toNat_add_lt_of_window {off len j : USize} (hw : off.toNat + len.
   exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) (by lia)
 
 @[inline]
-private unsafe def writeImpl (i : USize) (_h : i.toNat < n) (v : Int32) : InPlace n Unit :=
-  ⟨fun s => ((), ⟨setUnsafe s.array i v, lcProof⟩)⟩
+private unsafe def writeImpl (i : USize) (_h : i.toNat < n) (v : Int32) :
+    InPlace.{u} n PUnit :=
+  ⟨fun s => (⟨⟩, ⟨setUnsafe s.array i v, lcProof⟩)⟩
 
 /--
 Stores `v` at index `i`. It compiles to one store, without checking that the array is exclusive:
 `run` made it exclusive, and only this module's code holds it since.
 -/
 @[implemented_by writeImpl]
-public def write (i : USize) (h : i.toNat < n) (v : Int32) : InPlace n Unit :=
-  ⟨fun s => ((), ⟨s.array.uset i v (by rw [s.size_array]; exact h),
+public def write (i : USize) (h : i.toNat < n) (v : Int32) : InPlace.{u} n PUnit :=
+  ⟨fun s => (⟨⟩, ⟨s.array.uset i v (by rw [s.size_array]; exact h),
     by rw [size_uset]; exact s.size_array⟩)⟩
 
 /--
@@ -149,7 +158,7 @@ public def forUp (len : USize) (init : β)
 
 /-- The loop of `forUp2`, with the two accumulators as separate arguments. -/
 @[specialize]
-private def forUp2.loop {β₁ β₂ : Type u} (len : USize)
+private def forUp2.loop {β₁ : Type v} {β₂ : Type w} (len : USize)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
     (j : USize) (b₁ : β₁) (b₂ : β₂) (s : State n) : (β₁ × β₂) × State n :=
   if hj : j < len then
@@ -162,7 +171,7 @@ decreasing_by exact lt_succ_of_lt hj
 
 /-- `forUpFrom` with two accumulators. It is specified by `forUp2From_eq`. -/
 @[inline]
-public def forUp2From {β₁ β₂ : Type u} (len : USize) (j₀ : USize) (init₁ : β₁) (init₂ : β₂)
+public def forUp2From {β₁ : Type v} {β₂ : Type w} (len : USize) (j₀ : USize) (init₁ : β₁) (init₂ : β₂)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
     InPlace n (β₁ × β₂) :=
   ⟨forUp2.loop len body j₀ init₁ init₂⟩
@@ -173,7 +182,7 @@ unboxed when its type is a scalar, such as a carry and a borrow. A pair accumula
 would be allocated at every step.
 -/
 @[inline]
-public def forUp2 {β₁ β₂ : Type u} (len : USize) (init₁ : β₁) (init₂ : β₂)
+public def forUp2 {β₁ : Type v} {β₂ : Type w} (len : USize) (init₁ : β₁) (init₂ : β₂)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
     InPlace n (β₁ × β₂) :=
   forUp2From len 0 init₁ init₂ body
@@ -226,7 +235,7 @@ public def forDown (len : USize) (init : β)
 
 /-- The loop of `forDown2`, with the two accumulators as separate arguments. -/
 @[specialize]
-private def forDown2.loop {β₁ β₂ : Type u} (len : USize)
+private def forDown2.loop {β₁ : Type v} {β₂ : Type w} (len : USize)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
     (j : USize) (hj : j.toNat ≤ len.toNat) (b₁ : β₁) (b₂ : β₂) (s : State n) :
     (β₁ × β₂) × State n :=
@@ -241,7 +250,7 @@ decreasing_by exact forDown_pred_lt_self h0
 
 /-- `forDownFrom` with two accumulators. It is specified by `forDown2From_eq`. -/
 @[inline]
-public def forDown2From {β₁ β₂ : Type u} (len : USize) (j₀ : USize) (h : j₀.toNat ≤ len.toNat)
+public def forDown2From {β₁ : Type v} {β₂ : Type w} (len : USize) (j₀ : USize) (h : j₀.toNat ≤ len.toNat)
     (init₁ : β₁) (init₂ : β₂)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
     InPlace n (β₁ × β₂) :=
@@ -249,7 +258,7 @@ public def forDown2From {β₁ β₂ : Type u} (len : USize) (j₀ : USize) (h :
 
 /-- `forDown` with two accumulators, kept as two loop arguments like those of `forUp2`. -/
 @[inline]
-public def forDown2 {β₁ β₂ : Type u} (len : USize) (init₁ : β₁) (init₂ : β₂)
+public def forDown2 {β₁ : Type v} {β₂ : Type w} (len : USize) (init₁ : β₁) (init₂ : β₂)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
     InPlace n (β₁ × β₂) :=
   forDown2From len len (Nat.le_refl _) init₁ init₂ body
@@ -295,9 +304,14 @@ private theorem State.ext' {s t : State n} (h : s.array = t.array) : s = t := by
     (h : a.size = n) : (read i hi).run a h = (a[i.toNat]'(by rw [h]; exact hi), a) := by
   simp only [run_eq, read]; simp
 
+@[simp] public theorem run_readThen (i : USize) (hi : i.toNat < n) (k : Int32 → InPlace n α)
+    (a : Int32Array) (h : a.size = n) :
+    (readThen i hi k).run a h = (k (a[i.toNat]'(by rw [h]; exact hi))).run a h := by
+  simp only [run_eq, readThen]; simp
+
 @[simp] public theorem run_write (i : USize) (hi : i.toNat < n) (v : Int32) (a : Int32Array)
     (h : a.size = n) :
-    (write i hi v).run a h = ((), a.set i.toNat v (by rw [h]; exact hi)) := by
+    (write i hi v : InPlace.{u} n PUnit).run a h = (⟨⟩, a.set i.toNat v (by rw [h]; exact hi)) := by
   simp only [run_eq, write]
   congr 1
 
@@ -347,7 +361,7 @@ public theorem forUpFrom_eq (len j : USize) (init : β)
     forUp len init body = forUpFrom len 0 init body := by
   rfl
 
-private theorem forUp2_loop_eq {β₁ β₂ : Type u} (len : USize)
+private theorem forUp2_loop_eq {β₁ : Type v} {β₂ : Type w} (len : USize)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) (j : USize)
     (b₁ : β₁) (b₂ : β₂) (s : State n) :
     forUp2.loop len body j b₁ b₂ s =
@@ -358,7 +372,7 @@ private theorem forUp2_loop_eq {β₁ β₂ : Type u} (len : USize)
   rw [forUp2.loop]; rfl
 
 /-- One step of `forUp2From`. -/
-public theorem forUp2From_eq {β₁ β₂ : Type u} (len j : USize) (init₁ : β₁) (init₂ : β₂)
+public theorem forUp2From_eq {β₁ : Type v} {β₂ : Type w} (len j : USize) (init₁ : β₁) (init₂ : β₂)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
     forUp2From len j init₁ init₂ body =
       if hj : j < len then
@@ -374,13 +388,13 @@ public theorem forUp2From_eq {β₁ β₂ : Type u} (len j : USize) (init₁ : �
     show forUp2.loop len body j init₁ init₂ s = _
     rw [forUp2_loop_eq, dite_eq_right_of_eq_false (eq_false hc)]; rfl
 
-@[simp] public theorem forUp2_eq {β₁ β₂ : Type u} (len : USize) (init₁ : β₁) (init₂ : β₂)
+@[simp] public theorem forUp2_eq {β₁ : Type v} {β₂ : Type w} (len : USize) (init₁ : β₁) (init₂ : β₂)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
     forUp2 len init₁ init₂ body = forUp2From len 0 init₁ init₂ body := by
   rfl
 
 /-- `forUp2From` is `forUpFrom` on the pair of accumulators. -/
-public theorem forUp2From_eq_forUpFrom {β₁ β₂ : Type u} (len j : USize) (init₁ : β₁)
+public theorem forUp2From_eq_forUpFrom {β₁ : Type v} {β₂ : Type w} (len j : USize) (init₁ : β₁)
     (init₂ : β₂)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
     forUp2From len j init₁ init₂ body =
@@ -425,7 +439,7 @@ public theorem forDownFrom_eq (len j : USize) (h : j.toNat ≤ len.toNat) (init 
     forDown len init body = forDownFrom len len (Nat.le_refl _) init body := by
   rfl
 
-private theorem forDown2_loop_eq {β₁ β₂ : Type u} (len : USize)
+private theorem forDown2_loop_eq {β₁ : Type v} {β₂ : Type w} (len : USize)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) (j : USize)
     (hj : j.toNat ≤ len.toNat) (b₁ : β₁) (b₂ : β₂) (s : State n) :
     forDown2.loop len body j hj b₁ b₂ s =
@@ -437,7 +451,7 @@ private theorem forDown2_loop_eq {β₁ β₂ : Type u} (len : USize)
   rw [forDown2.loop]; rfl
 
 /-- One step of `forDown2From`. -/
-public theorem forDown2From_eq {β₁ β₂ : Type u} (len j : USize) (h : j.toNat ≤ len.toNat)
+public theorem forDown2From_eq {β₁ : Type v} {β₂ : Type w} (len j : USize) (h : j.toNat ≤ len.toNat)
     (init₁ : β₁) (init₂ : β₂)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
     forDown2From len j h init₁ init₂ body =
@@ -454,13 +468,13 @@ public theorem forDown2From_eq {β₁ β₂ : Type u} (len j : USize) (h : j.toN
     show forDown2.loop len body j h init₁ init₂ s = _
     rw [forDown2_loop_eq, dite_eq_right_of_eq_false (eq_false hc)]; rfl
 
-@[simp] public theorem forDown2_eq {β₁ β₂ : Type u} (len : USize) (init₁ : β₁) (init₂ : β₂)
+@[simp] public theorem forDown2_eq {β₁ : Type v} {β₂ : Type w} (len : USize) (init₁ : β₁) (init₂ : β₂)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
     forDown2 len init₁ init₂ body = forDown2From len len (Nat.le_refl _) init₁ init₂ body := by
   rfl
 
 /-- `forDown2From` is `forDownFrom` on the pair of accumulators. -/
-public theorem forDown2From_eq_forDownFrom {β₁ β₂ : Type u} (len j : USize)
+public theorem forDown2From_eq_forDownFrom {β₁ : Type v} {β₂ : Type w} (len j : USize)
     (h : j.toNat ≤ len.toNat) (init₁ : β₁) (init₂ : β₂)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
     forDown2From len j h init₁ init₂ body =
@@ -472,13 +486,156 @@ public theorem forDown2From_eq_forDownFrom {β₁ β₂ : Type u} (len j : USize
 termination_by j.toNat
 decreasing_by exact forDown_pred_lt_self ‹_›
 
+/-! ## Running a loop straight into a continuation -/
+
+/-- `forUp.loop`, handing the last accumulator and state to `k` instead of returning a pair. -/
+@[specialize]
+private def forUp.loopThen {γ : Type w} (len : USize)
+    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
+    (j : USize) (b : β) (s : State n) (k : β → State n → γ) : γ :=
+  if hj : j < len then
+    match (body j hj b).fn s with
+    | (b, s) => forUp.loopThen len body (j + 1) b s k
+  else
+    k b s
+termination_by len.toNat - j.toNat
+decreasing_by exact lt_succ_of_lt hj
+
+private theorem forUp_loopThen_eq {γ : Type w} (len : USize)
+    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
+    (j : USize) (b : β) (s : State n) (k : β → State n → γ) :
+    forUp.loopThen len body j b s k =
+      k (forUp.loop len body j b s).1 (forUp.loop len body j b s).2 := by
+  rw [forUp.loopThen, forUp.loop]
+  split
+  · rename_i hj
+    exact forUp_loopThen_eq len body (j + 1) _ _ k
+  · rfl
+termination_by len.toNat - j.toNat
+decreasing_by exact lt_succ_of_lt ‹_›
+
+/--
+Runs `forUpFrom len j₀ init body` on `a`, then `g` on the last accumulator and the new array, which
+the loop calls itself: unlike `g` on the result of `run`, it builds no pair.
+-/
+@[inline]
+public def runForUpFromThen {γ : Type w} (a : Int32Array) (h : a.size = n) (len j₀ : USize)
+    (init : β) (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
+    (g : β → (a' : Int32Array) → a'.size = n → γ) : γ :=
+  forUp.loopThen len body j₀ init ⟨a.ensureExclusive, by rw [ensureExclusive_eq]; exact h⟩
+    fun b s => g b s.array s.size_array
+
+public theorem runForUpFromThen_eq {γ : Type w} (a : Int32Array) (h : a.size = n)
+    (len j₀ : USize) (init : β) (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
+    (g : β → (a' : Int32Array) → a'.size = n → γ) :
+    runForUpFromThen a h len j₀ init body g =
+      g ((forUpFrom len j₀ init body).run a h).1 ((forUpFrom len j₀ init body).run a h).2
+        (size_run ..) := by
+  unfold runForUpFromThen
+  rw [forUp_loopThen_eq]
+  rfl
+
+/-- `forDown.loop`, handing the last accumulator and state to `k` instead of returning a pair. -/
+@[specialize]
+private def forDown.loopThen {γ : Type w} (len : USize)
+    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
+    (j : USize) (hj : j.toNat ≤ len.toNat) (b : β) (s : State n) (k : β → State n → γ) : γ :=
+  if h0 : j = 0 then
+    k b s
+  else
+    match (body (j - 1) (forDown_pred_lt hj h0) b).fn s with
+    | (b, s) => forDown.loopThen len body (j - 1) (Nat.le_of_lt (forDown_pred_lt hj h0)) b s k
+termination_by j.toNat
+decreasing_by exact forDown_pred_lt_self h0
+
+private theorem forDown_loopThen_eq {γ : Type w} (len : USize)
+    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
+    (j : USize) (hj : j.toNat ≤ len.toNat) (b : β) (s : State n) (k : β → State n → γ) :
+    forDown.loopThen len body j hj b s k =
+      k (forDown.loop len body j hj b s).1 (forDown.loop len body j hj b s).2 := by
+  rw [forDown.loopThen, forDown.loop]
+  split
+  · rfl
+  · rename_i h0
+    exact forDown_loopThen_eq len body (j - 1) _ _ _ k
+termination_by j.toNat
+decreasing_by exact forDown_pred_lt_self ‹_›
+
+/-- `runForUpFromThen` for `forDownFrom`. -/
+@[inline]
+public def runForDownFromThen {γ : Type w} (a : Int32Array) (h : a.size = n) (len j₀ : USize)
+    (hj : j₀.toNat ≤ len.toNat) (init : β)
+    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
+    (g : β → (a' : Int32Array) → a'.size = n → γ) : γ :=
+  forDown.loopThen len body j₀ hj init ⟨a.ensureExclusive, by rw [ensureExclusive_eq]; exact h⟩
+    fun b s => g b s.array s.size_array
+
+public theorem runForDownFromThen_eq {γ : Type w} (a : Int32Array) (h : a.size = n)
+    (len j₀ : USize) (hj : j₀.toNat ≤ len.toNat) (init : β)
+    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
+    (g : β → (a' : Int32Array) → a'.size = n → γ) :
+    runForDownFromThen a h len j₀ hj init body g =
+      g ((forDownFrom len j₀ hj init body).run a h).1
+        ((forDownFrom len j₀ hj init body).run a h).2 (size_run ..) := by
+  unfold runForDownFromThen
+  rw [forDown_loopThen_eq]
+  rfl
+
+/-- `forUp2.loop`, handing the two last accumulators and the state to `k`. -/
+@[specialize]
+private def forUp2.loopThen {β₁ : Type v} {β₂ : Type w} {γ : Type u} (len : USize)
+    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
+    (j : USize) (b₁ : β₁) (b₂ : β₂) (s : State n) (k : β₁ → β₂ → State n → γ) : γ :=
+  if hj : j < len then
+    match (body j hj b₁ b₂).fn s with
+    | ((b₁, b₂), s) => forUp2.loopThen len body (j + 1) b₁ b₂ s k
+  else
+    k b₁ b₂ s
+termination_by len.toNat - j.toNat
+decreasing_by exact lt_succ_of_lt hj
+
+private theorem forUp2_loopThen_eq {β₁ : Type v} {β₂ : Type w} {γ : Type u} (len : USize)
+    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
+    (j : USize) (b₁ : β₁) (b₂ : β₂) (s : State n) (k : β₁ → β₂ → State n → γ) :
+    forUp2.loopThen len body j b₁ b₂ s k =
+      k (forUp2.loop len body j b₁ b₂ s).1.1 (forUp2.loop len body j b₁ b₂ s).1.2
+        (forUp2.loop len body j b₁ b₂ s).2 := by
+  rw [forUp2.loopThen, forUp2.loop]
+  split
+  · rename_i hj
+    exact forUp2_loopThen_eq len body (j + 1) _ _ _ k
+  · rfl
+termination_by len.toNat - j.toNat
+decreasing_by exact lt_succ_of_lt ‹_›
+
+/-- `runForUpFromThen` for `forUp2From`, with the two accumulators handed to `g` apart. -/
+@[inline]
+public def runForUp2FromThen {β₁ : Type v} {β₂ : Type w} {γ : Type u} (a : Int32Array)
+    (h : a.size = n) (len j₀ : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
+    (g : β₁ → β₂ → (a' : Int32Array) → a'.size = n → γ) : γ :=
+  forUp2.loopThen len body j₀ init₁ init₂ ⟨a.ensureExclusive, by rw [ensureExclusive_eq]; exact h⟩
+    fun b₁ b₂ s => g b₁ b₂ s.array s.size_array
+
+public theorem runForUp2FromThen_eq {β₁ : Type v} {β₂ : Type w} {γ : Type u} (a : Int32Array)
+    (h : a.size = n) (len j₀ : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
+    (g : β₁ → β₂ → (a' : Int32Array) → a'.size = n → γ) :
+    runForUp2FromThen a h len j₀ init₁ init₂ body g =
+      g ((forUp2From len j₀ init₁ init₂ body).run a h).1.1
+        ((forUp2From len j₀ init₁ init₂ body).run a h).1.2
+        ((forUp2From len j₀ init₁ init₂ body).run a h).2 (size_run ..) := by
+  unfold runForUp2FromThen
+  rw [forUp2_loopThen_eq]
+  rfl
+
 end InPlace
 
 /--
 Runs the program `m` on `a`, and returns its result and the new array: `m.run a rfl`. The array is
 made exclusive first, so it is copied once if it is shared, and updated in place otherwise.
 -/
-@[inline]
+@[inline, expose]
 public def runInPlace {α : Type u} (a : Int32Array) (m : InPlace a.size α) : α × Int32Array :=
   m.run a rfl
 

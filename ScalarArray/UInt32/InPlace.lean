@@ -4,7 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 module
 
-public import ScalarArray.UInt32.Lemmas
+public import ScalarArray.UInt32.Program
 import all ScalarArray.Internal
 import all ScalarArray.UInt32.Basic
 import all ScalarArray.UInt32.Array
@@ -262,24 +262,82 @@ public def foldlInPlace.loop {β : Type v} (n : Nat)
     (s, b)
 termination_by n - k
 
-@[specialize]
-private unsafe def foldlInPlaceImpl.loop {β : Type v} {γ : Type w} (base len : USize)
-    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) (g : UInt32Array → β → γ)
-    (a : UInt32Array) (k : USize) (b : β) : γ :=
-  if k < len then
-    let p := f k lcProof (a.uget (base + k) lcProof) b
-    foldlInPlaceImpl.loop base len f g (setUnsafe a (base + k) p.1) (k + 1) p.2
-  else
-    g a b
+private theorem toNat_add_of_window {off len j : USize} {n : Nat} (hn : n < USize.size)
+    (hw : off.toNat + len.toNat ≤ n) (hj : j.toNat < len.toNat) :
+    (off + j).toNat = off.toNat + j.toNat := by
+  rw [USize.toNat_add]
+  exact Nat.mod_eq_of_lt (by have : USize.size = 2 ^ System.Platform.numBits := rfl; lia)
 
+private theorem toNat_succ_of_lt' {j len : USize} (h : j.toNat < len.toNat) :
+    (j + 1).toNat = j.toNat + 1 := by
+  have h2 := USize.toNat_lt_size len
+  rw [USize.toNat_add, USize.toNat_one]
+  exact Nat.mod_eq_of_lt (by have : USize.size = 2 ^ System.Platform.numBits := rfl; lia)
+
+private theorem toNat_toUSize_of_lt {m : Nat} (h : m < USize.size) : m.toUSize.toNat = m := by
+  rw [Nat.toUSize_eq, USize.toNat_ofNat', Nat.mod_eq_of_lt h]
+
+private theorem slice_ext {s t : UInt32Array.Slice} (ha : s.array = t.array)
+    (hs : s.start = t.start) (ht : s.stop = t.stop) : s = t := by
+  obtain ⟨⟨a, i, j, h₁, h₂⟩⟩ := s
+  obtain ⟨⟨b, i', j', h₁', h₂'⟩⟩ := t
+  simp only [Slice.array, Slice.start, Slice.stop] at ha hs ht
+  subst ha hs ht; rfl
+
+/-- The step of the in-place folds over the window of `len` elements at `start`. -/
 @[inline]
-private unsafe def foldlInPlaceImpl {β : Type v} (s : UInt32Array.Slice) (init : β)
-    (f : (k : USize) → k.toNat < s.size → UInt32 → β → UInt32 × β) : UInt32Array.Slice × β :=
-  match s with
-  | ⟨⟨a, start, stop, h, _⟩⟩ =>
-    foldlInPlaceImpl.loop start.toUSize (stop - start).toUSize (fun k _ => f k lcProof)
-      (fun a b => (⟨⟨a, start, stop, h, lcProof⟩⟩, b))
-      a.ensureExclusive 0 init
+private def foldInPlaceBody {β : Type v} {n : Nat} (start len : USize)
+    (hw : start.toNat + len.toNat ≤ n)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) (k : USize)
+    (hk : k.toNat < len.toNat) (b : β) : InPlace n β :=
+  InPlace.readThen (start + k) (InPlace.toNat_add_lt_of_window hw hk) fun x =>
+  let p := f k hk x b
+  InPlace.write (start + k) (InPlace.toNat_add_lt_of_window hw hk) p.1 >>= fun _ => pure p.2
+
+/--
+The program of the in-place folds over the window of `len` elements at `start`, from step `j` up.
+-/
+@[inline]
+private def foldlInPlaceProg {β : Type v} {n : Nat} (start len : USize)
+    (hw : start.toNat + len.toNat ≤ n)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) (j : USize) (b : β) :
+    InPlace n β :=
+  InPlace.forUpFrom len j b (foldInPlaceBody start len hw f)
+
+private theorem run_foldlInPlaceProg {β : Type v} (start len : USize) (N m : Nat)
+    (hN : N < USize.size) (hw : start.toNat + len.toNat ≤ N) (hm : len.toNat = m)
+    (f : (k : USize) → k.toNat < m → UInt32 → β → UInt32 × β)
+    (s : UInt32Array.Slice) (hs : s.size = m) (hstart : s.start = start.toNat) (c : UInt32Array)
+    (hca : s.array = c) (hc : c.size = N) (j : USize) (hj : j.toNat ≤ len.toNat) (b : β) :
+    (foldlInPlaceProg start len hw (fun k hk => f k (hm ▸ hk)) j b).run c hc =
+      ((foldlInPlace.loop m f s hs j.toNat b).2, (foldlInPlace.loop m f s hs j.toNat b).1.array) := by
+  subst hca
+  unfold foldlInPlaceProg
+  rw [InPlace.forUpFrom_eq, foldlInPlace.loop]
+  unfold foldInPlaceBody
+  by_cases hjl : j < len
+  · have hjl' : j.toNat < len.toNat := hjl
+    have hjm : j.toNat < m := hm ▸ hjl'
+    rw [dite_eq_left_of_eq_true (eq_true hjl), dite_eq_left_of_eq_true (eq_true hjm)]
+    simp only [InPlace.run_bind, InPlace.run_readThen, InPlace.run_write, InPlace.run_pure]
+    have ex := toNat_add_of_window hN hw hjl'
+    have ej : j.toNat.toUSize = j := by simp
+    have h1 : (j + 1).toNat ≤ len.toNat := by rw [toNat_succ_of_lt' hjl']; lia
+    have ih := fun s hs hstart hc b =>
+      run_foldlInPlaceProg start len N m hN hw hm f s hs hstart _ rfl hc (j + 1) h1 b
+    unfold foldlInPlaceProg foldInPlaceBody at ih
+    have hset : ∀ v h, s.array.set (start + j).toNat v h = (s.set j.toNat v (by lia)).array := by
+      intro v h; simp only [array_set, ex, hstart]
+    simp only [hset]
+    rw [ih _ (by simpa using hs) (by simpa using hstart) (by simpa using hc)]
+    simp only [toNat_succ_of_lt' hjl']
+    congr 3 <;> simp only [Slice.getElem_eq, ex, hstart, ej]
+  · have hjm : ¬j.toNat < m := hm ▸ hjl
+    rw [dite_eq_right_of_eq_false (eq_false hjl), dite_eq_right_of_eq_false (eq_false hjm)]
+    simp only [InPlace.run_pure]
+termination_by len.toNat - j.toNat
+decreasing_by rw [toNat_succ_of_lt' hjl']; lia
+
 
 /--
 Replaces each element of the slice while threading an accumulator, in place like `set`: for each
@@ -292,7 +350,7 @@ The array is made exclusive once, before the loop, which then stores without che
 skipping the checks safe. The proof `hk : k.toNat < s.size` lets `f` read other arrays with
 `uget`.
 -/
-@[implemented_by foldlInPlaceImpl, expose]
+@[expose]
 public def foldlInPlace {β : Type v} (s : UInt32Array.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → UInt32 → β → UInt32 × β) : UInt32Array.Slice × β :=
   foldlInPlace.loop s.size f s rfl 0 init
@@ -371,6 +429,53 @@ public theorem getElem?_array_foldlInPlace {β : Type v} (s : UInt32Array.Slice)
     (s.foldlInPlace init f).1.array[i]? = s.array[i]? :=
   (foldlInPlace_loop_array ..).2 i hi
 
+/-- The slice `s` with its array replaced by `a`, of the same size. -/
+@[inline]
+private def withArray (s : UInt32Array.Slice) (a : UInt32Array) (h : a.size = s.array.size) :
+    UInt32Array.Slice :=
+  ⟨⟨a, s.start, s.stop, s.start_le_stop, h ▸ s.stop_le_array_size⟩⟩
+
+private theorem toNat_size_toUSize (s : UInt32Array.Slice) (hN : s.array.size < USize.size) :
+    s.size.toUSize.toNat = s.size :=
+  toNat_toUSize_of_lt (by have := s.stop_le_array_size; rw [size_eq]; lia)
+
+private theorem toNat_start_toUSize (s : UInt32Array.Slice) (hN : s.array.size < USize.size) :
+    s.start.toUSize.toNat = s.start :=
+  toNat_toUSize_of_lt (by have h₁ := s.start_le_stop; have h₂ := s.stop_le_array_size; lia)
+
+private theorem window_slice (s : UInt32Array.Slice) (hN : s.array.size < USize.size) :
+    s.start.toUSize.toNat + s.size.toUSize.toNat ≤ s.array.size := by
+  have h₁ := s.stop_le_array_size
+  have h₂ := s.start_le_stop
+  rw [toNat_size_toUSize s hN, toNat_start_toUSize s hN, size_eq]; lia
+
+/-- For internal use only. -/
+@[inline]
+public def foldlInPlaceImpl {β : Type v} (s : UInt32Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt32 → β → UInt32 × β) : UInt32Array.Slice × β :=
+  if hN : s.array.size < USize.size then
+    let r := s.array.runInPlace (foldlInPlaceProg s.start.toUSize s.size.toUSize
+      (window_slice s hN) (fun k hk => f k (toNat_size_toUSize s hN ▸ hk)) 0 init)
+    (withArray s r.2 (InPlace.size_run ..), r.1)
+  else
+    s.foldlInPlace init f
+
+@[csimp] public theorem foldlInPlace_eq_foldlInPlaceImpl : @foldlInPlace = @foldlInPlaceImpl := by
+  funext β s init f
+  unfold foldlInPlaceImpl
+  split
+  · rename_i hN
+    have key := run_foldlInPlaceProg s.start.toUSize s.size.toUSize s.array.size s.size hN
+      (window_slice s hN) (toNat_size_toUSize s hN) f s rfl (toNat_start_toUSize s hN).symm _ rfl
+      rfl 0 (by simp) init
+    apply Prod.ext
+    · apply slice_ext
+      · exact (congrArg Prod.snd key).symm
+      · exact start_foldlInPlace ..
+      · exact stop_foldlInPlace ..
+    · exact (congrArg Prod.fst key).symm
+  · rfl
+
 private theorem toList_copy_set_take (s : UInt32Array.Slice) (k : Nat) (v : UInt32)
     (h : k < s.size) : (s.set k v h).copy.toList.take (k + 1) = s.copy.toList.take k ++ [v] := by
   rw [copy_set, toList_set, List.take_add_one, List.take_set_of_le (Nat.le_refl _),
@@ -436,26 +541,6 @@ public def foldrInPlace.loop {β : Type v} (n : Nat)
     let p := f k.toUSize hk' (s[k]'(by lia)) b
     foldrInPlace.loop n f (s.set k p.1 (by lia)) (by simpa using hs) k (by lia) p.2
 
-@[specialize]
-private unsafe def foldrInPlaceImpl.loop {β : Type v} {γ : Type w} (base : USize)
-    (f : (k : USize) → UInt32 → β → UInt32 × β) (g : UInt32Array → β → γ) (a : UInt32Array)
-    (k : USize) (b : β) : γ :=
-  if 0 < k then
-    let k := k - 1
-    let p := f k (a.uget (base + k) lcProof) b
-    foldrInPlaceImpl.loop base f g (setUnsafe a (base + k) p.1) k p.2
-  else
-    g a b
-
-@[inline]
-private unsafe def foldrInPlaceImpl {β : Type v} (s : UInt32Array.Slice) (init : β)
-    (f : (k : USize) → k.toNat < s.size → UInt32 → β → UInt32 × β) : UInt32Array.Slice × β :=
-  match s with
-  | ⟨⟨a, start, stop, h, _⟩⟩ =>
-    foldrInPlaceImpl.loop start.toUSize (fun k => f k lcProof)
-      (fun a b => (⟨⟨a, start, stop, h, lcProof⟩⟩, b))
-      a.ensureExclusive (stop - start).toUSize init
-
 /--
 Replaces each element of the slice while threading an accumulator, like `foldlInPlace` but from
 the last element to the first: for each `k < s.size`, from `s.size - 1` down to `0`, the element
@@ -464,7 +549,7 @@ is the next accumulator. Returns the new slice and the last accumulator.
 
 The array is made exclusive once, before the loop, which then stores without checks.
 -/
-@[implemented_by foldrInPlaceImpl, expose]
+@[expose]
 public def foldrInPlace {β : Type v} (s : UInt32Array.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → UInt32 → β → UInt32 × β) : UInt32Array.Slice × β :=
   foldrInPlace.loop s.size f s rfl s.size (Nat.le_refl _) init
@@ -522,6 +607,83 @@ public theorem getElem?_array_foldrInPlace {β : Type v} (s : UInt32Array.Slice)
     (s.foldrInPlace init f).1.array[i]? = s.array[i]? :=
   (foldrInPlace_loop_array ..).2 i hi
 
+/--
+The program of the in-place folds over the window of `len` elements at `start`, from step `j`
+down.
+-/
+@[inline]
+private def foldrInPlaceProg {β : Type v} {n : Nat} (start len : USize)
+    (hw : start.toNat + len.toNat ≤ n)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) (j : USize)
+    (hj : j.toNat ≤ len.toNat) (b : β) : InPlace n β :=
+  InPlace.forDownFrom len j hj b (foldInPlaceBody start len hw f)
+
+private theorem run_foldrInPlaceProg {β : Type v} (start len : USize) (N m : Nat)
+    (hN : N < USize.size) (hw : start.toNat + len.toNat ≤ N) (hm : len.toNat = m)
+    (f : (k : USize) → k.toNat < m → UInt32 → β → UInt32 × β) :
+    ∀ (k : Nat) (s : UInt32Array.Slice) (hs : s.size = m) (_ : s.start = start.toNat)
+      (c : UInt32Array) (_ : s.array = c) (hc : c.size = N) (j : USize)
+      (hj : j.toNat ≤ len.toNat) (hk : j.toNat = k) (b : β),
+    (foldrInPlaceProg start len hw (fun k hk => f k (hm ▸ hk)) j hj b).run c hc =
+      ((foldrInPlace.loop m f s hs k (by lia) b).2,
+        (foldrInPlace.loop m f s hs k (by lia) b).1.array)
+  | 0, s, hs, hstart, c, hca, hc, j, hj, hk, b => by
+    subst hca
+    have h0 : j = 0 := USize.toNat_inj.1 (by simpa using hk)
+    unfold foldrInPlaceProg
+    rw [InPlace.forDownFrom_eq, dite_eq_left_of_eq_true (eq_true h0), foldrInPlace.loop]
+    simp only [InPlace.run_pure]
+  | k + 1, s, hs, hstart, c, hca, hc, j, hj, hk, b => by
+    subst hca
+    have h0 : ¬j = 0 := fun h => by subst h; simp at hk
+    have hj1 : (j - 1).toNat = k := by
+      rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le, USize.toNat_one]; lia),
+        USize.toNat_one]
+      lia
+    have hjl' : (j - 1).toNat < len.toNat := by lia
+    unfold foldrInPlaceProg
+    rw [InPlace.forDownFrom_eq, dite_eq_right_of_eq_false (eq_false h0), foldrInPlace.loop]
+    unfold foldInPlaceBody
+    simp only [InPlace.run_bind, InPlace.run_readThen, InPlace.run_write, InPlace.run_pure]
+    have ex := toNat_add_of_window hN hw hjl'
+    have ej : k.toUSize = j - 1 := by rw [← hj1]; simp
+    have ih := fun s hs hstart hc b =>
+      run_foldrInPlaceProg start len N m hN hw hm f k s hs hstart _ rfl hc (j - 1) (by lia) hj1 b
+    unfold foldrInPlaceProg foldInPlaceBody at ih
+    have hset : ∀ v h, s.array.set (start + (j - 1)).toNat v h = (s.set k v (by lia)).array := by
+      intro v h; simp only [array_set, ex, hstart, hj1]
+    simp only [hset]
+    rw [ih _ (by simpa using hs) (by simpa using hstart) (by simpa using hc)]
+    congr 3 <;> simp only [Slice.getElem_eq, ex, hstart, ej, hj1]
+
+/-- For internal use only. -/
+@[inline]
+public def foldrInPlaceImpl {β : Type v} (s : UInt32Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt32 → β → UInt32 × β) : UInt32Array.Slice × β :=
+  if hN : s.array.size < USize.size then
+    let r := s.array.runInPlace (foldrInPlaceProg s.start.toUSize s.size.toUSize
+      (window_slice s hN) (fun k hk => f k (toNat_size_toUSize s hN ▸ hk)) s.size.toUSize
+      (Nat.le_refl _) init)
+    (withArray s r.2 (InPlace.size_run ..), r.1)
+  else
+    s.foldrInPlace init f
+
+@[csimp] public theorem foldrInPlace_eq_foldrInPlaceImpl : @foldrInPlace = @foldrInPlaceImpl := by
+  funext β s init f
+  unfold foldrInPlaceImpl
+  split
+  · rename_i hN
+    have key := run_foldrInPlaceProg s.start.toUSize s.size.toUSize s.array.size s.size hN
+      (window_slice s hN) (toNat_size_toUSize s hN) f s.size s rfl (toNat_start_toUSize s hN).symm
+      _ rfl rfl _ (Nat.le_refl _) (toNat_size_toUSize s hN) init
+    apply Prod.ext
+    · apply slice_ext
+      · exact (congrArg Prod.snd key).symm
+      · exact start_foldrInPlace ..
+      · exact stop_foldrInPlace ..
+    · exact (congrArg Prod.fst key).symm
+  · rfl
+
 private theorem toList_copy_set_drop (s : UInt32Array.Slice) (k : Nat) (v : UInt32)
     (h : k < s.size) : (s.set k v h).copy.toList.drop k = v :: s.copy.toList.drop (k + 1) := by
   rw [copy_set, toList_set, List.drop_eq_getElem_cons (by simpa using h), List.getElem_set_self,
@@ -572,16 +734,6 @@ public theorem foldrInPlace_eq_foldr_finRange {β : Type v} (s : UInt32Array.Sli
   rw [List.take_of_length_le (by simp), List.drop_of_length_le (by simp)] at this
   exact this
 
-@[inline]
-private unsafe def foldlInPlaceThenImpl {β : Type v} {γ : Type w} (s : UInt32Array.Slice)
-    (init : β) (f : (k : USize) → k.toNat < s.size → UInt32 → β → UInt32 × β)
-    (g : UInt32Array.Slice → β → γ) : γ :=
-  match s with
-  | ⟨⟨a, start, stop, h, _⟩⟩ =>
-    foldlInPlaceImpl.loop start.toUSize (stop - start).toUSize (fun k _ => f k lcProof)
-      (fun a b => g ⟨⟨a, start, stop, h, lcProof⟩⟩ b)
-      a.ensureExclusive 0 init
-
 /--
 `foldlInPlace` followed by `g` on the new slice and the last accumulator, which the loop calls
 itself where `foldlInPlace` returns them as a pair. The pair is a heap object, allocated once per
@@ -589,7 +741,7 @@ call, which shows when the fold runs over short slices many times; when `g` cons
 accumulator, for example by writing it into the slice, no pair is allocated at all.
 `foldlInPlace` is the case `g := Prod.mk`.
 -/
-@[implemented_by foldlInPlaceThenImpl, expose]
+@[expose]
 public def foldlInPlaceThen {β : Type v} {γ : Type w} (s : UInt32Array.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → UInt32 → β → UInt32 × β)
     (g : UInt32Array.Slice → β → γ) : γ :=
@@ -601,22 +753,45 @@ public def foldlInPlaceThen {β : Type v} {γ : Type w} (s : UInt32Array.Slice) 
     s.foldlInPlaceThen init f g = g (s.foldlInPlace init f).1 (s.foldlInPlace init f).2 :=
   rfl
 
+/-- For internal use only. -/
 @[inline]
-private unsafe def foldrInPlaceThenImpl {β : Type v} {γ : Type w} (s : UInt32Array.Slice)
-    (init : β) (f : (k : USize) → k.toNat < s.size → UInt32 → β → UInt32 × β)
+public def foldlInPlaceThenImpl {β : Type v} {γ : Type w} (s : UInt32Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt32 → β → UInt32 × β)
     (g : UInt32Array.Slice → β → γ) : γ :=
-  match s with
-  | ⟨⟨a, start, stop, h, _⟩⟩ =>
-    foldrInPlaceImpl.loop start.toUSize (fun k => f k lcProof)
-      (fun a b => g ⟨⟨a, start, stop, h, lcProof⟩⟩ b)
-      a.ensureExclusive (stop - start).toUSize init
+  -- Taking `s` apart up front keeps the continuation from holding `s`, and with it the array.
+  match s, f with
+  | ⟨⟨a, start, stop, h₁, h₂⟩⟩, f =>
+    let s' : UInt32Array.Slice := ⟨⟨a, start, stop, h₁, h₂⟩⟩
+    if hN : a.size < USize.size then
+      InPlace.runForUpFromThen a rfl s'.size.toUSize 0 init
+        (foldInPlaceBody s'.start.toUSize s'.size.toUSize (window_slice s' hN)
+          fun k hk => f k (toNat_size_toUSize s' hN ▸ hk))
+        fun b a' ha => g ⟨⟨a', start, stop, h₁, ha ▸ h₂⟩⟩ b
+    else
+      let r := s'.foldlInPlace init f
+      g r.1 r.2
+
+@[csimp] public theorem foldlInPlaceThen_eq_foldlInPlaceThenImpl :
+    @foldlInPlaceThen = @foldlInPlaceThenImpl := by
+  funext β γ s init f g
+  obtain ⟨⟨a, start, stop, h₁, h₂⟩⟩ := s
+  unfold foldlInPlaceThenImpl
+  dsimp only
+  split
+  · rename_i hN
+    rw [InPlace.runForUpFromThen_eq, foldlInPlaceThen_eq, foldlInPlace_eq_foldlInPlaceImpl]
+    unfold foldlInPlaceImpl
+    split
+    · rfl
+    · exact absurd hN ‹_›
+  · rfl
 
 /--
 `foldrInPlace` followed by `g` on the new slice and the last accumulator, which the loop calls
 itself where `foldrInPlace` returns them as a pair. When `g` consumes the accumulator, no pair is
 allocated. `foldrInPlace` is the case `g := Prod.mk`.
 -/
-@[implemented_by foldrInPlaceThenImpl, expose]
+@[expose]
 public def foldrInPlaceThen {β : Type v} {γ : Type w} (s : UInt32Array.Slice) (init : β)
     (f : (k : USize) → k.toNat < s.size → UInt32 → β → UInt32 × β)
     (g : UInt32Array.Slice → β → γ) : γ :=
@@ -628,7 +803,52 @@ public def foldrInPlaceThen {β : Type v} {γ : Type w} (s : UInt32Array.Slice) 
     s.foldrInPlaceThen init f g = g (s.foldrInPlace init f).1 (s.foldrInPlace init f).2 :=
   rfl
 
+/-- For internal use only. -/
+@[inline]
+public def foldrInPlaceThenImpl {β : Type v} {γ : Type w} (s : UInt32Array.Slice) (init : β)
+    (f : (k : USize) → k.toNat < s.size → UInt32 → β → UInt32 × β)
+    (g : UInt32Array.Slice → β → γ) : γ :=
+  -- Taking `s` apart up front keeps the continuation from holding `s`, and with it the array.
+  match s, f with
+  | ⟨⟨a, start, stop, h₁, h₂⟩⟩, f =>
+    let s' : UInt32Array.Slice := ⟨⟨a, start, stop, h₁, h₂⟩⟩
+    if hN : a.size < USize.size then
+      InPlace.runForDownFromThen a rfl s'.size.toUSize s'.size.toUSize (Nat.le_refl _) init
+        (foldInPlaceBody s'.start.toUSize s'.size.toUSize (window_slice s' hN)
+          fun k hk => f k (toNat_size_toUSize s' hN ▸ hk))
+        fun b a' ha => g ⟨⟨a', start, stop, h₁, ha ▸ h₂⟩⟩ b
+    else
+      let r := s'.foldrInPlace init f
+      g r.1 r.2
+
+@[csimp] public theorem foldrInPlaceThen_eq_foldrInPlaceThenImpl :
+    @foldrInPlaceThen = @foldrInPlaceThenImpl := by
+  funext β γ s init f g
+  obtain ⟨⟨a, start, stop, h₁, h₂⟩⟩ := s
+  unfold foldrInPlaceThenImpl
+  dsimp only
+  split
+  · rename_i hN
+    rw [InPlace.runForDownFromThen_eq, foldrInPlaceThen_eq, foldrInPlace_eq_foldrInPlaceImpl]
+    unfold foldrInPlaceImpl
+    split
+    · rfl
+    · exact absurd hN ‹_›
+  · rfl
+
 end Slice
+
+private theorem congr_then {β : Type v} {γ : Type w} {N : Nat}
+    (g : (a' : UInt32Array) → a'.size = N → β → γ) {a₁ a₂ : UInt32Array} {b₁ b₂ : β}
+    (ha : a₁ = a₂) (hb : b₁ = b₂) (h₁ : a₁.size = N) (h₂ : a₂.size = N) :
+    g a₁ h₁ b₁ = g a₂ h₂ b₂ := by
+  subst ha hb; rfl
+
+private theorem congr_then2 {β₁ : Type v} {β₂ : Type w} {γ : Type u} {N : Nat}
+    (g : (a' : UInt32Array) → a'.size = N → β₁ → β₂ → γ) {a₁ a₂ : UInt32Array} {b₁ c₁ : β₁}
+    {b₂ c₂ : β₂} (ha : a₁ = a₂) (hb₁ : b₁ = c₁) (hb₂ : b₂ = c₂) (h₁ : a₁.size = N)
+    (h₂ : a₂.size = N) : g a₁ h₁ b₁ b₂ = g a₂ h₂ c₁ c₂ := by
+  subst ha hb₁ hb₂; rfl
 
 /-! ## Folding over windows of one array -/
 
@@ -649,24 +869,6 @@ public def foldlInPlace2.loop {β : Type v} (xs ys rs len : Nat)
     (a, b)
 termination_by len - j
 
-@[specialize]
-private unsafe def foldlInPlace2Impl.loop {β : Type v} {γ : Type w} (xs ys rs len : USize)
-    (f : (j : USize) → UInt32 → UInt32 → β → UInt32 × β) (g : UInt32Array → β → γ)
-    (a : UInt32Array) (j : USize) (b : β) : γ :=
-  if j < len then
-    let p := f j (a.uget (xs + j) lcProof) (a.uget (ys + j) lcProof) b
-    foldlInPlace2Impl.loop xs ys rs len f g (setUnsafe a (rs + j) p.1) (j + 1) p.2
-  else
-    g a b
-
-@[inline]
-private unsafe def foldlInPlace2Impl {β : Type v} (a : UInt32Array) (xs ys rs len : USize)
-    (_ : xs.toNat + len.toNat ≤ a.size) (_ : ys.toNat + len.toNat ≤ a.size)
-    (_ : rs.toNat + len.toNat ≤ a.size) (init : β)
-    (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β) :
-    UInt32Array × β :=
-  foldlInPlace2Impl.loop xs ys rs len (fun j => f j lcProof) Prod.mk a.ensureExclusive 0 init
-
 /--
 Writes the window of `len` elements at `rs` from the windows at `xs` and `ys` of the same array,
 in place, threading an accumulator: for each `j < len`, from `0` up, it reads `x := a[xs + j]` and
@@ -681,7 +883,7 @@ not, and then the first write would copy the whole array.
 
 The array is made exclusive once, before the loop, which then reads and stores without checks.
 -/
-@[implemented_by foldlInPlace2Impl, expose]
+@[expose]
 public def foldlInPlace2 {β : Type v} (a : UInt32Array) (xs ys rs len : USize)
     (hx : xs.toNat + len.toNat ≤ a.size) (hy : ys.toNat + len.toNat ≤ a.size)
     (hr : rs.toNat + len.toNat ≤ a.size) (init : β)
@@ -704,14 +906,83 @@ private theorem size_foldlInPlace2_loop {β : Type v} (xs ys rs len : Nat)
     (a.foldlInPlace2 xs ys rs len hx hy hr init f).1.size = a.size :=
   size_foldlInPlace2_loop ..
 
+
+/-- The step of `foldlInPlace2`. -/
 @[inline]
-private unsafe def foldlInPlace2ThenImpl {β : Type v} {γ : Type w} (a : UInt32Array)
-    (xs ys rs len : USize) (_ : xs.toNat + len.toNat ≤ a.size)
-    (_ : ys.toNat + len.toNat ≤ a.size) (_ : rs.toNat + len.toNat ≤ a.size) (init : β)
+private def foldlInPlace2Body {β : Type v} {n : Nat} (xs ys rs len : USize)
+    (hx : xs.toNat + len.toNat ≤ n) (hy : ys.toNat + len.toNat ≤ n)
+    (hr : rs.toNat + len.toNat ≤ n)
+    (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β) (j : USize)
+    (hj : j.toNat < len.toNat) (b : β) : InPlace n β :=
+  InPlace.readThen (xs + j) (InPlace.toNat_add_lt_of_window hx hj) fun x =>
+  InPlace.readThen (ys + j) (InPlace.toNat_add_lt_of_window hy hj) fun y =>
+  let p := f j hj x y b
+  InPlace.write (rs + j) (InPlace.toNat_add_lt_of_window hr hj) p.1 >>= fun _ => pure p.2
+
+/-- The program of `foldlInPlace2`, from step `j` on. -/
+@[inline]
+private def foldlInPlace2Prog {β : Type v} {n : Nat} (xs ys rs len : USize)
+    (hx : xs.toNat + len.toNat ≤ n) (hy : ys.toNat + len.toNat ≤ n)
+    (hr : rs.toNat + len.toNat ≤ n)
+    (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β) (j : USize)
+    (b : β) : InPlace n β :=
+  InPlace.forUpFrom len j b (foldlInPlace2Body xs ys rs len hx hy hr f)
+
+private theorem run_foldlInPlace2Prog {β : Type v} (xs ys rs len : USize) (n : Nat)
+    (hn : n < USize.size) (hx : xs.toNat + len.toNat ≤ n) (hy : ys.toNat + len.toNat ≤ n)
+    (hr : rs.toNat + len.toNat ≤ n)
     (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β)
-    (g : (a' : UInt32Array) → a'.size = a.size → β → γ) : γ :=
-  foldlInPlace2Impl.loop xs ys rs len (fun j => f j lcProof) (fun a' b => g a' lcProof b)
-    a.ensureExclusive 0 init
+    (c : UInt32Array) (hc : c.size = n) (j : USize) (hj : j.toNat ≤ len.toNat) (b : β) :
+    (foldlInPlace2Prog xs ys rs len hx hy hr f j b).run c hc =
+      ((foldlInPlace2.loop xs.toNat ys.toNat rs.toNat len.toNat f c (hc ▸ hx) (hc ▸ hy)
+          (hc ▸ hr) j.toNat b).2,
+        (foldlInPlace2.loop xs.toNat ys.toNat rs.toNat len.toNat f c (hc ▸ hx) (hc ▸ hy)
+          (hc ▸ hr) j.toNat b).1) := by
+  unfold foldlInPlace2Prog
+  rw [InPlace.forUpFrom_eq, foldlInPlace2.loop]
+  unfold foldlInPlace2Body
+  by_cases hjl : j < len
+  · have hjl' : j.toNat < len.toNat := hjl
+    rw [dite_eq_left_of_eq_true (eq_true hjl), dite_eq_left_of_eq_true (eq_true hjl')]
+    simp only [InPlace.run_bind, InPlace.run_readThen, InPlace.run_write, InPlace.run_pure]
+    have ex := Slice.toNat_add_of_window hn hx hjl'
+    have ey := Slice.toNat_add_of_window hn hy hjl'
+    have er := Slice.toNat_add_of_window hn hr hjl'
+    have ej : j.toNat.toUSize = j := by simp
+    have h1 : (j + 1).toNat ≤ len.toNat := by rw [Slice.toNat_succ_of_lt' hjl']; lia
+    have ih := fun c hc b => run_foldlInPlace2Prog xs ys rs len n hn hx hy hr f c hc (j + 1) h1 b
+    unfold foldlInPlace2Prog foldlInPlace2Body at ih
+    rw [ih]
+    simp only [Slice.toNat_succ_of_lt' hjl']
+    congr 3 <;> simp only [ex, ey, er, ej]
+  · have hjl' : ¬j.toNat < len.toNat := hjl
+    rw [dite_eq_right_of_eq_false (eq_false hjl), dite_eq_right_of_eq_false (eq_false hjl')]
+    simp only [InPlace.run_pure]
+termination_by len.toNat - j.toNat
+decreasing_by rw [Slice.toNat_succ_of_lt' hjl']; lia
+
+/-- For internal use only. -/
+@[inline]
+public def foldlInPlace2Impl {β : Type v} (a : UInt32Array) (xs ys rs len : USize)
+    (hx : xs.toNat + len.toNat ≤ a.size) (hy : ys.toNat + len.toNat ≤ a.size)
+    (hr : rs.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β) :
+    UInt32Array × β :=
+  if a.size < USize.size then
+    let r := a.runInPlace (foldlInPlace2Prog xs ys rs len hx hy hr f 0 init)
+    (r.2, r.1)
+  else
+    a.foldlInPlace2 xs ys rs len hx hy hr init f
+
+@[csimp] public theorem foldlInPlace2_eq_foldlInPlace2Impl :
+    @foldlInPlace2 = @foldlInPlace2Impl := by
+  funext β a xs ys rs len hx hy hr init f
+  unfold foldlInPlace2Impl
+  split
+  · rename_i hn
+    rw [runInPlace_eq, run_foldlInPlace2Prog (hn := hn) (hj := by simp)]
+    rfl
+  · rfl
 
 /--
 `foldlInPlace2` followed by `g` on the new array and the last accumulator, which the loop calls
@@ -719,7 +990,7 @@ itself where `foldlInPlace2` returns them as a pair. When `g` consumes the accum
 allocated. `g` also receives a proof that the size is unchanged, so that it can go on with bounded
 reads and writes, such as another `foldlInPlace2Then`.
 -/
-@[implemented_by foldlInPlace2ThenImpl, expose]
+@[expose]
 public def foldlInPlace2Then {β : Type v} {γ : Type w} (a : UInt32Array) (xs ys rs len : USize)
     (hx : xs.toNat + len.toNat ≤ a.size) (hy : ys.toNat + len.toNat ≤ a.size)
     (hr : rs.toNat + len.toNat ≤ a.size) (init : β)
@@ -738,14 +1009,32 @@ public def foldlInPlace2Then {β : Type v} {γ : Type w} (a : UInt32Array) (xs y
         (a.foldlInPlace2 xs ys rs len hx hy hr init f).2 :=
   rfl
 
-/-! ## In-place folds over a `USize` range -/
-
+/-- For internal use only. -/
 @[inline]
-private unsafe def foldlInPlaceRangeImpl {β : Type v} (a : UInt32Array) (start len : USize)
-    (_ : start.toNat + len.toNat ≤ a.size) (init : β)
-    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) :
-    UInt32Array × β :=
-  Slice.foldlInPlaceImpl.loop start len f Prod.mk a.ensureExclusive 0 init
+public def foldlInPlace2ThenImpl {β : Type v} {γ : Type w} (a : UInt32Array) (xs ys rs len : USize)
+    (hx : xs.toNat + len.toNat ≤ a.size) (hy : ys.toNat + len.toNat ≤ a.size)
+    (hr : rs.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (j : USize) → j.toNat < len.toNat → UInt32 → UInt32 → β → UInt32 × β)
+    (g : (a' : UInt32Array) → a'.size = a.size → β → γ) : γ :=
+  if _ : a.size < USize.size then
+    InPlace.runForUpFromThen a rfl len 0 init (foldlInPlace2Body xs ys rs len hx hy hr f)
+      fun b a' ha => g a' ha b
+  else
+    let r := a.foldlInPlace2 xs ys rs len hx hy hr init f
+    g r.1 (size_foldlInPlace2 ..) r.2
+
+@[csimp] public theorem foldlInPlace2Then_eq_foldlInPlace2ThenImpl :
+    @foldlInPlace2Then = @foldlInPlace2ThenImpl := by
+  funext β γ a xs ys rs len hx hy hr init f g
+  unfold foldlInPlace2ThenImpl
+  split
+  · rename_i hN
+    have key := run_foldlInPlace2Prog xs ys rs len a.size hN hx hy hr f a rfl 0 (by simp) init
+    rw [InPlace.runForUpFromThen_eq, foldlInPlace2Then_eq]
+    exact congr_then g (congrArg Prod.snd key).symm (congrArg Prod.fst key).symm _ _
+  · rfl
+
+/-! ## In-place folds over a `USize` range -/
 
 /--
 `foldlInPlace` on the slice `a[start.toNat...start.toNat + len.toNat]`, for bounds that are
@@ -754,7 +1043,7 @@ fold, so the slice lemmas apply after `foldlInPlaceRange_eq`. The implementation
 `foldlInPlace` on the `USize` bounds directly, without building the slice, whose `Nat` bounds
 cost a conversion on the way in and out of every call.
 -/
-@[implemented_by foldlInPlaceRangeImpl, expose]
+@[expose]
 public def foldlInPlaceRange {β : Type v} (a : UInt32Array) (start len : USize)
     (h : start.toNat + len.toNat ≤ a.size) (init : β)
     (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) :
@@ -780,13 +1069,39 @@ public def foldlInPlaceRange {β : Type v} (a : UInt32Array) (start len : USize)
     (a.foldlInPlaceRange start len h init f).1.size = a.size := by
   simp
 
+private theorem foldlInPlaceRange_eq_run {β : Type v} (a : UInt32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) (hN : a.size < USize.size) :
+    a.foldlInPlaceRange start len h init f =
+      ((a.runInPlace (Slice.foldlInPlaceProg start len h f 0 init)).2,
+        (a.runInPlace (Slice.foldlInPlaceProg start len h f 0 init)).1) := by
+  have hsz : len.toNat = (a.toSlice start.toNat (start.toNat + len.toNat)).size := by simp; lia
+  have hst : (a.toSlice start.toNat (start.toNat + len.toNat)).start = start.toNat := by simp; lia
+  have key := Slice.run_foldlInPlaceProg start len a.size _ hN h hsz
+    (fun k hk => f k (by simp only [size_toSlice] at hk; lia)) _ rfl hst a (array_toSlice ..) rfl 0
+    (by simp) init
+  rw [runInPlace_eq]
+  exact (Prod.ext (congrArg Prod.snd key) (congrArg Prod.fst key)).symm
+
+/-- For internal use only. -/
 @[inline]
-private unsafe def foldlInPlaceRangeThenImpl {β : Type v} {γ : Type w} (a : UInt32Array)
-    (start len : USize) (_ : start.toNat + len.toNat ≤ a.size) (init : β)
-    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β)
-    (g : (a' : UInt32Array) → a'.size = a.size → β → γ) : γ :=
-  Slice.foldlInPlaceImpl.loop start len f (fun a' b => g a' lcProof b)
-    a.ensureExclusive 0 init
+public def foldlInPlaceRangeImpl {β : Type v} (a : UInt32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) :
+    UInt32Array × β :=
+  if a.size < USize.size then
+    let r := a.runInPlace (Slice.foldlInPlaceProg start len h f 0 init)
+    (r.2, r.1)
+  else
+    a.foldlInPlaceRange start len h init f
+
+@[csimp] public theorem foldlInPlaceRange_eq_foldlInPlaceRangeImpl :
+    @foldlInPlaceRange = @foldlInPlaceRangeImpl := by
+  funext β a start len h init f
+  unfold foldlInPlaceRangeImpl
+  split
+  · exact foldlInPlaceRange_eq_run a start len h init f ‹_›
+  · rfl
 
 /--
 `foldlInPlaceRange` followed by `g` on the new array and the last accumulator, which the loop
@@ -794,7 +1109,7 @@ calls itself where `foldlInPlaceRange` returns them as a pair, like `Slice.foldl
 `g` also receives a proof that the size is unchanged, like `foldlInPlace2Then`, so that it can go
 on with bounded reads and writes.
 -/
-@[implemented_by foldlInPlaceRangeThenImpl, expose]
+@[expose]
 public def foldlInPlaceRangeThen {β : Type v} {γ : Type w} (a : UInt32Array) (start len : USize)
     (h : start.toNat + len.toNat ≤ a.size) (init : β)
     (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β)
@@ -811,29 +1126,29 @@ public def foldlInPlaceRangeThen {β : Type v} {γ : Type w} (a : UInt32Array) (
         (a.foldlInPlaceRange start len h init f).2 :=
   rfl
 
-/--
-The loop of `foldlInPlaceRange`, with the accumulator split into two arguments, so that each one
-stays unboxed when its type is a scalar.
--/
-@[specialize]
-private unsafe def foldlInPlaceRangeWith2AccImpl.loop {β₁ : Type v} {β₂ : Type w} {γ : Type u}
-    (base len : USize)
-    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂)
-    (g : UInt32Array → β₁ → β₂ → γ) (a : UInt32Array) (k : USize) (b₁ : β₁) (b₂ : β₂) : γ :=
-  if k < len then
-    let p := f k lcProof (a.uget (base + k) lcProof) b₁ b₂
-    foldlInPlaceRangeWith2AccImpl.loop base len f g (setUnsafe a (base + k) p.1) (k + 1) p.2.1
-      p.2.2
-  else
-    g a b₁ b₂
-
+/-- For internal use only. -/
 @[inline]
-private unsafe def foldlInPlaceRangeWith2AccImpl {β₁ : Type v} {β₂ : Type w} (a : UInt32Array)
-    (start len : USize) (_ : start.toNat + len.toNat ≤ a.size) (init₁ : β₁) (init₂ : β₂)
-    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂) :
-    UInt32Array × β₁ × β₂ :=
-  foldlInPlaceRangeWith2AccImpl.loop start len f (fun a b₁ b₂ => (a, b₁, b₂)) a.ensureExclusive 0
-    init₁ init₂
+public def foldlInPlaceRangeThenImpl {β : Type v} {γ : Type w} (a : UInt32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β)
+    (g : (a' : UInt32Array) → a'.size = a.size → β → γ) : γ :=
+  if _ : a.size < USize.size then
+    InPlace.runForUpFromThen a rfl len 0 init (Slice.foldInPlaceBody start len h f)
+      fun b a' ha => g a' ha b
+  else
+    let r := a.foldlInPlaceRange start len h init f
+    g r.1 (size_foldlInPlaceRange ..) r.2
+
+@[csimp] public theorem foldlInPlaceRangeThen_eq_foldlInPlaceRangeThenImpl :
+    @foldlInPlaceRangeThen = @foldlInPlaceRangeThenImpl := by
+  funext β γ a start len h init f g
+  unfold foldlInPlaceRangeThenImpl
+  split
+  · rename_i hN
+    have key := foldlInPlaceRange_eq_run a start len h init f hN
+    rw [InPlace.runForUpFromThen_eq, foldlInPlaceRangeThen_eq]
+    exact congr_then g (congrArg Prod.fst key) (congrArg Prod.snd key) _ _
+  · rfl
 
 /--
 `foldlInPlaceRange` with two accumulators: returns the new array and the two last accumulators.
@@ -842,7 +1157,7 @@ apply after `foldlInPlaceRangeWith2Acc_eq`. The implementation passes the two ac
 separate arguments of the loop, where a pair would be allocated at every element and would box
 scalar accumulators such as `UInt64` carries.
 -/
-@[implemented_by foldlInPlaceRangeWith2AccImpl, expose]
+@[expose]
 public def foldlInPlaceRangeWith2Acc {β₁ : Type v} {β₂ : Type w} (a : UInt32Array)
     (start len : USize) (h : start.toNat + len.toNat ≤ a.size) (init₁ : β₁) (init₂ : β₂)
     (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂) :
@@ -864,20 +1179,64 @@ public def foldlInPlaceRangeWith2Acc {β₁ : Type v} {β₂ : Type w} (a : UInt
     (a.foldlInPlaceRangeWith2Acc start len h init₁ init₂ f).1.size = a.size := by
   simp
 
+/-- The step of `foldlInPlaceRangeWith2Acc`. -/
 @[inline]
-private unsafe def foldlInPlaceRangeWith2AccThenImpl {β₁ : Type v} {β₂ : Type w} {γ : Type u}
-    (a : UInt32Array) (start len : USize) (_ : start.toNat + len.toNat ≤ a.size) (init₁ : β₁)
-    (init₂ : β₂)
+private def foldlInPlaceRangeWith2AccBody {β₁ : Type v} {β₂ : Type w} {n : Nat}
+    (start len : USize) (hw : start.toNat + len.toNat ≤ n)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂) (k : USize)
+    (hk : k.toNat < len.toNat) (b₁ : β₁) (b₂ : β₂) : InPlace n (β₁ × β₂) :=
+  InPlace.readThen (start + k) (InPlace.toNat_add_lt_of_window hw hk) fun x =>
+  let p := f k hk x b₁ b₂
+  InPlace.write (start + k) (InPlace.toNat_add_lt_of_window hw hk) p.1 >>= fun _ =>
+    pure (p.2.1, p.2.2)
+
+private theorem forUp2From_with2AccBody {β₁ : Type v} {β₂ : Type w} {n : Nat}
+    (start len : USize) (hw : start.toNat + len.toNat ≤ n)
     (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂)
-    (g : (a' : UInt32Array) → a'.size = a.size → β₁ → β₂ → γ) : γ :=
-  foldlInPlaceRangeWith2AccImpl.loop start len f (fun a' b₁ b₂ => g a' lcProof b₁ b₂)
-    a.ensureExclusive 0 init₁ init₂
+    (init₁ : β₁) (init₂ : β₂) :
+    InPlace.forUp2From len 0 init₁ init₂ (foldlInPlaceRangeWith2AccBody start len hw f) =
+      InPlace.forUpFrom len 0 (init₁, init₂)
+        (Slice.foldInPlaceBody start len hw fun k hk x b => f k hk x b.1 b.2) := by
+  rw [InPlace.forUp2From_eq_forUpFrom]
+  rfl
+
+/-- The program of `foldlInPlaceRangeWith2Acc`, with the two accumulators kept apart. -/
+@[inline]
+private def foldlInPlaceRangeWith2AccProg {β₁ : Type v} {β₂ : Type w} {n : Nat}
+    (start len : USize) (hw : start.toNat + len.toNat ≤ n)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂)
+    (b₁ : β₁) (b₂ : β₂) : InPlace n (β₁ × β₂) :=
+  InPlace.forUp2 len b₁ b₂ (foldlInPlaceRangeWith2AccBody start len hw f)
+
+/-- For internal use only. -/
+@[inline]
+public def foldlInPlaceRangeWith2AccImpl {β₁ : Type v} {β₂ : Type w} (a : UInt32Array)
+    (start len : USize) (h : start.toNat + len.toNat ≤ a.size) (init₁ : β₁) (init₂ : β₂)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂) :
+    UInt32Array × β₁ × β₂ :=
+  if a.size < USize.size then
+    let r := a.runInPlace (foldlInPlaceRangeWith2AccProg start len h f init₁ init₂)
+    (r.2, r.1.1, r.1.2)
+  else
+    a.foldlInPlaceRangeWith2Acc start len h init₁ init₂ f
+
+@[csimp] public theorem foldlInPlaceRangeWith2Acc_eq_foldlInPlaceRangeWith2AccImpl :
+    @foldlInPlaceRangeWith2Acc = @foldlInPlaceRangeWith2AccImpl := by
+  funext β₁ β₂ a start len h init₁ init₂ f
+  unfold foldlInPlaceRangeWith2AccImpl
+  split
+  · rename_i hN
+    rw [foldlInPlaceRangeWith2Acc_eq, foldlInPlaceRange_eq_run (hN := hN)]
+    unfold foldlInPlaceRangeWith2AccProg
+    rw [InPlace.forUp2_eq, forUp2From_with2AccBody]
+    rfl
+  · rfl
 
 /--
 `foldlInPlaceRangeWith2Acc` followed by `g` on the new array, a proof that its size is unchanged
 and the two last accumulators, like `foldlInPlaceRangeThen`.
 -/
-@[implemented_by foldlInPlaceRangeWith2AccThenImpl, expose]
+@[expose]
 public def foldlInPlaceRangeWith2AccThen {β₁ : Type v} {β₂ : Type w} {γ : Type u}
     (a : UInt32Array) (start len : USize) (h : start.toNat + len.toNat ≤ a.size) (init₁ : β₁)
     (init₂ : β₂)
@@ -896,18 +1255,38 @@ public def foldlInPlaceRangeWith2AccThen {β₁ : Type v} {β₂ : Type w} {γ :
         fun a' ha b => g a' ha b.1 b.2 :=
   rfl
 
+/-- For internal use only. -/
 @[inline]
-private unsafe def foldrInPlaceRangeImpl {β : Type v} (a : UInt32Array) (start len : USize)
-    (_ : start.toNat + len.toNat ≤ a.size) (init : β)
-    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) :
-    UInt32Array × β :=
-  Slice.foldrInPlaceImpl.loop start (fun k => f k lcProof) Prod.mk a.ensureExclusive len init
+public def foldlInPlaceRangeWith2AccThenImpl {β₁ : Type v} {β₂ : Type w} {γ : Type u}
+    (a : UInt32Array) (start len : USize) (h : start.toNat + len.toNat ≤ a.size) (init₁ : β₁)
+    (init₂ : β₂)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β₁ → β₂ → UInt32 × β₁ × β₂)
+    (g : (a' : UInt32Array) → a'.size = a.size → β₁ → β₂ → γ) : γ :=
+  if _ : a.size < USize.size then
+    InPlace.runForUp2FromThen a rfl len 0 init₁ init₂ (foldlInPlaceRangeWith2AccBody start len h f)
+      fun b₁ b₂ a' ha => g a' ha b₁ b₂
+  else
+    let r := a.foldlInPlaceRangeWith2Acc start len h init₁ init₂ f
+    g r.1 (size_foldlInPlaceRangeWith2Acc ..) r.2.1 r.2.2
+
+@[csimp] public theorem foldlInPlaceRangeWith2AccThen_eq_foldlInPlaceRangeWith2AccThenImpl :
+    @foldlInPlaceRangeWith2AccThen = @foldlInPlaceRangeWith2AccThenImpl := by
+  funext β₁ β₂ γ a start len h init₁ init₂ f g
+  unfold foldlInPlaceRangeWith2AccThenImpl
+  split
+  · rename_i hN
+    have key := foldlInPlaceRange_eq_run a start len h (init₁, init₂)
+      (fun k hk x b => f k hk x b.1 b.2) hN
+    rw [InPlace.runForUp2FromThen_eq, forUp2From_with2AccBody, foldlInPlaceRangeWith2AccThen_eq,
+      foldlInPlaceRangeThen_eq]
+    exact congr_then2 g (congrArg Prod.fst key) (congrArg (·.2.1) key) (congrArg (·.2.2) key) _ _
+  · rfl
 
 /--
 `foldrInPlace` on the slice `a[start.toNat...start.toNat + len.toNat]`, for bounds that are
 already `USize`, like `foldlInPlaceRange`: returns the new array and the last accumulator.
 -/
-@[implemented_by foldrInPlaceRangeImpl, expose]
+@[expose]
 public def foldrInPlaceRange {β : Type v} (a : UInt32Array) (start len : USize)
     (h : start.toNat + len.toNat ≤ a.size) (init : β)
     (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) :
@@ -933,19 +1312,45 @@ public def foldrInPlaceRange {β : Type v} (a : UInt32Array) (start len : USize)
     (a.foldrInPlaceRange start len h init f).1.size = a.size := by
   simp
 
+private theorem foldrInPlaceRange_eq_run {β : Type v} (a : UInt32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) (hN : a.size < USize.size) :
+    a.foldrInPlaceRange start len h init f =
+      ((a.runInPlace (Slice.foldrInPlaceProg start len h f len (Nat.le_refl _) init)).2,
+        (a.runInPlace (Slice.foldrInPlaceProg start len h f len (Nat.le_refl _) init)).1) := by
+  have hsz : len.toNat = (a.toSlice start.toNat (start.toNat + len.toNat)).size := by simp; lia
+  have hst : (a.toSlice start.toNat (start.toNat + len.toNat)).start = start.toNat := by simp; lia
+  have key := Slice.run_foldrInPlaceProg start len a.size _ hN h hsz
+    (fun k hk => f k (by simp only [size_toSlice] at hk; lia)) _ _ rfl hst a (array_toSlice ..) rfl
+    len (Nat.le_refl _) hsz init
+  rw [runInPlace_eq]
+  exact (Prod.ext (congrArg Prod.snd key) (congrArg Prod.fst key)).symm
+
+/-- For internal use only. -/
 @[inline]
-private unsafe def foldrInPlaceRangeThenImpl {β : Type v} {γ : Type w} (a : UInt32Array)
-    (start len : USize) (_ : start.toNat + len.toNat ≤ a.size) (init : β)
-    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β)
-    (g : (a' : UInt32Array) → a'.size = a.size → β → γ) : γ :=
-  Slice.foldrInPlaceImpl.loop start (fun k => f k lcProof) (fun a' b => g a' lcProof b)
-    a.ensureExclusive len init
+public def foldrInPlaceRangeImpl {β : Type v} (a : UInt32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β) :
+    UInt32Array × β :=
+  if a.size < USize.size then
+    let r := a.runInPlace (Slice.foldrInPlaceProg start len h f len (Nat.le_refl _) init)
+    (r.2, r.1)
+  else
+    a.foldrInPlaceRange start len h init f
+
+@[csimp] public theorem foldrInPlaceRange_eq_foldrInPlaceRangeImpl :
+    @foldrInPlaceRange = @foldrInPlaceRangeImpl := by
+  funext β a start len h init f
+  unfold foldrInPlaceRangeImpl
+  split
+  · exact foldrInPlaceRange_eq_run a start len h init f ‹_›
+  · rfl
 
 /--
 `foldrInPlaceRange` followed by `g` on the new array, a proof that its size is unchanged and the
 last accumulator, like `foldlInPlaceRangeThen`.
 -/
-@[implemented_by foldrInPlaceRangeThenImpl, expose]
+@[expose]
 public def foldrInPlaceRangeThen {β : Type v} {γ : Type w} (a : UInt32Array) (start len : USize)
     (h : start.toNat + len.toNat ≤ a.size) (init : β)
     (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β)
@@ -961,6 +1366,30 @@ public def foldrInPlaceRangeThen {β : Type v} {γ : Type w} (a : UInt32Array) (
       g (a.foldrInPlaceRange start len h init f).1 (size_foldrInPlaceRange ..)
         (a.foldrInPlaceRange start len h init f).2 :=
   rfl
+
+/-- For internal use only. -/
+@[inline]
+public def foldrInPlaceRangeThenImpl {β : Type v} {γ : Type w} (a : UInt32Array) (start len : USize)
+    (h : start.toNat + len.toNat ≤ a.size) (init : β)
+    (f : (k : USize) → k.toNat < len.toNat → UInt32 → β → UInt32 × β)
+    (g : (a' : UInt32Array) → a'.size = a.size → β → γ) : γ :=
+  if _ : a.size < USize.size then
+    InPlace.runForDownFromThen a rfl len len (Nat.le_refl _) init (Slice.foldInPlaceBody start len h f)
+      fun b a' ha => g a' ha b
+  else
+    let r := a.foldrInPlaceRange start len h init f
+    g r.1 (size_foldrInPlaceRange ..) r.2
+
+@[csimp] public theorem foldrInPlaceRangeThen_eq_foldrInPlaceRangeThenImpl :
+    @foldrInPlaceRangeThen = @foldrInPlaceRangeThenImpl := by
+  funext β γ a start len h init f g
+  unfold foldrInPlaceRangeThenImpl
+  split
+  · rename_i hN
+    have key := foldrInPlaceRange_eq_run a start len h init f hN
+    rw [InPlace.runForDownFromThen_eq, foldrInPlaceRangeThen_eq]
+    exact congr_then g (congrArg Prod.fst key) (congrArg Prod.snd key) _ _
+  · rfl
 
 end UInt32Array
 

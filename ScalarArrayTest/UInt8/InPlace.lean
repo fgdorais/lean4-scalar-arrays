@@ -353,3 +353,17 @@ private def step2 (_ : USize) (x : UInt8) (b₁ b₂ : UInt8) : UInt8 × UInt8 �
   | none => false
 
 #guard UInt8Array.foldsRangeInPlace 1
+
+-- The `Then` forms hand the continuation the array written in place.
+@[noinline] def UInt8Array.foldsThenInPlace (x : UInt8) : Bool :=
+  let a := (UInt8Array.emptyWithCapacity 8).push x |>.push 2 |>.push 3 |>.push 4 |>.push x
+  let p := rawAddr a
+  if h : (1 : USize).toNat + (3 : USize).toNat ≤ a.size then
+    a.foldlInPlaceRangeThen 1 3 h () (fun _ _ x b => (x + 1, b)) fun b hb _ =>
+    b.foldrInPlaceRangeThen 1 3 (hb ▸ h) () (fun _ _ x b => (x + 1, b)) fun c hc _ =>
+    c.foldlInPlace2Then 1 2 1 2 (by rw [hc, hb]; simp at h ⊢; lia)
+      (by rw [hc, hb]; simp at h ⊢; lia) (by rw [hc, hb]; simp at h ⊢; lia) ()
+      (fun _ _ x y b => (x + y, b)) fun d _ _ => rawAddr d == p && d.toArray == #[x, 9, 11, 6, x]
+  else false
+
+#guard UInt8Array.foldsThenInPlace 1

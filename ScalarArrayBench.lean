@@ -221,6 +221,16 @@ passes, one `foldlInPlace2Then` for each result.
     (r.2, r.1.1 + r.1.2)
   else (a, 0)
 
+/-- `t := x + y` with a carry, on the same windows as the butterflies, with `foldlInPlace2`. -/
+@[noinline] def addFold2 (a : UInt64Array) (len : USize) : UInt64Array × UInt64 :=
+  if h : 3 * len.toNat ≤ a.size ∧ (2 * len).toNat = 2 * len.toNat ∧ len.toNat ≤ a.size then
+    have hx : (0 : USize).toNat + len.toNat ≤ a.size := by simp; lia
+    have hy : len.toNat + len.toNat ≤ a.size := by lia
+    have ht : (2 * len).toNat + len.toNat ≤ a.size := by lia
+    a.foldlInPlace2 0 len (2 * len) len hx hy ht (0 : UInt64)
+      fun _ _ x y c => let s := x + y + c; (s, carry x s c)
+  else (a, 0)
+
 /-- Runs a butterfly on windows of `len` limbs `reps` times, and returns a checksum. -/
 @[inline] def butterflies (k : UInt64Array → USize → UInt64Array × UInt64) (a : UInt64Array)
     (len : USize) (reps : Nat) : UInt64 := Id.run do
@@ -266,6 +276,9 @@ def extras (rounds n : Nat) : IO (List Row) := do
           (lo, c₂ + x * 5, lo >>> 7)
       r.2.1 + r.2.2,
     -- lean4-mpn's FFT residues are windows of about 137 limbs.
+    ← one "UInt64 add 137, foldlInPlace2" (w.extract 0 411) fun a n =>
+      butterflies addFold2 a 137 (n / 137),
+    ← one "UInt64 add n/3, foldlInPlace2" w fun a n => butterflies addFold2 a (n / 3).toUSize 3,
     ← one "UInt64 butterfly 137, 2× foldlInPlace2Then" (w.extract 0 411) fun a n =>
       butterflies butterflyTwoPass a 137 (n / 137),
     ← one "UInt64 butterfly 137, InPlace.forUp2" (w.extract 0 411) fun a n =>

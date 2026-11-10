@@ -8,8 +8,8 @@ public import ScalarArray.Int32.Basic
 public import ScalarArray.Int32.Array
 public import ScalarArray.Int32.Slice
 public import ScalarArray.Int32.Lemmas
-public import ScalarArray.Int32.InPlace
 public import ScalarArray.Int32.Program
+public import ScalarArray.Int32.InPlace
 public import ScalarArray.Int32.Decidable
 
 /-!

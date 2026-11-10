@@ -166,9 +166,9 @@ builds the `Array`. The header is described by an internal type, `ScalarArray.Ra
 they are not part of the API; the rest of that module is private.
 
 The implementations written in safe Lean, such as the loops behind `toArray`, `foldlM` and
-`forIn`, are proved equal to their specifications by `csimp` theorems. The `extern` and unsafe
-`implemented_by` code is connected to the model only by testing, so the test suite runs against
-the compiled code.
+`forIn`, and the in-place folds, which run as in-place programs, are proved equal to their
+specifications by `csimp` theorems. The `extern` and unsafe `implemented_by` code is connected to
+the model only by testing, so the test suite runs against the compiled code.
 
 ## Stability
 
@@ -210,8 +210,8 @@ Each type `X` has a module `ScalarArray.X`, which imports its parts:
 | `ScalarArray.X.Array` | removing elements, search, building arrays, iteration, equality, hashing, printing |
 | `ScalarArray.X.Slice` | slices: the type, reads, slice notation, iterators, folds and searches, membership, equality; collecting iterators into arrays |
 | `ScalarArray.X.Lemmas` | lemmas about arrays and slices |
-| `ScalarArray.X.InPlace` | writes through slices and in-place folds |
 | `ScalarArray.X.Program` | in-place programs: `InPlace`, `read`, `write`, the loops and `runInPlace` |
+| `ScalarArray.X.InPlace` | writes through slices and in-place folds, which are in-place programs |
 | `ScalarArray.X.Decidable` | decidable membership, slice hashing; not for `Float32` and `Float64` |
 
 The tests in `ScalarArrayTest.X` are split the same way.
