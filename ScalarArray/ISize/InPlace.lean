@@ -16,7 +16,13 @@ import Init.Data.Slice.InternalLemmas
 /-!
 # In-place writes on `ISizeArray`
 
-Writes through slices, and folds that write each element back in place.
+Writes through slices (`Slice.set`, `set!`, `modify`, `swap`, `reverse`), and folds that write
+each element back in place: `Slice.foldlInPlace`, `Slice.foldrInPlace`, `foldlInPlace2`,
+`foldlInPlaceRange`, `foldrInPlaceRange` and `foldlInPlaceRangeWith2Acc`, each with a `Then` form
+that hands the result to a continuation without building a pair. The folds are specified by plain
+recursion, and run as in-place programs (`ISizeArray.InPlace`), connected to their
+specifications by `csimp` theorems.
+For a kernel that none of these shapes covers, write an in-place program directly.
 -/
 
 namespace ScalarArray

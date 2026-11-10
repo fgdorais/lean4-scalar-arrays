@@ -33,8 +33,7 @@ inplace a do
 ## Statements
 
 * `let x ← a[i]` reads the element at the `USize` index `i`. In the terms of a statement, `a[i]`
-  also reads the current element, before the statement runs: `a[i] := a[i] + 1`. (Outside the
-  program, `a` is the array before it.)
+  also reads the current element, before the statement runs: `a[i] := a[i] + 1`.
 * `a[i] := e` writes `e` at `i`.
 * `let p := e` binds a pure value, where `p` can be a pattern such as `(s, c)`.
 * `let mut x := e` declares a mutable variable, and `x := e` assigns it.
@@ -63,12 +62,41 @@ becomes a local function of the mutable variables, which the compiler turns into
 
 ## Bounds
 
-The bound of each index is proved by the tactic `inplace_bound`: for an index `off + j` in a loop
-over `j < len`, from a hypothesis `off.toNat + len.toNat ≤ a.size` in context, or else by `lia`
-from the hypotheses in context, with the `USize` arithmetic of the index unfolded if needed, so
-that an index such as `j - 17` in a loop over `17...hi` is proved too. It looks inside
-conjunctions. A loop body has both bounds of its index, `lo ≤ j` and `j < hi`, in context, and the
-program has `a.usize.toNat ≤ a.size`, so `a.usize` works as a loop bound with no other hypothesis.
+The bound of each index is proved by the tactic `inplace_bound`, from the hypotheses in context:
+
+* for an index `off + j` in a loop over `j < len`, from a window hypothesis
+  `off.toNat + len.toNat ≤ a.size`;
+* otherwise by `lia`;
+* otherwise, for indices with `USize` arithmetic such as `j - 17` or `2 * j + 1`, by `omega` after
+  unfolding `+`, `-`, `*` and literals of `USize`, with the bound `x.toNat < USize.size` of each
+  `USize` in the goal, on both platform widths.
+
+It looks inside conjunctions. A loop body has both bounds of its index, `lo.toNat ≤ j.toNat` and
+`j.toNat < hi.toNat`, in context, and the program has `a.usize.toNat ≤ a.size`, so `a.usize`
+works as a loop bound with no other hypothesis. A bound that needs more is given by a `have`
+before the index, or by a hypothesis around the program, as in this left shift of 64-bit limbs by
+1111 bits:
+
+```
+if h : 18 ≤ a.size then
+  (inplace a do
+    for j in reverse 18...a.usize do
+      a[j] := (a[j - 17] <<< 23) ||| (a[j - 18] >>> 41)
+    a[17] := a[0] <<< 23
+    for j in 0...17 do
+      a[j] := 0).2
+else UInt64Array.mk (Array.replicate a.size 0)
+```
+
+## Limits
+
+* `a` is a local variable: the program's array. `let x ← b[i]` and `b[i] := e` on another array
+  `b` are errors, while `b[i]` in a term is ordinary indexing of `b`, with its own bound.
+* Inside the program, `a` outside of `a[i]` (as in `a.usize`) is the array before the program runs,
+  which is fine for its size.
+* Reads in terms are written `a[i]`, not `(← a[i])`.
+* A loop has at most two variables, and its range is `lo...hi`, `lo...<hi`, `*...hi` or `*...<hi`.
+* `have` takes a name: `have h : t := p`.
 -/
 
 namespace ScalarArray.InPlaceSyntax
@@ -128,9 +156,9 @@ open Lean Elab Tactic in
 /--
 Proves the bound `i.toNat < n` of an index in an `inplace` program: for `i = off + j`, from a
 window hypothesis `off.toNat + len.toNat ≤ n` and the loop bound `j.toNat < len.toNat`, or else by
-`lia` from the hypotheses in context, or else by `lia` after unfolding the `USize` arithmetic of
-the index and of the hypotheses (`+`, `-`, `*` and literals) on both platform widths. Conjunctions
-in context are split first.
+`lia` from the hypotheses in context, or else by `omega` after unfolding the `USize` arithmetic of
+the index and of the hypotheses (`+`, `-`, `*` and literals), with the bound of each `USize`, on
+both platform widths. Conjunctions in context are split first.
 -/
 syntax (name := inplaceBound) "inplace_bound" : tactic
 
