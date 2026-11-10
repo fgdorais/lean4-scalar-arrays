@@ -54,6 +54,22 @@ private def double (a : UInt8Array) (lo hi : USize) : Option (Nat × UInt8Array)
     for j in 1...<3 do
       a[j] := a[j] + 1).2.toArray == #[2, 4, 5]
 
+/-- Lists the indices from `hi - 1` down to `lo`, and shifts that window up by one. -/
+private def shiftRange (a : UInt8Array) (lo hi : USize) : Option (List Nat × UInt8Array) :=
+  if h : hi.toNat + 1 ≤ a.size ∧ hi.toNat + 1 < USize.size then
+    some <| inplace a do
+      for j in reverse lo...hi with (l := ([] : List Nat)) do
+        have hj1 : (j + 1).toNat < a.size := by
+          rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]; lia
+        a[j + 1] := a[j]
+        l := j.toNat :: l
+      return l
+  else none
+
+#guard shiftRange (UInt8Array.mk #[1, 2, 3, 4, 5]) 1 3 ==
+  some ([1, 2], UInt8Array.mk #[1, 2, 2, 3, 5])
+#guard shiftRange (UInt8Array.mk #[1, 2, 3]) 2 1 == some ([], UInt8Array.mk #[1, 2, 3])
+
 /-- Shifts the window of `len` elements at `off` up by one, from the top down, and returns the
 element shifted out. -/
 private def shiftUp (a : UInt8Array) (off len : USize) : Option (UInt8 × UInt8Array) :=
@@ -211,9 +227,3 @@ example (a : UInt8Array) (h : 0 < a.size) : UInt8 × UInt8Array :=
       y := 1
     return y
 
-/-- error: a `reverse` loop runs down to `0`: write `reverse 0...hi` -/
-#guard_msgs in
-example (a : UInt8Array) (h : 2 ≤ a.size) : Unit × UInt8Array :=
-  inplace a do
-    for j in reverse 1...2 do
-      a[j] := 0
