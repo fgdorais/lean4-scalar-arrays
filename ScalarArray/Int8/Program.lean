@@ -15,6 +15,8 @@ import all ScalarArray.Int8.Lemmas
 returns a value of type `α`. Programs are built from `read`, `write`, the monad operations and the
 loops `forIn`, `forIn2`, `forInRev` and `forInRev2`, then run on an array with `runInPlace` or
 `InPlace.run`, which make the array exclusive once, before the program runs.
+A loop followed by more of the program is best written with `forInBind` and its variants, whose
+loop calls the rest itself, so that its last accumulators stay unboxed.
 
 The array is never visible to a program: `InPlace` and its state have private constructors, so the
 only code that touches the state is the code in this module, which passes it on linearly. That is
@@ -380,6 +382,17 @@ public instance : LawfulMonad (InPlace n) := LawfulMonad.mk'
   (pure_bind := fun x f => InPlace.ext fun a h => by simp only [run_bind, run_pure])
   (bind_assoc := fun m f g => InPlace.ext fun a h => by simp only [run_bind])
 
+/--
+`InPlace.bind` is `>>=`, so that the lemmas about `>>=`, such as `run_bind`, apply to programs
+written with it, as the `inplace` notation writes them.
+-/
+@[simp] public theorem bind_eq (m : InPlace n α) (f : α → InPlace n β) : m.bind f = m >>= f := by
+  rfl
+
+/-- `InPlace.pure` is `pure`, so that `run_pure` applies to programs written with it. -/
+@[simp] public theorem pure_eq (x : α) : (InPlace.pure x : InPlace n α) = pure x := by
+  rfl
+
 private theorem forUp_loop_eq (lo hi : USize)
     (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β) (j : USize)
     (hlo : lo.toNat ≤ j.toNat) (b : β) (s : State n) :
@@ -719,6 +732,114 @@ public theorem runForIn2Then_eq {β₁ : Type v} {β₂ : Type w} {γ : Type u} 
   unfold runForIn2Then
   rw [forUp2_loopThen_eq]
   rfl
+
+/-! ## Loops that run straight into the rest of a program -/
+
+/--
+`forIn lo hi init body >>= k`, with the loop calling `k` itself on its last accumulator: the loop
+returns no pair, so a scalar accumulator stays unboxed into `k`. It is specified by `forInBind_eq`.
+-/
+@[inline]
+public def forInBind {γ : Type u} (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β)
+    (k : β → InPlace n γ) : InPlace n γ :=
+  ⟨fun s => forUp.loopThen lo hi body lo (Nat.le_refl _) init s fun b s => (k b).fn s⟩
+
+public theorem forInBind_eq {γ : Type u} (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β)
+    (k : β → InPlace n γ) :
+    forInBind lo hi init body k = forIn lo hi init body >>= k := by
+  apply fn_inj; funext s
+  show forUp.loopThen lo hi body lo _ init s _ = _
+  rw [forUp_loopThen_eq]; rfl
+
+/-- `forInBind` for `forIn2`, with the two last accumulators handed to `k` apart. -/
+@[inline]
+public def forIn2Bind {β₁ : Type v} {β₂ : Type w} {γ : Type u} (lo hi : USize) (init₁ : β₁)
+    (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β₁ → β₂ →
+      InPlace n (β₁ × β₂))
+    (k : β₁ → β₂ → InPlace n γ) : InPlace n γ :=
+  ⟨fun s => forUp2.loopThen lo hi body lo (Nat.le_refl _) init₁ init₂ s fun b₁ b₂ s =>
+    (k b₁ b₂).fn s⟩
+
+public theorem forIn2Bind_eq {β₁ : Type v} {β₂ : Type w} {γ : Type (max v w)} (lo hi : USize)
+    (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β₁ → β₂ →
+      InPlace n (β₁ × β₂))
+    (k : β₁ → β₂ → InPlace n γ) :
+    forIn2Bind lo hi init₁ init₂ body k =
+      forIn2 lo hi init₁ init₂ body >>= fun b => k b.1 b.2 := by
+  apply fn_inj; funext s
+  show forUp2.loopThen lo hi body lo _ init₁ init₂ s _ = _
+  rw [forUp2_loopThen_eq]; rfl
+
+/-- `forInBind` for `forInRev`. -/
+@[inline]
+public def forInRevBind {γ : Type u} (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β)
+    (k : β → InPlace n γ) : InPlace n γ :=
+  ⟨fun s => forDown.loopThen lo hi body hi (Nat.le_refl _) init s fun b s => (k b).fn s⟩
+
+public theorem forInRevBind_eq {γ : Type u} (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β)
+    (k : β → InPlace n γ) :
+    forInRevBind lo hi init body k = forInRev lo hi init body >>= k := by
+  apply fn_inj; funext s
+  show forDown.loopThen lo hi body hi _ init s _ = _
+  rw [forDown_loopThen_eq]; rfl
+
+/-- `forDown2.loop`, handing the two last accumulators and the state to `k`. -/
+@[specialize]
+private def forDown2.loopThen {β₁ : Type v} {β₂ : Type w} {γ : Type u} (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β₁ → β₂ →
+      InPlace n (β₁ × β₂))
+    (j : USize) (hj : j.toNat ≤ hi.toNat) (b₁ : β₁) (b₂ : β₂) (s : State n)
+    (k : β₁ → β₂ → State n → γ) : γ :=
+  if h : lo < j then
+    have hj' := forInRev_pred_lt hj h
+    match (body (j - 1) (forInRev_le_pred h) hj' b₁ b₂).fn s with
+    | ((b₁, b₂), s) => forDown2.loopThen lo hi body (j - 1) (Nat.le_of_lt hj') b₁ b₂ s k
+  else
+    k b₁ b₂ s
+termination_by j.toNat
+decreasing_by exact forInRev_pred_lt_self h
+
+private theorem forDown2_loopThen_eq {β₁ : Type v} {β₂ : Type w} {γ : Type u} (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β₁ → β₂ →
+      InPlace n (β₁ × β₂))
+    (j : USize) (hj : j.toNat ≤ hi.toNat) (b₁ : β₁) (b₂ : β₂) (s : State n)
+    (k : β₁ → β₂ → State n → γ) :
+    forDown2.loopThen lo hi body j hj b₁ b₂ s k =
+      k (forDown2.loop lo hi body j hj b₁ b₂ s).1.1 (forDown2.loop lo hi body j hj b₁ b₂ s).1.2
+        (forDown2.loop lo hi body j hj b₁ b₂ s).2 := by
+  rw [forDown2.loopThen, forDown2.loop]
+  split
+  · exact forDown2_loopThen_eq lo hi body (j - 1) _ _ _ _ k
+  · rfl
+termination_by j.toNat
+decreasing_by exact forInRev_pred_lt_self ‹_›
+
+/-- `forIn2Bind` for `forInRev2`. -/
+@[inline]
+public def forInRev2Bind {β₁ : Type v} {β₂ : Type w} {γ : Type u} (lo hi : USize) (init₁ : β₁)
+    (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β₁ → β₂ →
+      InPlace n (β₁ × β₂))
+    (k : β₁ → β₂ → InPlace n γ) : InPlace n γ :=
+  ⟨fun s => forDown2.loopThen lo hi body hi (Nat.le_refl _) init₁ init₂ s fun b₁ b₂ s =>
+    (k b₁ b₂).fn s⟩
+
+public theorem forInRev2Bind_eq {β₁ : Type v} {β₂ : Type w} {γ : Type (max v w)} (lo hi : USize)
+    (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β₁ → β₂ →
+      InPlace n (β₁ × β₂))
+    (k : β₁ → β₂ → InPlace n γ) :
+    forInRev2Bind lo hi init₁ init₂ body k =
+      forInRev2 lo hi init₁ init₂ body >>= fun b => k b.1 b.2 := by
+  apply fn_inj; funext s
+  show forDown2.loopThen lo hi body hi _ init₁ init₂ s _ = _
+  rw [forDown2_loopThen_eq]; rfl
 
 end InPlace
 

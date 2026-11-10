@@ -72,6 +72,30 @@ private def wr (i : USize) (v : UInt16) : UInt16Array.InPlace n Unit :=
       (forInRevFrom 0 4 2 h [] fun j _ _ b => pure (j.toNat :: b))).1 == [0, 1]
   else false
 
+-- The `Bind` loops run the rest of the program on the loop's last accumulators.
+#guard ((UInt16Array.mk #[1, 2, 3]).runInPlace
+  (forInBind 0 3 [] (fun j _ _ b => pure (j.toNat :: b)) fun b => pure (b, b.length))).1 ==
+    ([2, 1, 0], 3)
+#guard ((UInt16Array.mk #[1, 2, 3]).runInPlace
+  (forIn2Bind 0 3 [] 0 (fun j _ _ b c => pure (j.toNat :: b, c + 1)) fun b c => pure (c, b))).1 ==
+    (3, [2, 1, 0])
+#guard ((UInt16Array.mk #[1, 2, 3]).runInPlace
+  (forInRevBind 1 3 [] (fun j _ _ b => pure (j.toNat :: b)) fun b => pure b)).1 == [1, 2]
+#guard ((UInt16Array.mk #[1, 2, 3]).runInPlace
+  (forInRev2Bind 0 3 [] 0 (fun j _ _ b c => pure (j.toNat :: b, c + 1))
+    fun b c => pure (c, b))).1 ==
+    (3, [0, 1, 2])
+#guard ((UInt16Array.mk #[1, 2, 3]).runInPlace
+  (forInBind 0 3 () (fun j _ _ _ => wr j big) fun _ => rd 1)) ==
+    (big, UInt16Array.mk #[big, big, big])
+
+-- `simp` turns `InPlace.bind` and `InPlace.pure` into `>>=` and `pure`, for the `run_*` lemmas.
+example (m : UInt16Array.InPlace n Nat) (a : UInt16Array) (h : a.size = n) :
+    (m.bind fun x => UInt16Array.InPlace.pure (x + 1)).run a h =
+      ((m.run a h).1 + 1, (m.run a h).2) := by
+  simp only [UInt16Array.InPlace.bind_eq, UInt16Array.InPlace.pure_eq,
+    UInt16Array.InPlace.run_bind, UInt16Array.InPlace.run_pure]
+
 -- The body gets both bounds of `j`: with `lo = 1`, `j - 1` is in bounds without a check.
 private def diffs (a : UInt16Array) : UInt16Array :=
   (a.runInPlace (forInRev 1 a.usize () fun j hlo hj _ => do

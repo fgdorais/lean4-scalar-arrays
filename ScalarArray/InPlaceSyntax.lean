@@ -55,8 +55,9 @@ A loop body can assign only its own variables: to update a variable across a loo
 ## Compilation
 
 The program expands to `readThen`, `write`, `bind`, `InPlace.ite`, `InPlace.dite` and the
-`forIn`, `forIn2`, `forInRev` and `forInRev2` loops, so it compiles to the same loop as a
-hand-written program, with the loop variables unboxed. The rest of the program after an `if`
+`forInBind`, `forIn2Bind`, `forInRevBind` and `forInRev2Bind` loops, so it compiles to the same
+loop as a hand-written program, with the loop variables unboxed, and the loop calls the rest of
+the program itself, so its variables reach it unboxed too. The rest of the program after an `if`
 becomes a local function of the mutable variables, which the compiler turns into a join point: an
 `if` in a loop allocates nothing.
 
@@ -225,12 +226,6 @@ private def tuple (xs : Array Ident) : MacroM Term :=
   | #[x] => pure x
   | _ => `(($(xs[0]!), $(xs[1:].toArray),*))
 
-/-- The pattern that binds the variables `xs` from their tuple. -/
-private def tuplePat (xs : Array Ident) : MacroM Term :=
-  match xs with
-  | #[] => `(_)
-  | _ => tuple xs
-
 mutual
 
 /--
@@ -294,19 +289,18 @@ private partial def expandStmt (arr : Ident) (mvars : Array Ident) (ret : Term) 
     let xs := xs.getD #[]
     let inits := inits.getD #[]
     let b ← expandSeq arr xs (← `(.pure $(← tuple xs))) false body.getElems.toList
-    let loop ← if rev.isSome then
-        match xs, inits with
-        | #[], #[] => `(.forInRev $lo $hi () fun $j hlo hj _ => $b)
-        | #[x], #[init] => `(.forInRev $lo $hi $init fun $j hlo hj $x => $b)
-        | #[x, y], #[initx, inity] => `(.forInRev2 $lo $hi $initx $inity fun $j hlo hj $x $y => $b)
-        | _, _ => Macro.throwError "a loop has at most two variables"
-      else
-        match xs, inits with
-        | #[], #[] => `(.forIn $lo $hi () fun $j hlo hj _ => $b)
-        | #[x], #[init] => `(.forIn $lo $hi $init fun $j hlo hj $x => $b)
-        | #[x, y], #[initx, inity] => `(.forIn2 $lo $hi $initx $inity fun $j hlo hj $x $y => $b)
-        | _, _ => Macro.throwError "a loop has at most two variables"
-    `(.bind $loop fun p => match p with | $(← tuplePat xs) => $(← k (mvars ++ xs)))
+    -- The loop calls the rest of the program itself, so its variables reach it unboxed.
+    let rest ← k (mvars ++ xs)
+    match rev.isSome, xs, inits with
+    | true, #[], #[] => `(.forInRevBind $lo $hi () (fun $j hlo hj _ => $b) fun _ => $rest)
+    | true, #[x], #[init] => `(.forInRevBind $lo $hi $init (fun $j hlo hj $x => $b) fun $x => $rest)
+    | true, #[x, y], #[initx, inity] =>
+      `(.forInRev2Bind $lo $hi $initx $inity (fun $j hlo hj $x $y => $b) fun $x $y => $rest)
+    | false, #[], #[] => `(.forInBind $lo $hi () (fun $j hlo hj _ => $b) fun _ => $rest)
+    | false, #[x], #[init] => `(.forInBind $lo $hi $init (fun $j hlo hj $x => $b) fun $x => $rest)
+    | false, #[x, y], #[initx, inity] =>
+      `(.forIn2Bind $lo $hi $initx $inity (fun $j hlo hj $x $y => $b) fun $x $y => $rest)
+    | _, _, _ => Macro.throwError "a loop has at most two variables"
   | _ => Macro.throwUnsupported
 
 end
