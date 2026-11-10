@@ -143,7 +143,7 @@ private theorem beq_eq_beq_toArray (a b : UInt16Array) : (a == b) = (a.toArray =
 """
 # The parts of each array module and of its tests, in import order. The float types leave out
 # `Decidable`: the lemmas and instances that need decidable equality or hashing, and their tests.
-PARTS = ['Basic', 'Array', 'Slice', 'Lemmas', 'InPlace', 'Decidable']
+PARTS = ['Basic', 'Array', 'Slice', 'Lemmas', 'Program', 'InPlace', 'Decidable']
 # Left out of the `USize` and `ISize` tests: `decide` can't evaluate their literals, since
 # `System.Platform.numBits` is opaque.
 WORD_TEST_DECIDE = ('-- `decide` evaluates', '-- Lemmas that need decidable equality')

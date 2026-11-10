@@ -8,6 +8,7 @@ public import ScalarArray.Float32.Basic
 public import ScalarArray.Float32.Array
 public import ScalarArray.Float32.Slice
 public import ScalarArray.Float32.Lemmas
+public import ScalarArray.Float32.Program
 public import ScalarArray.Float32.InPlace
 
 /-!
