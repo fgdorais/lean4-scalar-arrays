@@ -229,7 +229,7 @@ passes, one `foldlInPlace2Then` for each result.
     have hy : len.toNat + len.toNat ≤ a.size := by lia
     have ht : (2 * len).toNat + len.toNat ≤ a.size := by lia
     let r := inplace a do
-      for j < len with (c := 0) (b := 0) do
+      for j in 0...len with (c := 0) (b := 0) do
         let x ← a[0 + j]
         let y ← a[len + j]
         let s := x + y + c
@@ -304,7 +304,7 @@ def extras (rounds n : Nat) : IO (List Row) := do
       let m : UInt64 := (1 : UInt64) <<< 63
       have := a.toNat_usize_le
       let r := inplace a do
-        for j < a.usize with (k := (0 : UInt64)) do
+        for j in 0...a.usize with (k := (0 : UInt64)) do
           if a[j] > m then
             a[j] := m
             k := k + 1

@@ -20,7 +20,7 @@ Tests for `inplace` programs.
 private def prefixSums (a : UInt32Array) (len : USize) : Option (UInt32 × UInt32Array) :=
   if h : len.toNat ≤ a.size then
     some <| inplace a do
-      for j < len with (s := 0) do
+      for j in 0...len with (s := 0) do
         let x ← a[j]
         let s := s + x
         a[j] := s
@@ -30,6 +30,29 @@ private def prefixSums (a : UInt32Array) (len : USize) : Option (UInt32 × UInt3
 #guard prefixSums (UInt32Array.mk #[1, 2, 3, 4, 5]) 4 ==
   some (10, UInt32Array.mk #[1, 3, 6, 10, 5])
 #guard prefixSums (UInt32Array.mk #[1, 2]) 3 == none
+
+/-- Doubles the elements at `lo` up to `hi - 1`, and counts them. -/
+private def double (a : UInt8Array) (lo hi : USize) : Option (Nat × UInt8Array) :=
+  if h : hi.toNat ≤ a.size then
+    some <| inplace a do
+      for j in lo...hi with (k := 0) do
+        a[j] := 2 * a[j]
+        k := k + 1
+      return k
+  else none
+
+#guard double (UInt8Array.mk #[1, 2, 3, 4, 5]) 1 4 == some (3, UInt8Array.mk #[1, 4, 6, 8, 5])
+#guard double (UInt8Array.mk #[1, 2, 3]) 2 1 == some (0, UInt8Array.mk #[1, 2, 3])
+
+-- `*...hi` and `lo...<hi` are ranges too.
+#guard
+  let a := UInt8Array.mk #[1, 2, 3]
+  have : (3 : USize).toNat ≤ a.size := by simp [a]
+  (inplace a do
+    for j in *...3 do
+      a[j] := a[j] + 1
+    for j in 1...<3 do
+      a[j] := a[j] + 1).2.toArray == #[2, 4, 5]
 
 /-- Shifts the window of `len` elements at `off` up by one, from the top down, and returns the
 element shifted out. -/
@@ -41,7 +64,7 @@ private def shiftUp (a : UInt8Array) (off len : USize) : Option (UInt8 × UInt8A
       rw [USize.toNat_add]; have := Nat.mod_le (off.toNat + (1 : USize).toNat) USize.size
       simp at this ⊢; lia
     some <| inplace a do
-      for j < len, downward with (top := 0) do
+      for j in reverse 0...len with (top := 0) do
         let x ← a[off + j]
         let top := if j + 1 = len then x else top
         a[(off + 1) + j] := x
@@ -74,7 +97,7 @@ private def butterfly (a : UInt64Array) (xs ys ts len : USize) :
     have hy := h.2.1
     have ht := h.2.2
     some <| inplace a do
-      for j < len with (c := 0) (b := 0) do
+      for j in 0...len with (c := 0) (b := 0) do
         let u ← a[xs + j]
         let v ← a[ys + j]
         let (s, c) := addc u v c
@@ -108,7 +131,7 @@ private def butterfly (a : UInt64Array) (xs ys ts len : USize) :
   let p := rawAddr a
   have := a.toNat_usize_le
   let r := inplace a do
-    for j < a.usize do
+    for j in 0...a.usize do
       a[j] := a[j] + 1
   rawAddr r.2 == p && r.2.toArray == #[x + 1, 3, 4]
 
@@ -118,7 +141,7 @@ private def butterfly (a : UInt64Array) (xs ys ts len : USize) :
 private def clamp (a : UInt16Array) (off len : USize) (m : UInt16) : Option (Nat × UInt16Array) :=
   if h : off.toNat + len.toNat ≤ a.size then
     some <| inplace a do
-      for j < len with (k := 0) do
+      for j in 0...len with (k := 0) do
         if a[off + j] > m then
           a[off + j] := m
           k := k + 1
@@ -150,7 +173,7 @@ private def swapIfGreater (a : Int32Array) (i j : USize) : Option (Bool × Int32
 private def rowSums (a : UInt32Array) (rows cols : USize) : Option (UInt32 × UInt32Array) :=
   if h : rows.toNat * cols.toNat ≤ a.size ∧ (rows * cols).toNat = rows.toNat * cols.toNat then
   some <| inplace a do
-    for r < rows with (total := 0) do
+    for r in 0...rows with (total := 0) do
       have hr : (r * cols).toNat + cols.toNat ≤ a.size := by
         have h₁ : (r.toNat + 1) * cols.toNat ≤ rows.toNat * cols.toNat :=
           Nat.mul_le_mul_right _ (by lia)
@@ -159,7 +182,7 @@ private def rowSums (a : UInt32Array) (rows cols : USize) : Option (UInt32 × UI
           have := Nat.mul_le_mul_right cols.toNat (Nat.le_of_lt (by lia : r.toNat < rows.toNat))
           lia
         rw [USize.toNat_mul, Nat.mod_eq_of_lt h₂]; rw [Nat.succ_mul] at h₁; lia
-      for c < cols with (s := 0) do
+      for c in 0...cols with (s := 0) do
         s := s + a[r * cols + c]
         a[r * cols + c] := s
       total := total + s
@@ -184,6 +207,13 @@ error: `y` is not a mutable variable here: declare it with `let mut`, or carry i
 example (a : UInt8Array) (h : 0 < a.size) : UInt8 × UInt8Array :=
   inplace a do
     let mut y := 0
-    for j < 1 do
+    for j in 0...1 do
       y := 1
     return y
+
+/-- error: a `reverse` loop runs down to `0`: write `reverse 0...hi` -/
+#guard_msgs in
+example (a : UInt8Array) (h : 2 ≤ a.size) : Unit × UInt8Array :=
+  inplace a do
+    for j in reverse 1...2 do
+      a[j] := 0

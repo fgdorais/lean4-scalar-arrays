@@ -18,7 +18,7 @@ new array. It works for all 13 array types:
 
 ```
 inplace a do
-  for j < len with (c := 0) (b := 0) do
+  for j in 0...len with (c := 0) (b := 0) do
     let u ← a[xs + j]
     let v ← a[ys + j]
     let (s, c') := addc u v c
@@ -41,10 +41,12 @@ inplace a do
 * `have h : t := p` adds a fact to the context, for the bounds of later indices.
 * `if c then … else …` and `if h : c then … else …` run one of two blocks, which may read, write,
   loop and assign mutable variables. The `else` block is optional.
-* `for j < len do …` and `for j < len, downward do …` loop over `j < len`, up from `0` or down
-  from `len - 1`. An optional `with (x := init) …` clause names the loop's variables: up to two,
-  which the loop keeps as separate unboxed arguments. They are mutable in the body, and they hold
-  their last values after the loop. Loops nest.
+* `for j in lo...hi do …` loops over `lo ≤ j < hi` upward, and `for j in reverse 0...hi do …` over
+  `j < hi` downward, from `hi - 1`. The bounds are `USize`s; `lo...<hi` and `*...hi` (from `0`)
+  work too, and `j.toNat < hi.toNat` is in context in the body. An optional `with (x := init) …`
+  clause names the loop's variables: up to two, which the loop keeps as separate unboxed
+  arguments. They are mutable in the body, and they hold their last values after the loop. Loops
+  nest.
 * `return e`, last, gives the program's result. Without it, the result is `()`.
 
 A loop body can assign only its own variables: to update a variable across a loop, carry it, as
@@ -131,8 +133,8 @@ syntax "have " ident " : " term " := " term : inplaceStmt
 syntax ident " := " term : inplaceStmt
 /-- `if c then … else …` runs one of two blocks. -/
 syntax "if " (atomic(ident " : "))? term " then" inplaceSeq (" else" inplaceSeq)? : inplaceStmt
-/-- A loop over `j < len`, with the variables of its `with` clause. -/
-syntax "for " ident " < " termBeforeDo (", " &"downward")?
+/-- A loop over `j` in `lo...hi` or `reverse 0...hi`, with the variables of its `with` clause. -/
+syntax "for " ident " in " (&"reverse ")? termBeforeDo
   (" with" (ppSpace "(" ident " := " term ")")+)? " do" inplaceSeq : inplaceStmt
 /-- `return e` gives the program's result. -/
 syntax "return " term : inplaceStmt
@@ -248,22 +250,40 @@ private partial def expandStmt (arr : Ident) (mvars : Array Ident) (ret : Term) 
     let rest ← k mvars
     let fn ← if mvars.isEmpty then `(fun (_ : Unit) => $rest) else `(fun $mvars* => $rest)
     `((fun $kont => $branch) $fn)
-  | `(inplaceStmt| for $j < $len $[, downward%$down]? $[with $[($xs := $inits)]*]? do $body;*) =>
+  | `(inplaceStmt| for $j in $[reverse%$rev]? $range $[with $[($xs := $inits)]*]? do $body;*) =>
+    let (lo, len) ← match range with
+      | `($lo...$hi) | `($lo...<$hi) => pure (some lo, hi)
+      | `(*...$hi) | `(*...<$hi) => pure (none, hi)
+      | _ => Macro.throwErrorAt range "expected a range `lo...hi` or `*...hi`"
     let xs := xs.getD #[]
     let inits := inits.getD #[]
-    let down := down.isSome
     let b ← expandSeq arr xs (← `(.pure $(← tuple xs))) false body.getElems.toList
-    let loop ← match xs, inits with
-      | #[], #[] =>
-        if down then `(.forDown $len () fun $j hj _ => $b)
-        else `(.forUp $len () fun $j hj _ => $b)
-      | #[x], #[init] =>
-        if down then `(.forDown $len $init fun $j hj $x => $b)
-        else `(.forUp $len $init fun $j hj $x => $b)
-      | #[x, y], #[initx, inity] =>
-        if down then `(.forDown2 $len $initx $inity fun $j hj $x $y => $b)
-        else `(.forUp2 $len $initx $inity fun $j hj $x $y => $b)
-      | _, _ => Macro.throwError "a loop has at most two variables"
+    -- The upward loop: `plain` from `0`, or `fromLo` from `lo`.
+    let up (plain : Term) (fromLo : Term → Term → MacroM Term) : MacroM Term :=
+      match lo with
+      | some lo => fromLo len lo
+      | none => pure plain
+    let loop ← if rev.isSome then
+        if let some lo := lo then
+          unless lo.raw.isOfKind numLitKind && lo.raw.isNatLit? == some 0 do
+            Macro.throwErrorAt lo "a `reverse` loop runs down to `0`: write `reverse 0...hi`"
+        match xs, inits with
+        | #[], #[] => `(.forDown $len () fun $j hj _ => $b)
+        | #[x], #[init] => `(.forDown $len $init fun $j hj $x => $b)
+        | #[x, y], #[initx, inity] => `(.forDown2 $len $initx $inity fun $j hj $x $y => $b)
+        | _, _ => Macro.throwError "a loop has at most two variables"
+      else
+        match xs, inits with
+        | #[], #[] => do
+          up (← `(.forUp $len () fun $j hj _ => $b))
+            fun len lo => `(.forUpFrom $len $lo () fun $j hj _ => $b)
+        | #[x], #[init] => do
+          up (← `(.forUp $len $init fun $j hj $x => $b))
+            fun len lo => `(.forUpFrom $len $lo $init fun $j hj $x => $b)
+        | #[x, y], #[initx, inity] => do
+          up (← `(.forUp2 $len $initx $inity fun $j hj $x $y => $b))
+            fun len lo => `(.forUp2From $len $lo $initx $inity fun $j hj $x $y => $b)
+        | _, _ => Macro.throwError "a loop has at most two variables"
     `(.bind $loop fun p => match p with | $(← tuplePat xs) => $(← k (mvars ++ xs)))
   | _ => Macro.throwUnsupported
 
