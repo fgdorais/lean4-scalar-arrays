@@ -19,3 +19,4 @@ import ScalarArrayTest.Float64
 import ScalarArrayTest.Float
 import ScalarArrayTest.Conversions
 import ScalarArrayTest.Bytes
+import ScalarArrayTest.InPlaceSyntax
