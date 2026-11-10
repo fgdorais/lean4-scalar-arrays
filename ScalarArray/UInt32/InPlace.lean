@@ -829,7 +829,8 @@ public def foldrInPlaceThenImpl {β : Type v} {γ : Type w} (s : UInt32Array.Sli
   dsimp only
   split
   · rename_i hN
-    rw [InPlace.runForInRevThen_eq, InPlace.forInRev_eq, foldrInPlaceThen_eq, foldrInPlace_eq_foldrInPlaceImpl]
+    rw [InPlace.runForInRevThen_eq, InPlace.forInRev_eq, foldrInPlaceThen_eq,
+      foldrInPlace_eq_foldrInPlaceImpl]
     unfold foldrInPlaceImpl
     split
     · rfl
