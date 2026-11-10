@@ -8,5 +8,6 @@ import ScalarArrayTest.UInt64.Basic
 import ScalarArrayTest.UInt64.Array
 import ScalarArrayTest.UInt64.Slice
 import ScalarArrayTest.UInt64.Lemmas
+import ScalarArrayTest.UInt64.Program
 import ScalarArrayTest.UInt64.InPlace
 import ScalarArrayTest.UInt64.Decidable

@@ -88,6 +88,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `Slice.empty`, `{}`, `array`, `start`, `stop`, `size`, `get`, `getD`, `get!`, `s[i]`, `popFront`, `slice`, `copy`, `for x in s`, `foldl`, `foldlM`, `forM`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findRevM?`, `findSomeRevM?`, `iter`, `toArray`, `toList`, `s == t` |
 | Slice writes | `Slice.set`, `set!`, `modify`, `swap`, `reverse`, `foldlInPlace`, `foldrInPlace`, `foldlInPlaceThen`, `foldrInPlaceThen`, which write into the slice's array; `s.array` gives the whole array back |
 | In-place folds | `Slice.foldlInPlace`, `Slice.foldrInPlace` and their `Then` forms; `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
+| In-place programs | `XArray.InPlace n α`, a program that reads and writes an array of size `n` in place: `InPlace.read`, `write`, `pure`, `>>=`, the loops `forIn lo hi`, `forIn2`, `forInRev lo hi` (from `hi - 1` down to `lo`), `forInRev2`, whose bodies get both `lo ≤ j` and `j < hi`, and `forInBind`, `forIn2Bind`, `forInRevBind`, `forInRev2Bind`, a loop followed by the rest of the program with no result pair in between, run with `a.runInPlace m` or `m.run a h`; for kernels that no fold shape covers, such as a butterfly that writes two windows with two carries |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array, and `Std.Iter.toXSlice` for the rest of a slice iterator as a slice, whose `start` is its position |
 | Equality     | `a == b` and `s == t`; for integer types also `DecidableEq` (`decEq`), `Hashable` (`hash`), and for slices `Hashable` (`Slice.hash`), `EquivBEq` and `LawfulHashable` |
 | Linearity    | `markLinear`, `propagateMark`                                               |
@@ -165,9 +166,9 @@ builds the `Array`. The header is described by an internal type, `ScalarArray.Ra
 they are not part of the API; the rest of that module is private.
 
 The implementations written in safe Lean, such as the loops behind `toArray`, `foldlM` and
-`forIn`, are proved equal to their specifications by `csimp` theorems. The `extern` and unsafe
-`implemented_by` code is connected to the model only by testing, so the test suite runs against
-the compiled code.
+`forIn`, and the in-place folds, which run as in-place programs, are proved equal to their
+specifications by `csimp` theorems. The `extern` and unsafe `implemented_by` code is connected to
+the model only by testing, so the test suite runs against the compiled code.
 
 ## Stability
 
@@ -209,7 +210,8 @@ Each type `X` has a module `ScalarArray.X`, which imports its parts:
 | `ScalarArray.X.Array` | removing elements, search, building arrays, iteration, equality, hashing, printing |
 | `ScalarArray.X.Slice` | slices: the type, reads, slice notation, iterators, folds and searches, membership, equality; collecting iterators into arrays |
 | `ScalarArray.X.Lemmas` | lemmas about arrays and slices |
-| `ScalarArray.X.InPlace` | writes through slices and in-place folds |
+| `ScalarArray.X.Program` | in-place programs: `InPlace`, `read`, `write`, the loops and `runInPlace` |
+| `ScalarArray.X.InPlace` | writes through slices and in-place folds, which are in-place programs |
 | `ScalarArray.X.Decidable` | decidable membership, slice hashing; not for `Float32` and `Float64` |
 
 The tests in `ScalarArrayTest.X` are split the same way.
