@@ -203,13 +203,13 @@ passes, one `foldlInPlace2Then` for each result.
           (fun _ _ x y c => let s := x + y + c; (s, carry x s c)) fun a _ c => (a, b + c)
   else (a, 0)
 
-/-- The same butterfly in one pass, as an `InPlace` program with `forUp2`. -/
+/-- The same butterfly in one pass, as an `InPlace` program with `forIn2`. -/
 @[noinline] def butterflyInPlace (a : UInt64Array) (len : USize) : UInt64Array × UInt64 :=
   if h : 3 * len.toNat ≤ a.size ∧ (2 * len).toNat = 2 * len.toNat ∧ len.toNat ≤ a.size then
     have hx : (0 : USize).toNat + len.toNat ≤ a.size := by simp; lia
     have hy : len.toNat + len.toNat ≤ a.size := by lia
     have ht : (2 * len).toNat + len.toNat ≤ a.size := by lia
-    let r := a.runInPlace <| UInt64Array.InPlace.forUp2 len (0 : UInt64) (0 : UInt64)
+    let r := a.runInPlace <| UInt64Array.InPlace.forIn2 0 len (0 : UInt64) (0 : UInt64)
       fun j hj c b => do
         let x ← UInt64Array.InPlace.read (0 + j) (UInt64Array.InPlace.toNat_add_lt_of_window hx hj)
         let y ← UInt64Array.InPlace.read (len + j) (UInt64Array.InPlace.toNat_add_lt_of_window hy hj)
@@ -281,11 +281,11 @@ def extras (rounds n : Nat) : IO (List Row) := do
     ← one "UInt64 add n/3, foldlInPlace2" w fun a n => butterflies addFold2 a (n / 3).toUSize 3,
     ← one "UInt64 butterfly 137, 2× foldlInPlace2Then" (w.extract 0 411) fun a n =>
       butterflies butterflyTwoPass a 137 (n / 137),
-    ← one "UInt64 butterfly 137, InPlace.forUp2" (w.extract 0 411) fun a n =>
+    ← one "UInt64 butterfly 137, InPlace.forIn2" (w.extract 0 411) fun a n =>
       butterflies butterflyInPlace a 137 (n / 137),
     ← one "UInt64 butterfly n/3, 2× foldlInPlace2Then" w fun a n =>
       butterflies butterflyTwoPass a (n / 3).toUSize 3,
-    ← one "UInt64 butterfly n/3, InPlace.forUp2" w fun a n =>
+    ← one "UInt64 butterfly n/3, InPlace.forIn2" w fun a n =>
       butterflies butterflyInPlace a (n / 3).toUSize 3]
 
 /-- Formats milliseconds with three decimals. -/

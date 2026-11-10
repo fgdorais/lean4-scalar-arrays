@@ -13,7 +13,7 @@ import all ScalarArray.UInt64.Lemmas
 
 `UInt64Array.InPlace n α` is a program that reads and writes an array of size `n` in place and
 returns a value of type `α`. Programs are built from `read`, `write`, the monad operations and the
-loops `forUp`, `forUp2`, `forDown` and `forDown2`, then run on an array with `runInPlace` or
+loops `forIn`, `forIn2`, `forInRev` and `forInRev2`, then run on an array with `runInPlace` or
 `InPlace.run`, which make the array exclusive once, before the program runs.
 
 The array is never visible to a program: `InPlace` and its state have private constructors, so the
@@ -23,7 +23,7 @@ what lets `write` store without checking that the array is exclusive. The in-pla
 
 The loops must be the loops of this module. A program that calls itself recursively compiles to a
 closure for each step, and `for` in `do` notation boxes its mutable variables at each step, so both
-are much slower than `forUp`, whose step is inlined into one loop with unboxed accumulators.
+are much slower than `forIn`, whose step is inlined into one loop with unboxed accumulators.
 
 Programs are specified by `InPlace.run`, whose behavior the `run_*` lemmas give.
 -/
@@ -125,7 +125,7 @@ private theorem lt_succ_of_lt {j len : USize} (h : j < len) :
   have := USize.lt_iff_toNat_lt.1 h
   rw [toNat_succ_of_lt h]; lia
 
-/-- The loop of `forUp`. -/
+/-- The loop of `forIn`. -/
 @[specialize]
 private def forUp.loop (len : USize)
     (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
@@ -139,24 +139,15 @@ termination_by len.toNat - j.toNat
 decreasing_by exact lt_succ_of_lt hj
 
 /--
-Runs `body j hj b` for each `j` from `j₀` up to `len - 1`, threading the accumulator `b` from
-`init`. `forUp` is the case `j₀ = 0`. It is specified by `forUpFrom_eq`.
+Runs `body j hj b` for each `j` from `lo` up to `hi - 1`, threading the accumulator `b` from `init`,
+and returns the last accumulator. It runs no step when `hi ≤ lo`. It is specified by `forIn_eq`.
 -/
 @[inline]
-public def forUpFrom (len : USize) (j₀ : USize) (init : β)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β) : InPlace n β :=
-  ⟨forUp.loop len body j₀ init⟩
+public def forIn (lo hi : USize) (init : β)
+    (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β) : InPlace n β :=
+  ⟨forUp.loop hi body lo init⟩
 
-/--
-Runs `body j hj b` for each `j < len`, from `0` up, threading the accumulator `b` from `init`, and
-returns the last accumulator.
--/
-@[inline]
-public def forUp (len : USize) (init : β)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β) : InPlace n β :=
-  forUpFrom len 0 init body
-
-/-- The loop of `forUp2`, with the two accumulators as separate arguments. -/
+/-- The loop of `forIn2`, with the two accumulators as separate arguments. -/
 @[specialize]
 private def forUp2.loop {β₁ : Type v} {β₂ : Type w} (len : USize)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
@@ -169,99 +160,92 @@ private def forUp2.loop {β₁ : Type v} {β₂ : Type w} (len : USize)
 termination_by len.toNat - j.toNat
 decreasing_by exact lt_succ_of_lt hj
 
-/-- `forUpFrom` with two accumulators. It is specified by `forUp2From_eq`. -/
-@[inline]
-public def forUp2From {β₁ : Type v} {β₂ : Type w} (len : USize) (j₀ : USize) (init₁ : β₁) (init₂ : β₂)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
-    InPlace n (β₁ × β₂) :=
-  ⟨forUp2.loop len body j₀ init₁ init₂⟩
-
 /--
-`forUp` with two accumulators, which the loop keeps as two arguments, so that each one stays
-unboxed when its type is a scalar, such as a carry and a borrow. A pair accumulator in `forUp`
-would be allocated at every step.
+`forIn` with two accumulators, which the loop keeps as two arguments, so that each one stays
+unboxed when its type is a scalar, such as a carry and a borrow. A pair accumulator in `forIn`
+would be allocated at every step. It is specified by `forIn2_eq`.
 -/
 @[inline]
-public def forUp2 {β₁ : Type v} {β₂ : Type w} (len : USize) (init₁ : β₁) (init₂ : β₂)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
+public def forIn2 {β₁ : Type v} {β₂ : Type w} (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
     InPlace n (β₁ × β₂) :=
-  forUp2From len 0 init₁ init₂ body
+  ⟨forUp2.loop hi body lo init₁ init₂⟩
 
-/-- The index of a step of `forDown`: `j - 1 < len` when `0 < j ≤ len`. -/
-public theorem forDown_pred_lt {len j : USize} (hj : j.toNat ≤ len.toNat) (h0 : ¬j = 0) :
-    (j - 1).toNat < len.toNat := by
-  have : j.toNat ≠ 0 := fun h => h0 (USize.toNat_inj.1 (by simpa using h))
+/-- The index of a step of `forInRev`: `j - 1 < hi` when `lo < j ≤ hi`. -/
+public theorem forInRev_pred_lt {lo hi j : USize} (hj : j.toNat ≤ hi.toNat) (h : lo < j) :
+    (j - 1).toNat < hi.toNat := by
+  have := USize.lt_iff_toNat_lt.1 h
   rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le, USize.toNat_one]; lia),
     USize.toNat_one]
   lia
 
-private theorem forDown_pred_lt_self {j : USize} (h0 : ¬j = 0) : (j - 1).toNat < j.toNat := by
-  have : j.toNat ≠ 0 := fun h => h0 (USize.toNat_inj.1 (by simpa using h))
+private theorem forInRev_pred_lt_self {lo j : USize} (h : lo < j) : (j - 1).toNat < j.toNat := by
+  have := USize.lt_iff_toNat_lt.1 h
   rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le, USize.toNat_one]; lia),
     USize.toNat_one]
   lia
 
-/-- The loop of `forDown`: `j` is the number of steps left. -/
+/-- The loop of `forInRev`: the next step is at `j - 1`, while `lo < j`. -/
 @[specialize]
-private def forDown.loop (len : USize)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
-    (j : USize) (hj : j.toNat ≤ len.toNat) (b : β) (s : State n) : β × State n :=
-  if h0 : j = 0 then
-    (b, s)
-  else
-    have hj' : (j - 1).toNat < len.toNat := forDown_pred_lt hj h0
+private def forDown.loop (lo hi : USize)
+    (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β)
+    (j : USize) (hj : j.toNat ≤ hi.toNat) (b : β) (s : State n) : β × State n :=
+  if h : lo < j then
+    have hj' : (j - 1).toNat < hi.toNat := forInRev_pred_lt hj h
     match (body (j - 1) hj' b).fn s with
-    | (b, s) => forDown.loop len body (j - 1) (Nat.le_of_lt hj') b s
-termination_by j.toNat
-decreasing_by exact forDown_pred_lt_self h0
-
-/--
-Runs `body j hj b` for each `j` from `j₀ - 1` down to `0`, threading the accumulator `b` from
-`init`. `forDown` is the case `j₀ = len`. It is specified by `forDownFrom_eq`.
--/
-@[inline]
-public def forDownFrom (len : USize) (j₀ : USize) (h : j₀.toNat ≤ len.toNat) (init : β)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β) : InPlace n β :=
-  ⟨forDown.loop len body j₀ h init⟩
-
-/--
-Runs `body j hj b` for each `j < len`, from `len - 1` down to `0`, threading the accumulator `b`
-from `init`, and returns the last accumulator.
--/
-@[inline]
-public def forDown (len : USize) (init : β)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β) : InPlace n β :=
-  forDownFrom len len (Nat.le_refl _) init body
-
-/-- The loop of `forDown2`, with the two accumulators as separate arguments. -/
-@[specialize]
-private def forDown2.loop {β₁ : Type v} {β₂ : Type w} (len : USize)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
-    (j : USize) (hj : j.toNat ≤ len.toNat) (b₁ : β₁) (b₂ : β₂) (s : State n) :
-    (β₁ × β₂) × State n :=
-  if h0 : j = 0 then
-    ((b₁, b₂), s)
+    | (b, s) => forDown.loop lo hi body (j - 1) (Nat.le_of_lt hj') b s
   else
-    have hj' : (j - 1).toNat < len.toNat := forDown_pred_lt hj h0
-    match (body (j - 1) hj' b₁ b₂).fn s with
-    | ((b₁, b₂), s) => forDown2.loop len body (j - 1) (Nat.le_of_lt hj') b₁ b₂ s
+    (b, s)
 termination_by j.toNat
-decreasing_by exact forDown_pred_lt_self h0
+decreasing_by exact forInRev_pred_lt_self h
 
-/-- `forDownFrom` with two accumulators. It is specified by `forDown2From_eq`. -/
+/--
+Runs `body j hj b` for each `j` from `j₀ - 1` down to `lo`, threading the accumulator `b` from
+`init`. `forInRev` is the case `j₀ = hi`. It is specified by `forInRevFrom_eq`.
+-/
 @[inline]
-public def forDown2From {β₁ : Type v} {β₂ : Type w} (len : USize) (j₀ : USize) (h : j₀.toNat ≤ len.toNat)
-    (init₁ : β₁) (init₂ : β₂)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
-    InPlace n (β₁ × β₂) :=
-  ⟨forDown2.loop len body j₀ h init₁ init₂⟩
+public def forInRevFrom (lo hi j₀ : USize) (h : j₀.toNat ≤ hi.toNat) (init : β)
+    (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β) : InPlace n β :=
+  ⟨forDown.loop lo hi body j₀ h init⟩
 
-/-- `forDown` with two accumulators, kept as two loop arguments like those of `forUp2`. -/
+/--
+Runs `body j hj b` for each `j` from `hi - 1` down to `lo`, threading the accumulator `b` from
+`init`, and returns the last accumulator. It runs no step when `hi ≤ lo`.
+-/
 @[inline]
-public def forDown2 {β₁ : Type v} {β₂ : Type w} (len : USize) (init₁ : β₁) (init₂ : β₂)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
+public def forInRev (lo hi : USize) (init : β)
+    (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β) : InPlace n β :=
+  forInRevFrom lo hi hi (Nat.le_refl _) init body
+
+/-- The loop of `forInRev2`, with the two accumulators as separate arguments. -/
+@[specialize]
+private def forDown2.loop {β₁ : Type v} {β₂ : Type w} (lo hi : USize)
+    (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
+    (j : USize) (hj : j.toNat ≤ hi.toNat) (b₁ : β₁) (b₂ : β₂) (s : State n) :
+    (β₁ × β₂) × State n :=
+  if h : lo < j then
+    have hj' : (j - 1).toNat < hi.toNat := forInRev_pred_lt hj h
+    match (body (j - 1) hj' b₁ b₂).fn s with
+    | ((b₁, b₂), s) => forDown2.loop lo hi body (j - 1) (Nat.le_of_lt hj') b₁ b₂ s
+  else
+    ((b₁, b₂), s)
+termination_by j.toNat
+decreasing_by exact forInRev_pred_lt_self h
+
+/-- `forInRevFrom` with two accumulators. It is specified by `forInRev2From_eq`. -/
+@[inline]
+public def forInRev2From {β₁ : Type v} {β₂ : Type w} (lo hi j₀ : USize)
+    (h : j₀.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
     InPlace n (β₁ × β₂) :=
-  forDown2From len len (Nat.le_refl _) init₁ init₂ body
+  ⟨forDown2.loop lo hi body j₀ h init₁ init₂⟩
+
+/-- `forInRev` with two accumulators, kept as two loop arguments like those of `forIn2`. -/
+@[inline]
+public def forInRev2 {β₁ : Type v} {β₂ : Type w} (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
+    InPlace n (β₁ × β₂) :=
+  forInRev2From lo hi hi (Nat.le_refl _) init₁ init₂ body
 
 /-! ## Specification -/
 
@@ -340,26 +324,21 @@ private theorem forUp_loop_eq (len : USize)
       else (b, s) := by
   rw [forUp.loop]; rfl
 
-/-- One step of `forUpFrom`. -/
-public theorem forUpFrom_eq (len j : USize) (init : β)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β) :
-    forUpFrom len j init body =
-      if hj : j < len then body j hj init >>= fun b => forUpFrom len (j + 1) b body
+/-- One step of `forIn`. -/
+public theorem forIn_eq (lo hi : USize) (init : β)
+    (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β) :
+    forIn lo hi init body =
+      if hj : lo < hi then body lo hj init >>= fun b => forIn (lo + 1) hi b body
       else pure init := by
-  by_cases hc : j < len
+  by_cases hc : lo < hi
   · rw [dite_eq_left_of_eq_true (eq_true hc)]
     apply fn_inj; funext s
-    show forUp.loop len body j init s = _
+    show forUp.loop hi body lo init s = _
     rw [forUp_loop_eq, dite_eq_left_of_eq_true (eq_true hc)]; rfl
   · rw [dite_eq_right_of_eq_false (eq_false hc)]
     apply fn_inj; funext s
-    show forUp.loop len body j init s = _
+    show forUp.loop hi body lo init s = _
     rw [forUp_loop_eq, dite_eq_right_of_eq_false (eq_false hc)]; rfl
-
-@[simp] public theorem forUp_eq (len : USize) (init : β)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β) :
-    forUp len init body = forUpFrom len 0 init body := by
-  rfl
 
 private theorem forUp2_loop_eq {β₁ : Type v} {β₂ : Type w} (len : USize)
     (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) (j : USize)
@@ -371,120 +350,125 @@ private theorem forUp2_loop_eq {β₁ : Type v} {β₂ : Type w} (len : USize)
       else ((b₁, b₂), s) := by
   rw [forUp2.loop]; rfl
 
-/-- One step of `forUp2From`. -/
-public theorem forUp2From_eq {β₁ : Type v} {β₂ : Type w} (len j : USize) (init₁ : β₁) (init₂ : β₂)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
-    forUp2From len j init₁ init₂ body =
-      if hj : j < len then
-        body j hj init₁ init₂ >>= fun b => forUp2From len (j + 1) b.1 b.2 body
+/-- One step of `forIn2`. -/
+public theorem forIn2_eq {β₁ : Type v} {β₂ : Type w} (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
+    forIn2 lo hi init₁ init₂ body =
+      if hj : lo < hi then
+        body lo hj init₁ init₂ >>= fun b => forIn2 (lo + 1) hi b.1 b.2 body
       else pure (init₁, init₂) := by
-  by_cases hc : j < len
+  by_cases hc : lo < hi
   · rw [dite_eq_left_of_eq_true (eq_true hc)]
     apply fn_inj; funext s
-    show forUp2.loop len body j init₁ init₂ s = _
+    show forUp2.loop hi body lo init₁ init₂ s = _
     rw [forUp2_loop_eq, dite_eq_left_of_eq_true (eq_true hc)]; rfl
   · rw [dite_eq_right_of_eq_false (eq_false hc)]
     apply fn_inj; funext s
-    show forUp2.loop len body j init₁ init₂ s = _
+    show forUp2.loop hi body lo init₁ init₂ s = _
     rw [forUp2_loop_eq, dite_eq_right_of_eq_false (eq_false hc)]; rfl
 
-@[simp] public theorem forUp2_eq {β₁ : Type v} {β₂ : Type w} (len : USize) (init₁ : β₁) (init₂ : β₂)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
-    forUp2 len init₁ init₂ body = forUp2From len 0 init₁ init₂ body := by
-  rfl
-
-/-- `forUp2From` is `forUpFrom` on the pair of accumulators. -/
-public theorem forUp2From_eq_forUpFrom {β₁ : Type v} {β₂ : Type w} (len j : USize) (init₁ : β₁)
+/-- `forIn2` is `forIn` on the pair of accumulators. -/
+public theorem forIn2_eq_forIn {β₁ : Type v} {β₂ : Type w} (lo hi : USize) (init₁ : β₁)
     (init₂ : β₂)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
-    forUp2From len j init₁ init₂ body =
-      forUpFrom len j (init₁, init₂) fun j hj b => body j hj b.1 b.2 := by
-  rw [forUp2From_eq, forUpFrom_eq]
+    (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
+    forIn2 lo hi init₁ init₂ body =
+      forIn lo hi (init₁, init₂) fun j hj b => body j hj b.1 b.2 := by
+  rw [forIn2_eq, forIn_eq]
   split
-  · congr 1; funext b; exact forUp2From_eq_forUpFrom len (j + 1) b.1 b.2 body
+  · congr 1; funext b; exact forIn2_eq_forIn (lo + 1) hi b.1 b.2 body
   · rfl
-termination_by len.toNat - j.toNat
-decreasing_by exact lt_succ_of_lt ‹j < len›
+termination_by hi.toNat - lo.toNat
+decreasing_by exact lt_succ_of_lt ‹lo < hi›
 
-private theorem forDown_loop_eq (len : USize)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β) (j : USize)
-    (hj : j.toNat ≤ len.toNat) (b : β) (s : State n) :
-    forDown.loop len body j hj b s =
-      if h0 : j = 0 then (b, s)
-      else
-        (body (j - 1) (forDown_pred_lt hj h0) b >>= fun b =>
-          ⟨forDown.loop len body (j - 1) (Nat.le_of_lt (forDown_pred_lt hj h0)) b⟩ :
-          InPlace n β).fn s := by
+private theorem forDown_loop_eq (lo hi : USize)
+    (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β) (j : USize)
+    (hj : j.toNat ≤ hi.toNat) (b : β) (s : State n) :
+    forDown.loop lo hi body j hj b s =
+      if h : lo < j then
+        (body (j - 1) (forInRev_pred_lt hj h) b >>= fun b =>
+          ⟨forDown.loop lo hi body (j - 1) (Nat.le_of_lt (forInRev_pred_lt hj h)) b⟩ :
+          InPlace n β).fn s
+      else (b, s) := by
   rw [forDown.loop]; rfl
 
-/-- One step of `forDownFrom`. -/
-public theorem forDownFrom_eq (len j : USize) (h : j.toNat ≤ len.toNat) (init : β)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β) :
-    forDownFrom len j h init body =
-      if h0 : j = 0 then pure init
-      else body (j - 1) (forDown_pred_lt h h0) init >>= fun b =>
-        forDownFrom len (j - 1) (Nat.le_of_lt (forDown_pred_lt h h0)) b body := by
-  by_cases hc : j = 0
+/-- One step of `forInRevFrom`. -/
+public theorem forInRevFrom_eq (lo hi j : USize) (hj : j.toNat ≤ hi.toNat) (init : β)
+    (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β) :
+    forInRevFrom lo hi j hj init body =
+      if h : lo < j then
+        body (j - 1) (forInRev_pred_lt hj h) init >>= fun b =>
+          forInRevFrom lo hi (j - 1) (Nat.le_of_lt (forInRev_pred_lt hj h)) b body
+      else pure init := by
+  by_cases hc : lo < j
   · rw [dite_eq_left_of_eq_true (eq_true hc)]
     apply fn_inj; funext s
-    show forDown.loop len body j h init s = _
+    show forDown.loop lo hi body j hj init s = _
     rw [forDown_loop_eq, dite_eq_left_of_eq_true (eq_true hc)]; rfl
   · rw [dite_eq_right_of_eq_false (eq_false hc)]
     apply fn_inj; funext s
-    show forDown.loop len body j h init s = _
+    show forDown.loop lo hi body j hj init s = _
     rw [forDown_loop_eq, dite_eq_right_of_eq_false (eq_false hc)]; rfl
 
-@[simp] public theorem forDown_eq (len : USize) (init : β)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β) :
-    forDown len init body = forDownFrom len len (Nat.le_refl _) init body := by
+@[simp] public theorem forInRev_eq (lo hi : USize) (init : β)
+    (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β) :
+    forInRev lo hi init body = forInRevFrom lo hi hi (Nat.le_refl _) init body := by
   rfl
 
-private theorem forDown2_loop_eq {β₁ : Type v} {β₂ : Type w} (len : USize)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) (j : USize)
-    (hj : j.toNat ≤ len.toNat) (b₁ : β₁) (b₂ : β₂) (s : State n) :
-    forDown2.loop len body j hj b₁ b₂ s =
-      if h0 : j = 0 then ((b₁, b₂), s)
-      else
-        (body (j - 1) (forDown_pred_lt hj h0) b₁ b₂ >>= fun b =>
-          ⟨forDown2.loop len body (j - 1) (Nat.le_of_lt (forDown_pred_lt hj h0)) b.1 b.2⟩ :
-          InPlace n (β₁ × β₂)).fn s := by
+private theorem forDown2_loop_eq {β₁ : Type v} {β₂ : Type w} (lo hi : USize)
+    (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) (j : USize)
+    (hj : j.toNat ≤ hi.toNat) (b₁ : β₁) (b₂ : β₂) (s : State n) :
+    forDown2.loop lo hi body j hj b₁ b₂ s =
+      if h : lo < j then
+        (body (j - 1) (forInRev_pred_lt hj h) b₁ b₂ >>= fun b =>
+          ⟨forDown2.loop lo hi body (j - 1) (Nat.le_of_lt (forInRev_pred_lt hj h)) b.1 b.2⟩ :
+          InPlace n (β₁ × β₂)).fn s
+      else ((b₁, b₂), s) := by
   rw [forDown2.loop]; rfl
 
-/-- One step of `forDown2From`. -/
-public theorem forDown2From_eq {β₁ : Type v} {β₂ : Type w} (len j : USize) (h : j.toNat ≤ len.toNat)
-    (init₁ : β₁) (init₂ : β₂)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
-    forDown2From len j h init₁ init₂ body =
-      if h0 : j = 0 then pure (init₁, init₂)
-      else body (j - 1) (forDown_pred_lt h h0) init₁ init₂ >>= fun b =>
-        forDown2From len (j - 1) (Nat.le_of_lt (forDown_pred_lt h h0)) b.1 b.2 body := by
-  by_cases hc : j = 0
+/-- One step of `forInRev2From`. -/
+public theorem forInRev2From_eq {β₁ : Type v} {β₂ : Type w} (lo hi j : USize)
+    (hj : j.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
+    forInRev2From lo hi j hj init₁ init₂ body =
+      if h : lo < j then
+        body (j - 1) (forInRev_pred_lt hj h) init₁ init₂ >>= fun b =>
+          forInRev2From lo hi (j - 1) (Nat.le_of_lt (forInRev_pred_lt hj h)) b.1 b.2 body
+      else pure (init₁, init₂) := by
+  by_cases hc : lo < j
   · rw [dite_eq_left_of_eq_true (eq_true hc)]
     apply fn_inj; funext s
-    show forDown2.loop len body j h init₁ init₂ s = _
+    show forDown2.loop lo hi body j hj init₁ init₂ s = _
     rw [forDown2_loop_eq, dite_eq_left_of_eq_true (eq_true hc)]; rfl
   · rw [dite_eq_right_of_eq_false (eq_false hc)]
     apply fn_inj; funext s
-    show forDown2.loop len body j h init₁ init₂ s = _
+    show forDown2.loop lo hi body j hj init₁ init₂ s = _
     rw [forDown2_loop_eq, dite_eq_right_of_eq_false (eq_false hc)]; rfl
 
-@[simp] public theorem forDown2_eq {β₁ : Type v} {β₂ : Type w} (len : USize) (init₁ : β₁) (init₂ : β₂)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
-    forDown2 len init₁ init₂ body = forDown2From len len (Nat.le_refl _) init₁ init₂ body := by
+@[simp] public theorem forInRev2_eq {β₁ : Type v} {β₂ : Type w} (lo hi : USize) (init₁ : β₁)
+    (init₂ : β₂) (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
+    forInRev2 lo hi init₁ init₂ body =
+      forInRev2From lo hi hi (Nat.le_refl _) init₁ init₂ body := by
   rfl
 
-/-- `forDown2From` is `forDownFrom` on the pair of accumulators. -/
-public theorem forDown2From_eq_forDownFrom {β₁ : Type v} {β₂ : Type w} (len j : USize)
-    (h : j.toNat ≤ len.toNat) (init₁ : β₁) (init₂ : β₂)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
-    forDown2From len j h init₁ init₂ body =
-      forDownFrom len j h (init₁, init₂) fun j hj b => body j hj b.1 b.2 := by
-  rw [forDown2From_eq, forDownFrom_eq]
+/-- `forInRev2From` is `forInRevFrom` on the pair of accumulators. -/
+public theorem forInRev2From_eq_forInRevFrom {β₁ : Type v} {β₂ : Type w} (lo hi j : USize)
+    (hj : j.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
+    forInRev2From lo hi j hj init₁ init₂ body =
+      forInRevFrom lo hi j hj (init₁, init₂) fun j hj b => body j hj b.1 b.2 := by
+  rw [forInRev2From_eq, forInRevFrom_eq]
   split
+  · congr 1; funext b; exact forInRev2From_eq_forInRevFrom lo hi (j - 1) _ b.1 b.2 body
   · rfl
-  · congr 1; funext b; exact forDown2From_eq_forDownFrom len (j - 1) _ b.1 b.2 body
 termination_by j.toNat
-decreasing_by exact forDown_pred_lt_self ‹_›
+decreasing_by exact forInRev_pred_lt_self ‹_›
+
+/-- `forInRev2` is `forInRev` on the pair of accumulators. -/
+public theorem forInRev2_eq_forInRev {β₁ : Type v} {β₂ : Type w} (lo hi : USize) (init₁ : β₁)
+    (init₂ : β₂) (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂)) :
+    forInRev2 lo hi init₁ init₂ body =
+      forInRev lo hi (init₁, init₂) fun j hj b => body j hj b.1 b.2 :=
+  forInRev2From_eq_forInRevFrom lo hi hi _ init₁ init₂ body
 
 /-! ## Running a loop straight into a continuation -/
 
@@ -515,69 +499,68 @@ termination_by len.toNat - j.toNat
 decreasing_by exact lt_succ_of_lt ‹_›
 
 /--
-Runs `forUpFrom len j₀ init body` on `a`, then `g` on the last accumulator and the new array, which
-the loop calls itself: unlike `g` on the result of `run`, it builds no pair.
+Runs `forIn lo hi init body` on `a`, then `g` on the last accumulator and the new array, which the
+loop calls itself: unlike `g` on the result of `run`, it builds no pair.
 -/
 @[inline]
-public def runForUpFromThen {γ : Type w} (a : UInt64Array) (h : a.size = n) (len j₀ : USize)
-    (init : β) (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
+public def runForInThen {γ : Type w} (a : UInt64Array) (h : a.size = n) (lo hi : USize)
+    (init : β) (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β)
     (g : β → (a' : UInt64Array) → a'.size = n → γ) : γ :=
-  forUp.loopThen len body j₀ init ⟨a.ensureExclusive, by rw [ensureExclusive_eq]; exact h⟩
+  forUp.loopThen hi body lo init ⟨a.ensureExclusive, by rw [ensureExclusive_eq]; exact h⟩
     fun b s => g b s.array s.size_array
 
-public theorem runForUpFromThen_eq {γ : Type w} (a : UInt64Array) (h : a.size = n)
-    (len j₀ : USize) (init : β) (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
+public theorem runForInThen_eq {γ : Type w} (a : UInt64Array) (h : a.size = n)
+    (lo hi : USize) (init : β) (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β)
     (g : β → (a' : UInt64Array) → a'.size = n → γ) :
-    runForUpFromThen a h len j₀ init body g =
-      g ((forUpFrom len j₀ init body).run a h).1 ((forUpFrom len j₀ init body).run a h).2
+    runForInThen a h lo hi init body g =
+      g ((forIn lo hi init body).run a h).1 ((forIn lo hi init body).run a h).2
         (size_run ..) := by
-  unfold runForUpFromThen
+  unfold runForInThen
   rw [forUp_loopThen_eq]
   rfl
 
 /-- `forDown.loop`, handing the last accumulator and state to `k` instead of returning a pair. -/
 @[specialize]
-private def forDown.loopThen {γ : Type w} (len : USize)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
-    (j : USize) (hj : j.toNat ≤ len.toNat) (b : β) (s : State n) (k : β → State n → γ) : γ :=
-  if h0 : j = 0 then
-    k b s
+private def forDown.loopThen {γ : Type w} (lo hi : USize)
+    (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β)
+    (j : USize) (hj : j.toNat ≤ hi.toNat) (b : β) (s : State n) (k : β → State n → γ) : γ :=
+  if h : lo < j then
+    have hj' := forInRev_pred_lt hj h
+    match (body (j - 1) hj' b).fn s with
+    | (b, s) => forDown.loopThen lo hi body (j - 1) (Nat.le_of_lt hj') b s k
   else
-    match (body (j - 1) (forDown_pred_lt hj h0) b).fn s with
-    | (b, s) => forDown.loopThen len body (j - 1) (Nat.le_of_lt (forDown_pred_lt hj h0)) b s k
+    k b s
 termination_by j.toNat
-decreasing_by exact forDown_pred_lt_self h0
+decreasing_by exact forInRev_pred_lt_self h
 
-private theorem forDown_loopThen_eq {γ : Type w} (len : USize)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
-    (j : USize) (hj : j.toNat ≤ len.toNat) (b : β) (s : State n) (k : β → State n → γ) :
-    forDown.loopThen len body j hj b s k =
-      k (forDown.loop len body j hj b s).1 (forDown.loop len body j hj b s).2 := by
+private theorem forDown_loopThen_eq {γ : Type w} (lo hi : USize)
+    (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β)
+    (j : USize) (hj : j.toNat ≤ hi.toNat) (b : β) (s : State n) (k : β → State n → γ) :
+    forDown.loopThen lo hi body j hj b s k =
+      k (forDown.loop lo hi body j hj b s).1 (forDown.loop lo hi body j hj b s).2 := by
   rw [forDown.loopThen, forDown.loop]
   split
+  · exact forDown_loopThen_eq lo hi body (j - 1) _ _ _ k
   · rfl
-  · rename_i h0
-    exact forDown_loopThen_eq len body (j - 1) _ _ _ k
 termination_by j.toNat
-decreasing_by exact forDown_pred_lt_self ‹_›
+decreasing_by exact forInRev_pred_lt_self ‹_›
 
-/-- `runForUpFromThen` for `forDownFrom`. -/
+/-- `runForInThen` for `forInRev`. -/
 @[inline]
-public def runForDownFromThen {γ : Type w} (a : UInt64Array) (h : a.size = n) (len j₀ : USize)
-    (hj : j₀.toNat ≤ len.toNat) (init : β)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
+public def runForInRevThen {γ : Type w} (a : UInt64Array) (h : a.size = n) (lo hi : USize)
+    (init : β) (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β)
     (g : β → (a' : UInt64Array) → a'.size = n → γ) : γ :=
-  forDown.loopThen len body j₀ hj init ⟨a.ensureExclusive, by rw [ensureExclusive_eq]; exact h⟩
+  forDown.loopThen lo hi body hi (Nat.le_refl _) init
+    ⟨a.ensureExclusive, by rw [ensureExclusive_eq]; exact h⟩
     fun b s => g b s.array s.size_array
 
-public theorem runForDownFromThen_eq {γ : Type w} (a : UInt64Array) (h : a.size = n)
-    (len j₀ : USize) (hj : j₀.toNat ≤ len.toNat) (init : β)
-    (body : (j : USize) → j.toNat < len.toNat → β → InPlace n β)
+public theorem runForInRevThen_eq {γ : Type w} (a : UInt64Array) (h : a.size = n)
+    (lo hi : USize) (init : β) (body : (j : USize) → j.toNat < hi.toNat → β → InPlace n β)
     (g : β → (a' : UInt64Array) → a'.size = n → γ) :
-    runForDownFromThen a h len j₀ hj init body g =
-      g ((forDownFrom len j₀ hj init body).run a h).1
-        ((forDownFrom len j₀ hj init body).run a h).2 (size_run ..) := by
-  unfold runForDownFromThen
+    runForInRevThen a h lo hi init body g =
+      g ((forInRev lo hi init body).run a h).1 ((forInRev lo hi init body).run a h).2
+        (size_run ..) := by
+  unfold runForInRevThen
   rw [forDown_loopThen_eq]
   rfl
 
@@ -608,24 +591,24 @@ private theorem forUp2_loopThen_eq {β₁ : Type v} {β₂ : Type w} {γ : Type 
 termination_by len.toNat - j.toNat
 decreasing_by exact lt_succ_of_lt ‹_›
 
-/-- `runForUpFromThen` for `forUp2From`, with the two accumulators handed to `g` apart. -/
+/-- `runForInThen` for `forIn2`, with the two accumulators handed to `g` apart. -/
 @[inline]
-public def runForUp2FromThen {β₁ : Type v} {β₂ : Type w} {γ : Type u} (a : UInt64Array)
-    (h : a.size = n) (len j₀ : USize) (init₁ : β₁) (init₂ : β₂)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
+public def runForIn2Then {β₁ : Type v} {β₂ : Type w} {γ : Type u} (a : UInt64Array)
+    (h : a.size = n) (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
     (g : β₁ → β₂ → (a' : UInt64Array) → a'.size = n → γ) : γ :=
-  forUp2.loopThen len body j₀ init₁ init₂ ⟨a.ensureExclusive, by rw [ensureExclusive_eq]; exact h⟩
+  forUp2.loopThen hi body lo init₁ init₂ ⟨a.ensureExclusive, by rw [ensureExclusive_eq]; exact h⟩
     fun b₁ b₂ s => g b₁ b₂ s.array s.size_array
 
-public theorem runForUp2FromThen_eq {β₁ : Type v} {β₂ : Type w} {γ : Type u} (a : UInt64Array)
-    (h : a.size = n) (len j₀ : USize) (init₁ : β₁) (init₂ : β₂)
-    (body : (j : USize) → j.toNat < len.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
+public theorem runForIn2Then_eq {β₁ : Type v} {β₂ : Type w} {γ : Type u} (a : UInt64Array)
+    (h : a.size = n) (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → j.toNat < hi.toNat → β₁ → β₂ → InPlace n (β₁ × β₂))
     (g : β₁ → β₂ → (a' : UInt64Array) → a'.size = n → γ) :
-    runForUp2FromThen a h len j₀ init₁ init₂ body g =
-      g ((forUp2From len j₀ init₁ init₂ body).run a h).1.1
-        ((forUp2From len j₀ init₁ init₂ body).run a h).1.2
-        ((forUp2From len j₀ init₁ init₂ body).run a h).2 (size_run ..) := by
-  unfold runForUp2FromThen
+    runForIn2Then a h lo hi init₁ init₂ body g =
+      g ((forIn2 lo hi init₁ init₂ body).run a h).1.1
+        ((forIn2 lo hi init₁ init₂ body).run a h).1.2
+        ((forIn2 lo hi init₁ init₂ body).run a h).2 (size_run ..) := by
+  unfold runForIn2Then
   rw [forUp2_loopThen_eq]
   rfl
 
