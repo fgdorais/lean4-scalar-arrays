@@ -43,10 +43,10 @@ inplace a do
   loop and assign mutable variables. The `else` block is optional.
 * `for j in lo...hi do …` loops over `lo ≤ j < hi` upward, and `for j in reverse lo...hi do …`
   over the same range downward, from `hi - 1` to `lo`. The bounds are `USize`s; `lo...<hi` and
-  `*...hi` (from `0`) work too, and `j.toNat < hi.toNat` is in context in the body. An optional
-  `with (x := init) …` clause names the loop's variables: up to two, which the loop keeps as
-  separate unboxed arguments. They are mutable in the body, and they hold their last values after
-  the loop. Loops nest.
+  `*...hi` (from `0`) work too, and `lo.toNat ≤ j.toNat` and `j.toNat < hi.toNat` are in context
+  in the body. An optional `with (x := init) …` clause names the loop's variables: up to two,
+  which the loop keeps as separate unboxed arguments. They are mutable in the body, and they hold
+  their last values after the loop. Loops nest.
 * `return e`, last, gives the program's result. Without it, the result is `()`.
 
 A loop body can assign only its own variables: to update a variable across a loop, carry it, as
@@ -64,7 +64,10 @@ becomes a local function of the mutable variables, which the compiler turns into
 
 The bound of each index is proved by the tactic `inplace_bound`: for an index `off + j` in a loop
 over `j < len`, from a hypothesis `off.toNat + len.toNat ≤ a.size` in context, or else by `lia`
-from the hypotheses in context. It looks inside conjunctions.
+from the hypotheses in context, with the `USize` arithmetic of the index unfolded if needed, so
+that an index such as `j - 17` in a loop over `17...hi` is proved too. It looks inside
+conjunctions. A loop body has both bounds of its index, `lo ≤ j` and `j < hi`, in context, and the
+program has `a.usize.toNat ≤ a.size`, so `a.usize` works as a loop bound with no other hypothesis.
 -/
 
 namespace ScalarArray.InPlaceSyntax
@@ -96,10 +99,37 @@ open Lean Elab Tactic in
 @[tactic inplaceSplit] def evalInplaceSplit : Tactic := fun _ =>
   liftMetaTactic fun g => return [← splitAnds g]
 
+open Lean Meta in
+/-- Adds `x.toNat < USize.size` to the context of `g` for each `x.toNat` in its goal or context. -/
+def addUSizeBounds (g : MVarId) : MetaM MVarId := g.withContext do
+  let atoms ← IO.mkRef (#[] : Array Expr)
+  let mut types := #[← instantiateMVars (← g.getType)]
+  for d in ← getLCtx do
+    if !d.isImplementationDetail then types := types.push (← instantiateMVars d.type)
+  for t in types do
+    t.forEachWhere (fun e => e.isAppOfArity ``USize.toNat 1 && !e.hasLooseBVars) fun e =>
+      atoms.modify fun xs => if xs.contains e.appArg! then xs else xs.push e.appArg!
+  let mut g := g
+  for x in ← atoms.get do
+    let h ← mkAppM ``USize.toNat_lt_size #[x]
+    let (_, g') ← (← g.assert `hsize (← inferType h) h).intro1P
+    g := g'
+  return g
+
+/-- Adds `x.toNat < USize.size` to the context for each `x.toNat` in the goal or context. -/
+syntax (name := inplaceUSizeBounds) "inplace_usize_bounds" : tactic
+
+open Lean Elab Tactic in
+/-- Elaborates `inplace_usize_bounds`. -/
+@[tactic inplaceUSizeBounds] def evalInplaceUSizeBounds : Tactic := fun _ =>
+  liftMetaTactic fun g => return [← addUSizeBounds g]
+
 /--
 Proves the bound `i.toNat < n` of an index in an `inplace` program: for `i = off + j`, from a
 window hypothesis `off.toNat + len.toNat ≤ n` and the loop bound `j.toNat < len.toNat`, or else by
-`lia` from the hypotheses in context. Conjunctions in context are split first.
+`lia` from the hypotheses in context, or else by `lia` after unfolding the `USize` arithmetic of
+the index and of the hypotheses (`+`, `-`, `*` and literals) on both platform widths. Conjunctions
+in context are split first.
 -/
 syntax (name := inplaceBound) "inplace_bound" : tactic
 
@@ -111,7 +141,13 @@ macro_rules
            case hj => assumption
            case hw => assumption)
         | assumption
-        | lia))
+        | lia
+        | (inplace_usize_bounds
+           have := System.Platform.numBits_eq
+           simp only [USize.toNat_add, USize.toNat_sub, USize.toNat_mul, USize.reduceToNat,
+             USize.size] at *
+           -- `lia` runs out of memory on these large moduli, where `omega` is instant.
+           rcases this with h | h <;> simp only [h] at * <;> omega)))
 
 /-- A statement of an `inplace` program. -/
 declare_syntax_cat inplaceStmt
@@ -260,15 +296,15 @@ private partial def expandStmt (arr : Ident) (mvars : Array Ident) (ret : Term) 
     let b ← expandSeq arr xs (← `(.pure $(← tuple xs))) false body.getElems.toList
     let loop ← if rev.isSome then
         match xs, inits with
-        | #[], #[] => `(.forInRev $lo $hi () fun $j hj _ => $b)
-        | #[x], #[init] => `(.forInRev $lo $hi $init fun $j hj $x => $b)
-        | #[x, y], #[initx, inity] => `(.forInRev2 $lo $hi $initx $inity fun $j hj $x $y => $b)
+        | #[], #[] => `(.forInRev $lo $hi () fun $j hlo hj _ => $b)
+        | #[x], #[init] => `(.forInRev $lo $hi $init fun $j hlo hj $x => $b)
+        | #[x, y], #[initx, inity] => `(.forInRev2 $lo $hi $initx $inity fun $j hlo hj $x $y => $b)
         | _, _ => Macro.throwError "a loop has at most two variables"
       else
         match xs, inits with
-        | #[], #[] => `(.forIn $lo $hi () fun $j hj _ => $b)
-        | #[x], #[init] => `(.forIn $lo $hi $init fun $j hj $x => $b)
-        | #[x, y], #[initx, inity] => `(.forIn2 $lo $hi $initx $inity fun $j hj $x $y => $b)
+        | #[], #[] => `(.forIn $lo $hi () fun $j hlo hj _ => $b)
+        | #[x], #[init] => `(.forIn $lo $hi $init fun $j hlo hj $x => $b)
+        | #[x, y], #[initx, inity] => `(.forIn2 $lo $hi $initx $inity fun $j hlo hj $x $y => $b)
         | _, _ => Macro.throwError "a loop has at most two variables"
     `(.bind $loop fun p => match p with | $(← tuplePat xs) => $(← k (mvars ++ xs)))
   | _ => Macro.throwUnsupported
@@ -280,4 +316,5 @@ end
 macro_rules
   | `(inplace $a:ident do $stmts;*) => do
     let prog ← expandSeq a #[] (← `(.pure ())) true stmts.getElems.toList
-    `(($a).runInPlace $prog)
+    `(have : ($a).usize.toNat ≤ ($a).size := ($a).toNat_usize_le
+      ($a).runInPlace $prog)

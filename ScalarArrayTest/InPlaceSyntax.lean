@@ -70,6 +70,36 @@ private def shiftRange (a : UInt8Array) (lo hi : USize) : Option (List Nat × UI
   some ([1, 2], UInt8Array.mk #[1, 2, 2, 3, 5])
 #guard shiftRange (UInt8Array.mk #[1, 2, 3]) 2 1 == some ([], UInt8Array.mk #[1, 2, 3])
 
+/--
+Shifts the number with little-endian 64-bit limbs `a` left by 1111 = 17 * 64 + 23 bits, keeping
+`a.size` limbs, in place.
+-/
+private def shl1111 (a : UInt64Array) : UInt64Array :=
+  if h : 18 ≤ a.size then
+    (inplace a do
+      for j in reverse 18...a.usize do
+        a[j] := (a[j - 17] <<< 23) ||| (a[j - 18] >>> 41)
+      a[17] := a[0] <<< 23
+      for j in 0...17 do
+        a[j] := 0).2
+  else
+    UInt64Array.mk (Array.replicate a.size 0)
+
+/-- The number with little-endian 64-bit limbs `a`. -/
+private def limbsToNat (a : UInt64Array) : Nat :=
+  a.toArray.foldr (fun x n => n * 2 ^ 64 + x.toNat) 0
+
+/-- The `n` low 64-bit limbs of `x`. -/
+private def natToLimbs (n x : Nat) : UInt64Array :=
+  UInt64Array.mk ((Array.range n).map fun i => (x >>> (64 * i)).toUInt64)
+
+private def checkShl (n x : Nat) : Bool :=
+  limbsToNat (shl1111 (natToLimbs n x)) == (x <<< 1111) % 2 ^ (64 * n)
+
+#guard (List.range 24).all fun n => checkShl n (3 ^ (40 * n))
+#guard (List.range 24).all fun n => checkShl n (2 ^ (64 * n) - 1)
+#guard checkShl 18 1 && checkShl 18 (2 ^ 41) && checkShl 19 (2 ^ 41) && checkShl 17 1
+
 /-- Shifts the window of `len` elements at `off` up by one, from the top down, and returns the
 element shifted out. -/
 private def shiftUp (a : UInt8Array) (off len : USize) : Option (UInt8 × UInt8Array) :=
