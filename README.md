@@ -90,7 +90,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `Slice.empty`, `{}`, `array`, `start`, `stop`, `size`, `get`, `getD`, `get!`, `s[i]`, `popFront`, `slice`, `copy`, `for x in s`, `foldl`, `foldlM`, `forM`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findRevM?`, `findSomeRevM?`, `iter`, `toArray`, `toList`, `s == t` |
 | Slice writes | `Slice.set`, `set!`, `modify`, `swap`, `reverse`, `foldlInPlace`, `foldrInPlace`, `foldlInPlaceThen`, `foldrInPlaceThen`, which write into the slice's array; `s.array` gives the whole array back |
 | In-place folds | `Slice.foldlInPlace`, `Slice.foldrInPlace` and their `Then` forms; `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
-| In-place programs | `XArray.InPlace n α`, a program that reads and writes an array of size `n` in place: `InPlace.read`, `write`, `pure`, `>>=`, `InPlace.ite`, `InPlace.dite`, the loops `forIn lo hi`, `forIn2`, `forInRev lo hi` (from `hi - 1` down to `lo`), `forInRev2`, whose bodies get both `lo ≤ j` and `j < hi`, and `forInBind`, `forIn2Bind`, `forInRevBind`, `forInRev2Bind`, a loop followed by the rest of the program with no result pair in between, run with `a.runInPlace m` or `m.run a h`; for kernels that no fold shape covers, such as a butterfly that writes two windows with two carries |
+| In-place programs | `XArray.InPlace n α`, a monad of programs that read and write an array of size `n` in place: `InPlace.read`, `readThen`, `write`, `InPlace.ite`, `InPlace.dite`; the loops `forIn lo hi` and `forInRev lo hi` (from `hi - 1` down to `lo`), whose bodies get both `lo ≤ j` and `j < hi`, `forIn2` and `forInRev2` with two unboxed accumulators, and their `Bind` forms (`forInBind`, …), which run straight into the rest of the program; run with `a.runInPlace m` or `m.run a h`, or a single loop with `runForInThen`, `runForInRevThen` and `runForIn2Then`. For kernels that no fold shape covers, such as a butterfly that writes two windows with two carries |
 | `inplace` notation | In the experimental `ScalarArray.InPlaceSyntax`: `inplace a do …`, an in-place program on `a` written with reads `let x ← a[i]` (or `a[i]` in any term), writes `a[i] := e`, `let`, `let mut` and `x := e`, `have`, `if … then … else …`, loops `for j in lo...hi with (x := init) … do …` and `for j in reverse lo...hi …`, and `return e`; it compiles to the same loops as hand-written programs, and the tactic `inplace_bound` proves the index bounds, including `USize` arithmetic such as `j - 17` |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array, and `Std.Iter.toXSlice` for the rest of a slice iterator as a slice, whose `start` is its position |
 | Equality     | `a == b` and `s == t`; for integer types also `DecidableEq` (`decEq`), `Hashable` (`hash`), and for slices `Hashable` (`Slice.hash`), `EquivBEq` and `LawfulHashable` |
@@ -148,6 +148,36 @@ a.iter.length                                -- size
 
 `Std.Iter.toXArrayWithCapacity` allocates up front when the number of elements is known or
 bounded, for example `(a.iter.map f).toUInt32ArrayWithCapacity a.size`.
+
+In-place programs cover loops that no fold shape fits. In the experimental
+`ScalarArray.InPlaceSyntax`, `inplace a do …` writes one in a small imperative language, and
+compiles it to the same unboxed loop as a hand-written program. Here a single pass adds and
+subtracts two windows of `a` with a carry and a borrow, writing the sum over `x` and the
+difference to `t`:
+
+```lean
+import ScalarArray
+import ScalarArray.InPlaceSyntax
+
+open ScalarArray
+
+def addSub (a : UInt64Array) (x y t len : USize) (hx : x.toNat + len.toNat ≤ a.size)
+    (hy : y.toNat + len.toNat ≤ a.size) (ht : t.toNat + len.toNat ≤ a.size) :
+    (UInt64 × UInt64) × UInt64Array :=
+  inplace a do
+    for j in 0...len with (c := 0) (b := 0) do
+      let u ← a[x + j]
+      let v ← a[y + j]
+      let s := u + v + c
+      let d := u - v - b
+      a[x + j] := s
+      a[t + j] := d
+      c := if s < u || (s == u && c == 1) then 1 else 0
+      b := if u < v || (u == v && b == 1) then 1 else 0
+    return (c, b)
+```
+
+The index bounds are proved by the tactic `inplace_bound`, here from the window hypotheses.
 
 Equality on the integer types compares the arrays' memory with `memcmp`, and their hash agrees
 with the hash of `toArray`. `Float32Array` and `Float64Array` compare elements with floating-point
