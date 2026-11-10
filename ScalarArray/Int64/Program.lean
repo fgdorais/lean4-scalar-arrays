@@ -104,6 +104,21 @@ public def write (i : USize) (h : i.toNat < n) (v : Int64) : InPlace.{u} n PUnit
     by rw [size_uset]; exact s.size_array⟩)⟩
 
 /--
+Runs `t` if `c` holds and `e` otherwise. Unlike `if c then t else e`, which chooses a program and
+then runs it, it compiles to a branch inside one program, without building the programs of the two
+branches as closures.
+-/
+@[inline]
+public protected def ite (c : Prop) [Decidable c] (t e : InPlace n α) : InPlace n α :=
+  ⟨fun s => if c then t.fn s else e.fn s⟩
+
+/-- `InPlace.ite` where each branch takes the proof of its condition. -/
+@[inline]
+public protected def dite (c : Prop) [Decidable c] (t : c → InPlace n α) (e : ¬c → InPlace n α) :
+    InPlace n α :=
+  ⟨fun s => if h : c then (t h).fn s else (e h).fn s⟩
+
+/--
 Runs the program `m` on the array `a`, and returns its result and the new array. The array is made
 exclusive first, so it is copied once if it is shared, and updated in place otherwise.
 -/
@@ -314,6 +329,14 @@ private theorem State.ext' {s t : State n} (h : s.array = t.array) : s = t := by
     (write i hi v : InPlace.{u} n PUnit).run a h = (⟨⟩, a.set i.toNat v (by rw [h]; exact hi)) := by
   simp only [run_eq, write]
   congr 1
+
+@[simp] public theorem ite_eq (c : Prop) [Decidable c] (t e : InPlace n α) :
+    InPlace.ite c t e = if c then t else e := by
+  unfold InPlace.ite; split <;> rfl
+
+@[simp] public theorem dite_eq (c : Prop) [Decidable c] (t : c → InPlace n α)
+    (e : ¬c → InPlace n α) : InPlace.dite c t e = if h : c then t h else e h := by
+  unfold InPlace.dite; split <;> rfl
 
 private theorem run_bind' (m : InPlace n α) (f : α → InPlace n β) (a : Int64Array)
     (h : a.size = n) :

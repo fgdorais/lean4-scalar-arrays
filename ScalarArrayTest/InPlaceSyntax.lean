@@ -102,6 +102,73 @@ private def butterfly (a : UInt64Array) (xs ys ts len : USize) :
 
 #guard UInt32Array.inplaceWritesInPlace 1
 
+-- A program may use the array's size, without a copy.
+@[noinline] def UInt32Array.inplaceUsesSize (x : UInt32) : Bool :=
+  let a := (UInt32Array.emptyWithCapacity 4).push x |>.push 2 |>.push 3
+  let p := rawAddr a
+  have := a.toNat_usize_le
+  let r := inplace a do
+    for j < a.usize do
+      a[j] := a[j] + 1
+  rawAddr r.2 == p && r.2.toArray == #[x + 1, 3, 4]
+
+#guard UInt32Array.inplaceUsesSize 1
+
+/-- Clamps each element of the window of `len` at `off` to at most `m`, and counts the clamped. -/
+private def clamp (a : UInt16Array) (off len : USize) (m : UInt16) : Option (Nat × UInt16Array) :=
+  if h : off.toNat + len.toNat ≤ a.size then
+    some <| inplace a do
+      for j < len with (k := 0) do
+        if a[off + j] > m then
+          a[off + j] := m
+          k := k + 1
+      return k
+  else none
+
+#guard clamp (UInt16Array.mk #[9, 1, 7, 3, 8, 9]) 1 4 5 ==
+  some (2, UInt16Array.mk #[9, 1, 5, 3, 5, 9])
+
+/-- Nested reads, `let mut` and an `if` with an `else` at the top level of a program. -/
+private def swapIfGreater (a : Int32Array) (i j : USize) : Option (Bool × Int32Array) :=
+  if h : i.toNat < a.size ∧ j.toNat < a.size then
+    some <| inplace a do
+      let mut swapped := false
+      if h' : a[i] > a[j] then
+        let x ← a[i]
+        a[i] := a[j]
+        a[j] := x
+        swapped := true
+      else
+        swapped := false
+      return swapped
+  else none
+
+#guard swapIfGreater (Int32Array.mk #[3, -1]) 0 1 == some (true, Int32Array.mk #[-1, 3])
+#guard swapIfGreater (Int32Array.mk #[-3, 1]) 0 1 == some (false, Int32Array.mk #[-3, 1])
+
+/-- Nested loops: running sums along the rows of a `rows × cols` matrix, in place, and the total. -/
+private def rowSums (a : UInt32Array) (rows cols : USize) : Option (UInt32 × UInt32Array) :=
+  if h : rows.toNat * cols.toNat ≤ a.size ∧ (rows * cols).toNat = rows.toNat * cols.toNat then
+  some <| inplace a do
+    for r < rows with (total := 0) do
+      have hr : (r * cols).toNat + cols.toNat ≤ a.size := by
+        have h₁ : (r.toNat + 1) * cols.toNat ≤ rows.toNat * cols.toNat :=
+          Nat.mul_le_mul_right _ (by lia)
+        have h₂ : r.toNat * cols.toNat < USize.size := by
+          have := (rows * cols).toNat_lt_size
+          have := Nat.mul_le_mul_right cols.toNat (Nat.le_of_lt (by lia : r.toNat < rows.toNat))
+          lia
+        rw [USize.toNat_mul, Nat.mod_eq_of_lt h₂]; rw [Nat.succ_mul] at h₁; lia
+      for c < cols with (s := 0) do
+        s := s + a[r * cols + c]
+        a[r * cols + c] := s
+      total := total + s
+    return total
+  else none
+
+#guard rowSums (UInt32Array.mk #[1, 2, 3, 4, 5, 6]) 2 3 ==
+  some (21, UInt32Array.mk #[1, 3, 6, 4, 9, 15])
+
 -- Reads and writes go to the program's array only.
 /-- error: an `inplace` program on `a` reads and writes only `a` -/
 #guard_msgs in
@@ -109,3 +176,14 @@ example (a b : UInt8Array) (h : 0 < a.size) : UInt8 × UInt8Array :=
   inplace a do
     let x ← b[0]
     return x
+
+/--
+error: `y` is not a mutable variable here: declare it with `let mut`, or carry it into the loop with `with (y := y)`
+-/
+#guard_msgs in
+example (a : UInt8Array) (h : 0 < a.size) : UInt8 × UInt8Array :=
+  inplace a do
+    let mut y := 0
+    for j < 1 do
+      y := 1
+    return y

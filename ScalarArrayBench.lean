@@ -295,6 +295,21 @@ def extras (rounds n : Nat) : IO (List Row) := do
           let lo := x * 3 + c₁
           (lo, c₂ + x * 5, lo >>> 7)
       r.2.1 + r.2.2,
+    ← one "UInt64 clamp, foldlInPlaceRange" w fun a _ =>
+      let m : UInt64 := (1 : UInt64) <<< 63
+      let r := a.foldlInPlaceRange 0 a.usize (by simpa using a.toNat_usize_le) (0 : UInt64)
+        fun _ _ x k => if x > m then (m, k + 1) else (x, k)
+      r.2,
+    ← one "UInt64 clamp, inplace notation" w fun a _ =>
+      let m : UInt64 := (1 : UInt64) <<< 63
+      have := a.toNat_usize_le
+      let r := inplace a do
+        for j < a.usize with (k := (0 : UInt64)) do
+          if a[j] > m then
+            a[j] := m
+            k := k + 1
+        return k
+      r.1,
     -- lean4-mpn's FFT residues are windows of about 137 limbs.
     ← one "UInt64 add 137, foldlInPlace2" (w.extract 0 411) fun a n =>
       butterflies addFold2 a 137 (n / 137),
