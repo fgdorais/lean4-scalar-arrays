@@ -9,6 +9,7 @@ public import ScalarArray.UInt8.Array
 public import ScalarArray.UInt8.Slice
 public import ScalarArray.UInt8.Lemmas
 public import ScalarArray.UInt8.InPlace
+public import ScalarArray.UInt8.Program
 public import ScalarArray.UInt8.Decidable
 
 /-!

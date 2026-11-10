@@ -9,4 +9,5 @@ import ScalarArrayTest.USize.Array
 import ScalarArrayTest.USize.Slice
 import ScalarArrayTest.USize.Lemmas
 import ScalarArrayTest.USize.InPlace
+import ScalarArrayTest.USize.Program
 import ScalarArrayTest.USize.Decidable

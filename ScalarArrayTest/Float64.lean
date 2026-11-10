@@ -9,3 +9,4 @@ import ScalarArrayTest.Float64.Array
 import ScalarArrayTest.Float64.Slice
 import ScalarArrayTest.Float64.Lemmas
 import ScalarArrayTest.Float64.InPlace
+import ScalarArrayTest.Float64.Program

@@ -179,6 +179,59 @@ structure Row where
     rows := rows ++ [{ name := s!"{label} {name}", time := t, core := c }]
   return rows
 
+/-- The carry of `x + y + c`, for a carry `c ≤ 1`, with `s := x + y + c` already computed. -/
+@[inline] def carry (x s c : UInt64) : UInt64 :=
+  (decide (s < x)).toUInt64 ||| ((decide (s == x)).toUInt64 &&& c)
+
+/-- The borrow of `x - y - b`, for a borrow `b ≤ 1`. -/
+@[inline] def borrow (x y b : UInt64) : UInt64 :=
+  (decide (x < y)).toUInt64 ||| ((decide (x == y)).toUInt64 &&& b)
+
+/--
+A butterfly on the windows of `len` limbs at `0`, `len` and `2 * len` of `a`, the way lean4-mpn's
+FFT does one: `x, t := x + y, x - y`, carrying the carry and the borrow apart. This one makes two
+passes, one `foldlInPlace2Then` for each result.
+-/
+@[noinline] def butterflyTwoPass (a : UInt64Array) (len : USize) : UInt64Array × UInt64 :=
+  if h : 3 * len.toNat ≤ a.size ∧ (2 * len).toNat = 2 * len.toNat ∧ len.toNat ≤ a.size then
+    have hx : (0 : USize).toNat + len.toNat ≤ a.size := by simp; lia
+    have hy : len.toNat + len.toNat ≤ a.size := by lia
+    have ht : (2 * len).toNat + len.toNat ≤ a.size := by lia
+    a.foldlInPlace2Then 0 len (2 * len) len hx hy ht (0 : UInt64)
+      (fun _ _ x y b => (x - y - b, borrow x y b)) fun a ha b =>
+        a.foldlInPlace2Then 0 len 0 len (ha ▸ hx) (ha ▸ hy) (ha ▸ hx) (0 : UInt64)
+          (fun _ _ x y c => let s := x + y + c; (s, carry x s c)) fun a _ c => (a, b + c)
+  else (a, 0)
+
+/-- The same butterfly in one pass, as an `InPlace` program with `forUp2`. -/
+@[noinline] def butterflyInPlace (a : UInt64Array) (len : USize) : UInt64Array × UInt64 :=
+  if h : 3 * len.toNat ≤ a.size ∧ (2 * len).toNat = 2 * len.toNat ∧ len.toNat ≤ a.size then
+    have hx : (0 : USize).toNat + len.toNat ≤ a.size := by simp; lia
+    have hy : len.toNat + len.toNat ≤ a.size := by lia
+    have ht : (2 * len).toNat + len.toNat ≤ a.size := by lia
+    let r := a.runInPlace <| UInt64Array.InPlace.forUp2 len (0 : UInt64) (0 : UInt64)
+      fun j hj c b => do
+        let x ← UInt64Array.InPlace.read (0 + j) (UInt64Array.InPlace.toNat_add_lt_of_window hx hj)
+        let y ← UInt64Array.InPlace.read (len + j) (UInt64Array.InPlace.toNat_add_lt_of_window hy hj)
+        let s := x + y + c
+        UInt64Array.InPlace.write (0 + j) (UInt64Array.InPlace.toNat_add_lt_of_window hx hj) s
+        UInt64Array.InPlace.write (2 * len + j) (UInt64Array.InPlace.toNat_add_lt_of_window ht hj)
+          (x - y - b)
+        pure (carry x s c, borrow x y b)
+    (r.2, r.1.1 + r.1.2)
+  else (a, 0)
+
+/-- Runs a butterfly on windows of `len` limbs `reps` times, and returns a checksum. -/
+@[inline] def butterflies (k : UInt64Array → USize → UInt64Array × UInt64) (a : UInt64Array)
+    (len : USize) (reps : Nat) : UInt64 := Id.run do
+  let mut a := a
+  let mut s : UInt64 := 0
+  for _ in [0:reps] do
+    let r := k a len
+    a := r.1
+    s := s + r.2
+  return s + a[0]!
+
 /--
 Times the operations that have no counterpart in core, on `UInt32Array`. Each kernel takes its
 input as an argument, so that the compiler can't compute its result once, outside the timing.
@@ -211,7 +264,16 @@ def extras (rounds n : Nat) : IO (List Row) := do
         (0 : UInt64) (0 : UInt64) fun _ _ x c₁ c₂ =>
           let lo := x * 3 + c₁
           (lo, c₂ + x * 5, lo >>> 7)
-      r.2.1 + r.2.2]
+      r.2.1 + r.2.2,
+    -- lean4-mpn's FFT residues are windows of about 137 limbs.
+    ← one "UInt64 butterfly 137, 2× foldlInPlace2Then" (w.extract 0 411) fun a n =>
+      butterflies butterflyTwoPass a 137 (n / 137),
+    ← one "UInt64 butterfly 137, InPlace.forUp2" (w.extract 0 411) fun a n =>
+      butterflies butterflyInPlace a 137 (n / 137),
+    ← one "UInt64 butterfly n/3, 2× foldlInPlace2Then" w fun a n =>
+      butterflies butterflyTwoPass a (n / 3).toUSize 3,
+    ← one "UInt64 butterfly n/3, InPlace.forUp2" w fun a n =>
+      butterflies butterflyInPlace a (n / 3).toUSize 3]
 
 /-- Formats milliseconds with three decimals. -/
 def fmt (t : Float) : String :=

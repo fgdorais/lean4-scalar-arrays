@@ -9,4 +9,5 @@ import ScalarArrayTest.Int16.Array
 import ScalarArrayTest.Int16.Slice
 import ScalarArrayTest.Int16.Lemmas
 import ScalarArrayTest.Int16.InPlace
+import ScalarArrayTest.Int16.Program
 import ScalarArrayTest.Int16.Decidable
