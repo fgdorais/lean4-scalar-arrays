@@ -36,6 +36,13 @@ private def wr (i : USize) (v : Int8) : Int8Array.InPlace n Unit :=
     pure (x, y)
   r.1 == (1, big) && r.2.toArray == #[big, 2, 11]
 
+-- `InPlace.ite` and `InPlace.dite` run the branch of the condition.
+#guard ((Int8Array.mk #[1, 2, 3]).runInPlace (forIn 0 3 () fun j _ _ _ =>
+  Int8Array.InPlace.ite (j.toNat % 2 = 0) (wr j big) (pure ()))).2.toArray == #[big, 2, big]
+#guard ((Int8Array.mk #[1, 2, 3]).runInPlace
+  (Int8Array.InPlace.dite (2 < 3) (fun _ => wr 1 big *> pure true) (fun _ => pure false))) ==
+    (true, Int8Array.mk #[1, big, 3])
+
 -- `forIn lo hi` visits `lo` to `hi - 1`, `forInRev lo hi` visits `hi - 1` down to `lo`.
 #guard ((Int8Array.mk #[1, 2, 3]).runInPlace
   (forIn 0 3 [] fun j _ _ b => pure (j.toNat :: b))).1 == [2, 1, 0]

@@ -44,6 +44,8 @@ rev = "v1.0.0"
 Then `import ScalarArray` for every type, or `import ScalarArray.UInt32` and so on for just one.
 The experimental `ScalarArray.Bytes`, which converts the arrays to and from `ByteArray` in little-
 or big-endian byte order, is not part of `import ScalarArray` and has to be imported on its own.
+So is the experimental `ScalarArray.InPlaceSyntax`, the `inplace a do …` notation for in-place
+programs.
 
 Reads, writes and copies are implemented in C, so the library is built with `precompileModules`,
 and Lake loads the compiled code whenever a file that imports it runs `#eval` or `#guard`. This
@@ -88,7 +90,8 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `Slice.empty`, `{}`, `array`, `start`, `stop`, `size`, `get`, `getD`, `get!`, `s[i]`, `popFront`, `slice`, `copy`, `for x in s`, `foldl`, `foldlM`, `forM`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findRevM?`, `findSomeRevM?`, `iter`, `toArray`, `toList`, `s == t` |
 | Slice writes | `Slice.set`, `set!`, `modify`, `swap`, `reverse`, `foldlInPlace`, `foldrInPlace`, `foldlInPlaceThen`, `foldrInPlaceThen`, which write into the slice's array; `s.array` gives the whole array back |
 | In-place folds | `Slice.foldlInPlace`, `Slice.foldrInPlace` and their `Then` forms; `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
-| In-place programs | `XArray.InPlace n α`, a program that reads and writes an array of size `n` in place: `InPlace.read`, `write`, `pure`, `>>=`, the loops `forIn lo hi`, `forIn2`, `forInRev lo hi` (from `hi - 1` down to `lo`), `forInRev2`, whose bodies get both `lo ≤ j` and `j < hi`, and `forInBind`, `forIn2Bind`, `forInRevBind`, `forInRev2Bind`, a loop followed by the rest of the program with no result pair in between, run with `a.runInPlace m` or `m.run a h`; for kernels that no fold shape covers, such as a butterfly that writes two windows with two carries |
+| In-place programs | `XArray.InPlace n α`, a program that reads and writes an array of size `n` in place: `InPlace.read`, `write`, `pure`, `>>=`, `InPlace.ite`, `InPlace.dite`, the loops `forIn lo hi`, `forIn2`, `forInRev lo hi` (from `hi - 1` down to `lo`), `forInRev2`, whose bodies get both `lo ≤ j` and `j < hi`, and `forInBind`, `forIn2Bind`, `forInRevBind`, `forInRev2Bind`, a loop followed by the rest of the program with no result pair in between, run with `a.runInPlace m` or `m.run a h`; for kernels that no fold shape covers, such as a butterfly that writes two windows with two carries |
+| `inplace` notation | In the experimental `ScalarArray.InPlaceSyntax`: `inplace a do …`, an in-place program on `a` written with reads `let x ← a[i]` (or `a[i]` in any term), writes `a[i] := e`, `let`, `let mut` and `x := e`, `have`, `if … then … else …`, loops `for j in lo...hi with (x := init) … do …` and `for j in reverse lo...hi …`, and `return e`; it compiles to the same loops as hand-written programs, and the tactic `inplace_bound` proves the index bounds, including `USize` arithmetic such as `j - 17` |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array, and `Std.Iter.toXSlice` for the rest of a slice iterator as a slice, whose `start` is its position |
 | Equality     | `a == b` and `s == t`; for integer types also `DecidableEq` (`decEq`), `Hashable` (`hash`), and for slices `Hashable` (`Slice.hash`), `EquivBEq` and `LawfulHashable` |
 | Linearity    | `markLinear`, `propagateMark`                                               |
@@ -178,7 +181,7 @@ The following are not covered by this promise:
 
 - `ScalarArray.Internal`, including `ScalarArray.Raw`, and the declarations whose documentation
   says they are for internal use only;
-- the experimental `ScalarArray.Bytes`;
+- the experimental `ScalarArray.Bytes` and `ScalarArray.InPlaceSyntax`;
 - which lemmas are `@[simp]` or `@[grind]`, so `simp` and `grind` proofs may need adjusting after
   an upgrade;
 - changes forced by changes to Lean and its core library, which is still evolving; in particular,

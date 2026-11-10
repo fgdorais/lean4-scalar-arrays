@@ -5,6 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 import ScalarArray
+import ScalarArray.InPlaceSyntax
 import ScalarArray.Bytes
 
 /-!
@@ -221,6 +222,25 @@ passes, one `foldlInPlace2Then` for each result.
     (r.2, r.1.1 + r.1.2)
   else (a, 0)
 
+/-- The same one-pass butterfly, written with the `inplace` notation. -/
+@[noinline] def butterflySyntax (a : UInt64Array) (len : USize) : UInt64Array × UInt64 :=
+  if h : 3 * len.toNat ≤ a.size ∧ (2 * len).toNat = 2 * len.toNat ∧ len.toNat ≤ a.size then
+    have hx : (0 : USize).toNat + len.toNat ≤ a.size := by simp; lia
+    have hy : len.toNat + len.toNat ≤ a.size := by lia
+    have ht : (2 * len).toNat + len.toNat ≤ a.size := by lia
+    let r := inplace a do
+      for j in 0...len with (c := 0) (b := 0) do
+        let x ← a[0 + j]
+        let y ← a[len + j]
+        let s := x + y + c
+        a[0 + j] := s
+        a[2 * len + j] := x - y - b
+        let c := carry x s c
+        let b := borrow x y b
+      return (c, b)
+    (r.2, r.1.1 + r.1.2)
+  else (a, 0)
+
 /-- `t := x + y` with a carry, on the same windows as the butterflies, with `foldlInPlace2`. -/
 @[noinline] def addFold2 (a : UInt64Array) (len : USize) : UInt64Array × UInt64 :=
   if h : 3 * len.toNat ≤ a.size ∧ (2 * len).toNat = 2 * len.toNat ∧ len.toNat ≤ a.size then
@@ -275,6 +295,21 @@ def extras (rounds n : Nat) : IO (List Row) := do
           let lo := x * 3 + c₁
           (lo, c₂ + x * 5, lo >>> 7)
       r.2.1 + r.2.2,
+    ← one "UInt64 clamp, foldlInPlaceRange" w fun a _ =>
+      let m : UInt64 := (1 : UInt64) <<< 63
+      let r := a.foldlInPlaceRange 0 a.usize (by simpa using a.toNat_usize_le) (0 : UInt64)
+        fun _ _ x k => if x > m then (m, k + 1) else (x, k)
+      r.2,
+    ← one "UInt64 clamp, inplace notation" w fun a _ =>
+      let m : UInt64 := (1 : UInt64) <<< 63
+      have := a.toNat_usize_le
+      let r := inplace a do
+        for j in 0...a.usize with (k := (0 : UInt64)) do
+          if a[j] > m then
+            a[j] := m
+            k := k + 1
+        return k
+      r.1,
     -- lean4-mpn's FFT residues are windows of about 137 limbs.
     ← one "UInt64 add 137, foldlInPlace2" (w.extract 0 411) fun a n =>
       butterflies addFold2 a 137 (n / 137),
@@ -283,10 +318,14 @@ def extras (rounds n : Nat) : IO (List Row) := do
       butterflies butterflyTwoPass a 137 (n / 137),
     ← one "UInt64 butterfly 137, InPlace.forIn2" (w.extract 0 411) fun a n =>
       butterflies butterflyInPlace a 137 (n / 137),
+    ← one "UInt64 butterfly 137, inplace notation" (w.extract 0 411) fun a n =>
+      butterflies butterflySyntax a 137 (n / 137),
     ← one "UInt64 butterfly n/3, 2× foldlInPlace2Then" w fun a n =>
       butterflies butterflyTwoPass a (n / 3).toUSize 3,
     ← one "UInt64 butterfly n/3, InPlace.forIn2" w fun a n =>
-      butterflies butterflyInPlace a (n / 3).toUSize 3]
+      butterflies butterflyInPlace a (n / 3).toUSize 3,
+    ← one "UInt64 butterfly n/3, inplace notation" w fun a n =>
+      butterflies butterflySyntax a (n / 3).toUSize 3]
 
 /-- Formats milliseconds with three decimals. -/
 def fmt (t : Float) : String :=
