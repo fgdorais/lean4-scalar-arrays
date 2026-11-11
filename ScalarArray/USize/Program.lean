@@ -14,8 +14,8 @@ import all ScalarArray.USize.Lemmas
 `USizeArray.InPlace n α` is a program that reads and writes an array of size `n` in place and
 returns a value of type `α`. It is a monad, and programs are built from:
 
-* `read i h`, `readThen i h k` and `write i h v`, at a `USize` index `i` with its bound `h`
-  (`toNat_add_lt_of_window` gives the bound of `off + j` in a window);
+* `read i h`, `readThen i h k`, `write i h v` and `writeThen i h v k`, at a `USize` index `i`
+  with its bound `h` (`toNat_add_lt_of_window` gives the bound of `off + j` in a window);
 * `InPlace.ite` and `InPlace.dite`, which branch inside one program;
 * the loops `forIn lo hi` and `forInRev lo hi`, which run a body for each `j` from `lo` up to
   `hi - 1`, or from `hi - 1` down to `lo`, threading an accumulator. The body gets both bounds of
@@ -27,6 +27,13 @@ returns a value of type `α`. It is a monad, and programs are built from:
 A program runs on an array with `a.runInPlace m` or `m.run a h`, which make the array exclusive
 once, before the program runs. `runForInThen`, `runForInRevThen` and `runForIn2Then` run a single
 loop and hand its last accumulators and the new array to a continuation, without a result pair.
+
+A tail program `InPlace.Tail n γ` is a program that ends by handing its result and the new array to
+a continuation `k`, which returns a `γ`, where `run` would return the pair of them: `Tail.done x k`
+ends it, `Tail.bind m t` runs an in-place program `m` before it, and `Tail.readThen`,
+`Tail.writeThen`, `Tail.ite`, `Tail.dite` and the loops `Tail.forInBind`, … are those of `InPlace`.
+The continuation runs inside the program's last loop, so its last accumulators reach `k` unboxed,
+and no result pair is built. A tail program runs with `a.runInPlaceThen t` or `t.run a h`.
 
 The array is never visible to a program: `InPlace` and its state have private constructors, so the
 only code that touches the state is the code in this module, which passes it on linearly. That is
@@ -120,6 +127,14 @@ Stores `v` at index `i`. It compiles to one store, without checking that the arr
 public def write (i : USize) (h : i.toNat < n) (v : USize) : InPlace.{u} n PUnit :=
   ⟨fun s => (⟨⟩, ⟨s.array.uset i v (by rw [s.size_array]; exact h),
     by rw [size_uset]; exact s.size_array⟩)⟩
+
+/--
+`write i h v` followed by `k`, for a program `k` in any universe: in `write i h v >>= fun _ => k`,
+the universe of `write`'s `PUnit` is that of `k`.
+-/
+@[inline]
+public def writeThen (i : USize) (h : i.toNat < n) (v : USize) (k : InPlace n α) : InPlace n α :=
+  (write i h v).bind fun _ => k
 
 /--
 Runs `t` if `c` holds and `e` otherwise. Unlike `if c then t else e`, which chooses a program and
@@ -373,6 +388,13 @@ private theorem State.ext' {s t : State n} (h : s.array = t.array) : s = t := by
     (write i hi v : InPlace.{u} n PUnit).run a h = (⟨⟩, a.set i.toNat v (by rw [h]; exact hi)) := by
   simp only [run_eq, write]
   congr 1
+
+@[simp] public theorem run_writeThen (i : USize) (hi : i.toNat < n) (v : USize) (k : InPlace n α)
+    (a : USizeArray) (h : a.size = n) :
+    (writeThen i hi v k).run a h =
+      k.run (a.set i.toNat v (by rw [h]; exact hi)) (by rw [USizeArray.size_set]; exact h) := by
+  show ((write i hi v) >>= fun _ => k).run a h = _
+  simp only [run_bind, run_write]
 
 @[simp] public theorem ite_eq (c : Prop) [Decidable c] (t e : InPlace n α) :
     InPlace.ite c t e = if c then t else e := by
@@ -857,6 +879,185 @@ public theorem forInRev2Bind_eq {β₁ : Type v} {β₂ : Type w} {γ : Type (ma
   show forDown2.loopThen lo hi body hi _ init₁ init₂ s _ = _
   rw [forDown2_loopThen_eq]; rfl
 
+/-! ## Tail programs -/
+
+/--
+A tail program on arrays of size `n`, which returns a `γ`: an in-place program that ends by handing
+the new array to a continuation, instead of returning it with a result. The continuation runs where
+the program ends, inside its last loop if it ends with one, so the program's last values reach it
+unboxed, and no result pair is built. A tail program is built from in-place programs with
+`Tail.bind`, `Tail.readThen`, `Tail.ite`, `Tail.dite`, the loops `Tail.forInBind`,
+`Tail.forIn2Bind`, `Tail.forInRevBind` and `Tail.forInRev2Bind`, and ends with `Tail.done x k`.
+It runs with `Tail.run` or `runInPlaceThen`, and `inplace a do … then k` writes one.
+-/
+public structure Tail (n : Nat) (γ : Type u) where
+  private mk ::
+  private fn : State n → γ
+
+namespace Tail
+
+variable {γ : Type w}
+
+/-- Ends the program with the result `x`: hands `x`, the array and its size to `k`. -/
+@[inline]
+public def done (x : α) (k : α → (a : USizeArray) → a.size = n → γ) : Tail n γ :=
+  ⟨fun s => k x s.array s.size_array⟩
+
+/-- Runs the in-place program `m`, then the tail program `k` on its result. -/
+@[inline]
+public protected def bind (m : InPlace n α) (k : α → Tail n γ) : Tail n γ :=
+  ⟨fun s => match m.fn s with | (x, s) => (k x).fn s⟩
+
+/-- `read i h` followed by `k` on the element. -/
+@[inline]
+public def readThen (i : USize) (h : i.toNat < n) (k : USize → Tail n γ) : Tail n γ :=
+  ⟨fun s => (k (s.array.uget i (by rw [s.size_array]; exact h))).fn s⟩
+
+/-- `write i h v` followed by `k`. -/
+@[inline]
+public def writeThen (i : USize) (h : i.toNat < n) (v : USize) (k : Tail n γ) : Tail n γ :=
+  Tail.bind (write.{0} i h v) fun _ => k
+
+/-- Runs `t` if `c` holds and `e` otherwise, as a branch inside one program, like `InPlace.ite`. -/
+@[inline]
+public protected def ite (c : Prop) [Decidable c] (t e : Tail n γ) : Tail n γ :=
+  ⟨fun s => if c then t.fn s else e.fn s⟩
+
+/-- `Tail.ite` where each branch takes the proof of its condition. -/
+@[inline]
+public protected def dite (c : Prop) [Decidable c] (t : c → Tail n γ) (e : ¬c → Tail n γ) :
+    Tail n γ :=
+  ⟨fun s => if h : c then (t h).fn s else (e h).fn s⟩
+
+/--
+`forIn lo hi init body` followed by the tail program `k` on its last accumulator, which the loop
+calls itself. It is specified by `forInBind_eq`.
+-/
+@[inline]
+public def forInBind (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β)
+    (k : β → Tail n γ) : Tail n γ :=
+  ⟨fun s => forUp.loopThen lo hi body lo (Nat.le_refl _) init s fun b s => (k b).fn s⟩
+
+/-- `Tail.forInBind` for `forIn2`, with the two last accumulators handed to `k` apart. -/
+@[inline]
+public def forIn2Bind {β₁ : Type v} {β₂ : Type w'} (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β₁ → β₂ →
+      InPlace n (β₁ × β₂))
+    (k : β₁ → β₂ → Tail n γ) : Tail n γ :=
+  ⟨fun s => forUp2.loopThen lo hi body lo (Nat.le_refl _) init₁ init₂ s fun b₁ b₂ s =>
+    (k b₁ b₂).fn s⟩
+
+/-- `Tail.forInBind` for `forInRev`. -/
+@[inline]
+public def forInRevBind (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β)
+    (k : β → Tail n γ) : Tail n γ :=
+  ⟨fun s => forDown.loopThen lo hi body hi (Nat.le_refl _) init s fun b s => (k b).fn s⟩
+
+/-- `Tail.forInBind` for `forInRev2`, with the two last accumulators handed to `k` apart. -/
+@[inline]
+public def forInRev2Bind {β₁ : Type v} {β₂ : Type w'} (lo hi : USize) (init₁ : β₁)
+    (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β₁ → β₂ →
+      InPlace n (β₁ × β₂))
+    (k : β₁ → β₂ → Tail n γ) : Tail n γ :=
+  ⟨fun s => forDown2.loopThen lo hi body hi (Nat.le_refl _) init₁ init₂ s fun b₁ b₂ s =>
+    (k b₁ b₂).fn s⟩
+
+/--
+Runs the tail program `t` on the array `a`, and returns what its continuation returns. The array
+is made exclusive first, so it is copied once if it is shared, and updated in place otherwise.
+-/
+@[inline]
+public def run (t : Tail n γ) (a : USizeArray) (h : a.size = n) : γ :=
+  t.fn ⟨a.ensureExclusive, by rw [ensureExclusive_eq]; exact h⟩
+
+private theorem run_eq (t : Tail n γ) (a : USizeArray) (h : a.size = n) :
+    t.run a h = t.fn ⟨a, h⟩ := by
+  simp only [run, ensureExclusive_eq]
+
+private theorem fn_inj {t t' : Tail n γ} (h : t.fn = t'.fn) : t = t' := by
+  obtain ⟨f⟩ := t; obtain ⟨f'⟩ := t'
+  cases h; rfl
+
+/-- Two tail programs are equal when they run the same on every array. -/
+@[ext] public theorem ext {t t' : Tail n γ}
+    (h : ∀ a (h : a.size = n), t.run a h = t'.run a h) : t = t' := by
+  apply fn_inj; funext s
+  have := h s.array s.size_array
+  rw [run_eq, run_eq] at this
+  exact this
+
+@[simp] public theorem run_done (x : α) (k : α → (a : USizeArray) → a.size = n → γ)
+    (a : USizeArray) (h : a.size = n) : (done x k).run a h = k x a h := by
+  rw [run_eq]; rfl
+
+@[simp] public theorem run_bind (m : InPlace n α) (k : α → Tail n γ) (a : USizeArray)
+    (h : a.size = n) :
+    (Tail.bind m k).run a h = (k (m.run a h).1).run (m.run a h).2 (size_run ..) := by
+  rfl
+
+@[simp] public theorem run_readThen (i : USize) (hi : i.toNat < n) (k : USize → Tail n γ)
+    (a : USizeArray) (h : a.size = n) :
+    (readThen i hi k).run a h = (k (a[i.toNat]'(by rw [h]; exact hi))).run a h := by
+  simp only [run_eq, readThen]; simp
+
+@[simp] public theorem run_writeThen (i : USize) (hi : i.toNat < n) (v : USize) (k : Tail n γ)
+    (a : USizeArray) (h : a.size = n) :
+    (writeThen i hi v k).run a h =
+      k.run (a.set i.toNat v (by rw [h]; exact hi)) (by rw [USizeArray.size_set]; exact h) := by
+  show (Tail.bind (write.{0} i hi v) fun _ => k).run a h = _
+  simp only [run_bind, InPlace.run_write]
+
+@[simp] public theorem ite_eq (c : Prop) [Decidable c] (t e : Tail n γ) :
+    Tail.ite c t e = if c then t else e := by
+  unfold Tail.ite; split <;> rfl
+
+@[simp] public theorem dite_eq (c : Prop) [Decidable c] (t : c → Tail n γ)
+    (e : ¬c → Tail n γ) : Tail.dite c t e = if h : c then t h else e h := by
+  unfold Tail.dite; split <;> rfl
+
+@[simp] public theorem forInBind_eq (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β)
+    (k : β → Tail n γ) :
+    forInBind lo hi init body k = Tail.bind (forIn lo hi init body) k := by
+  apply fn_inj; funext s
+  show forUp.loopThen lo hi body lo _ init s _ = _
+  rw [forUp_loopThen_eq]; rfl
+
+@[simp] public theorem forIn2Bind_eq {β₁ : Type v} {β₂ : Type w'} (lo hi : USize) (init₁ : β₁)
+    (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β₁ → β₂ →
+      InPlace n (β₁ × β₂))
+    (k : β₁ → β₂ → Tail n γ) :
+    forIn2Bind lo hi init₁ init₂ body k =
+      Tail.bind (forIn2 lo hi init₁ init₂ body) fun b => k b.1 b.2 := by
+  apply fn_inj; funext s
+  show forUp2.loopThen lo hi body lo _ init₁ init₂ s _ = _
+  rw [forUp2_loopThen_eq]; rfl
+
+@[simp] public theorem forInRevBind_eq (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β)
+    (k : β → Tail n γ) :
+    forInRevBind lo hi init body k = Tail.bind (forInRev lo hi init body) k := by
+  apply fn_inj; funext s
+  show forDown.loopThen lo hi body hi _ init s _ = _
+  rw [forDown_loopThen_eq]; rfl
+
+@[simp] public theorem forInRev2Bind_eq {β₁ : Type v} {β₂ : Type w'} (lo hi : USize)
+    (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β₁ → β₂ →
+      InPlace n (β₁ × β₂))
+    (k : β₁ → β₂ → Tail n γ) :
+    forInRev2Bind lo hi init₁ init₂ body k =
+      Tail.bind (forInRev2 lo hi init₁ init₂ body) fun b => k b.1 b.2 := by
+  apply fn_inj; funext s
+  show forDown2.loopThen lo hi body hi _ init₁ init₂ s _ = _
+  rw [forDown2_loopThen_eq]; rfl
+
+end Tail
+
 end InPlace
 
 /--
@@ -869,6 +1070,19 @@ public def runInPlace {α : Type u} (a : USizeArray) (m : InPlace a.size α) : �
 
 @[simp] public theorem runInPlace_eq {α : Type u} (a : USizeArray) (m : InPlace a.size α) :
     a.runInPlace m = m.run a rfl := by
+  rfl
+
+/--
+Runs the tail program `t` on `a`, and returns what its continuation returns: `t.run a rfl`. The
+array is made exclusive first, so it is copied once if it is shared, and updated in place otherwise.
+-/
+@[inline, expose]
+public def runInPlaceThen {γ : Type u} (a : USizeArray) (t : InPlace.Tail a.size γ) : γ :=
+  t.run a rfl
+
+@[simp] public theorem runInPlaceThen_eq {γ : Type u} (a : USizeArray)
+    (t : InPlace.Tail a.size γ) :
+    a.runInPlaceThen t = t.run a rfl := by
   rfl
 
 end USizeArray
