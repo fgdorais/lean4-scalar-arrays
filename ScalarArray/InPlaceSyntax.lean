@@ -33,20 +33,29 @@ inplace a do
 ## Statements
 
 * `let x ← a[i]` reads the element at the `USize` index `i`. In the terms of a statement, `a[i]`
-  also reads the current element, before the statement runs: `a[i] := a[i] + 1`.
+  also reads the current element, before the statement runs: `a[i] := a[i] + 1`. So a read can't
+  be under a binder, or in a branch of a term (`if`, `match`, or the right side of `&&`, `||`,
+  `∧` and `∨`), which would run later or not at all: read it first with `let x ← a[i]`, or branch
+  with an `if` statement.
 * `a[i] := e` writes `e` at `i`.
-* `let p := e` binds a pure value, where `p` can be a pattern such as `(s, c)`.
-* `let mut x := e` declares a mutable variable, and `x := e` assigns it.
+* `let x ← m` runs an in-place program `m : XArray.InPlace n α`, for the program's size `n`, and
+  binds its result, so that programs compose.
+* `let p := e` binds a pure value, where `p` can be a pattern such as `(s, c)`, and
+  `let x : t := e` one of type `t`.
+* `let mut x := e` or `let mut x : t := e` declares a mutable variable, and `x := e` assigns it.
 * `have h : t := p` adds a fact to the context, for the bounds of later indices.
 * `if c then … else …` and `if h : c then … else …` run one of two blocks, which may read, write,
-  loop and assign mutable variables. The `else` block is optional.
+  loop and assign mutable variables. The `else` block is optional, and `unless c do …` is
+  `if ¬c then …`.
 * `for j in lo...hi do …` loops over `lo ≤ j < hi` upward, and `for j in reverse lo...hi do …`
   over the same range downward, from `hi - 1` to `lo`. The bounds are `USize`s; `lo...<hi` and
   `*...hi` (from `0`) work too, and `lo.toNat ≤ j.toNat` and `j.toNat < hi.toNat` are in context
-  in the body. An optional `with (x := init) …` clause names the loop's variables: up to two,
-  which the loop keeps as separate unboxed arguments. They are mutable in the body, and they hold
-  their last values after the loop. Loops nest.
-* `return e`, last, gives the program's result. Without it, the result is `()`.
+  in the body. An optional `with (x := init) …` clause names the loop's variables, as
+  `(x : t := init)` with their types: up to four, which the loop keeps as separate unboxed
+  arguments. They are mutable in the body, and they hold their last values after the loop. Loops
+  nest, and a nested loop allocates nothing either.
+* `return e`, last, gives the program's result, and so may `return` in both branches of the
+  program's last `if`. Without it, the result is `()`.
 
 A loop body can assign only its own variables: to update a variable across a loop, carry it, as
 `with (c := c)`.
@@ -76,11 +85,13 @@ The program expands to a tail program (`XArray.InPlace.Tail`) on arrays of size 
 and the program uses them in place of `a.size` and `a.usize`. So nothing in the compiled program
 refers to `a`, which the compiler would otherwise keep alive past the point where the program makes
 the array exclusive, and the array would be copied. The program ends with `Tail.done x k`, where `k`
-is the `then` continuation or makes the pair. Its statements expand to `readThen`, `writeThen`,
-`ite`, `dite` and the `forInBind`, `forIn2Bind`, `forInRevBind` and `forInRev2Bind` loops, of `Tail`
-at the top level and of `InPlace` in loop bodies, so it compiles to the same loop as a hand-written
-program, with the loop variables unboxed, and the loop calls the rest of the program itself, so its
-variables reach it unboxed too. The rest of the program after an `if` becomes a local function of
+is the `then` continuation or makes the pair. Its statements expand to the tail programs
+`readThen`, `writeThen`, `ite`, `dite` and the loops `Tail.forIn`, `Tail.forIn2`, … and
+`Tail.forInRev`, …, in continuation-passing style: a loop body ends by calling `next` on the loop's
+variables, which runs the next step, and the loop ends by calling the rest of the program, so the
+variables are arguments of both and stay unboxed. A nested loop ends by calling the outer loop's
+`next`, so the two compile to mutually recursive loops with no allocation, and the program compiles
+to the same loops as a hand-written one. The rest of the program after an `if` becomes a local function of
 the mutable variables, which the compiler turns into a join point: an `if` in a loop allocates
 nothing.
 
@@ -99,7 +110,8 @@ The bound of each index is proved by the tactic `inplace_bound`, from the hypoth
 It looks inside conjunctions. A loop body has both bounds of its index, `lo.toNat ≤ j.toNat` and
 `j.toNat < hi.toNat`, in context, and the program has `a.usize.toNat ≤ a.size`, so `a.usize`
 works as a loop bound with no other hypothesis. A bound that needs more is given by a `have`
-before the index, or by a hypothesis around the program, as in this left shift of 64-bit limbs by
+before the index, or by a hypothesis around the program, and a bound that `inplace_bound` can't
+prove is reported with its goal. For example, in this left shift of 64-bit limbs by
 1111 bits:
 
 ```
@@ -123,7 +135,7 @@ else UInt64Array.mk (Array.replicate a.size 0)
   may use `a`, and so may `then k`, which runs after the program, but `k` keeps the old array alive
   if it uses more than its size.
 * Reads in terms are written `a[i]`, not `(← a[i])`.
-* A loop has at most two variables, and its range is `lo...hi`, `lo...<hi`, `*...hi` or `*...<hi`.
+* A loop has at most four variables, and its range is `lo...hi`, `lo...<hi`, `*...hi` or `*...<hi`.
 * `have` takes a name: `have h : t := p`.
 -/
 
@@ -253,8 +265,11 @@ are split first.
 -/
 syntax (name := inplaceBound) "inplace_bound" : tactic
 
+/-- The proof search of `inplace_bound`, which fails with the errors of its last attempt. -/
+syntax (name := inplaceBoundCore) "inplace_bound_core" : tactic
+
 macro_rules
-  | `(tactic| inplace_bound) => `(tactic| (
+  | `(tactic| inplace_bound_core) => `(tactic| (
       inplace_split
       first
         | (refine ScalarArray.InPlaceSyntax.toNat_add_lt_of_window (len := ?len) ?hw ?hj
@@ -269,6 +284,17 @@ macro_rules
            inplace_mod_facts
            lia)))
 
+open Lean Elab Tactic Meta in
+/-- Elaborates `inplace_bound`: runs its proof search, and reports a failure with the bound. -/
+@[tactic inplaceBound] def evalInplaceBound : Tactic := fun _ => do
+  let g ← getMainGoal
+  try evalTactic (← `(tactic| inplace_bound_core))
+  catch _ =>
+    let t ← instantiateMVars (← g.getType)
+    throwError m!"inplace: cannot prove the bound of this index from the hypotheses in context:"
+      ++ indentExpr t ++ m!"\nAdd the missing fact with a `have` before the statement, or as a \
+        hypothesis around the program."
+
 /-- A statement of an `inplace` program. -/
 declare_syntax_cat inplaceStmt
 
@@ -279,8 +305,15 @@ syntax inplaceSeq := sepByIndentSemicolon(inplaceStmt)
 syntax "let " ident " ← " ident "[" term "]" : inplaceStmt
 /-- `a[i] := e` writes `e` at `i`. -/
 syntax ident "[" term "]" " := " term : inplaceStmt
-/-- `let mut x := e` declares the mutable variable `x`. -/
-syntax "let " "mut " ident " := " term : inplaceStmt
+/--
+`let x ← m` runs the in-place program `m` (an `XArray.InPlace n α`, for the program's size `n`)
+and binds its result to `x`.
+-/
+syntax (priority := low) "let " ident " ← " term : inplaceStmt
+/-- `let mut x := e` declares the mutable variable `x`, and `let mut x : t := e` gives its type. -/
+syntax "let " "mut " ident (" : " term)? " := " term : inplaceStmt
+/-- `let x : t := e` binds the value of the pure term `e` of type `t` to `x`. -/
+syntax "let " ident " : " term " := " term : inplaceStmt
 /-- `let p := e` binds the value of the pure term `e` to the pattern `p`. -/
 syntax "let " term " := " term : inplaceStmt
 /-- `have h : t := p` adds the fact `h` to the context, for the bounds of later indices. -/
@@ -289,9 +322,11 @@ syntax "have " ident " : " term " := " term : inplaceStmt
 syntax ident " := " term : inplaceStmt
 /-- `if c then … else …` runs one of two blocks. -/
 syntax "if " (atomic(ident " : "))? term " then" inplaceSeq (" else" inplaceSeq)? : inplaceStmt
+/-- `unless c do …` runs the block if `c` doesn't hold. -/
+syntax "unless " termBeforeDo " do" inplaceSeq : inplaceStmt
 /-- A loop over `j` in `lo...hi` or `reverse lo...hi`, with the variables of its `with` clause. -/
 syntax "for " ident " in " (&"reverse ")? termBeforeDo
-  (" with" (ppSpace "(" ident " := " term ")")+)? " do" inplaceSeq : inplaceStmt
+  (" with" (ppSpace "(" ident (" : " term)? " := " term ")")+)? " do" inplaceSeq : inplaceStmt
 /-- `return e` gives the program's result. -/
 syntax "return " term : inplaceStmt
 
@@ -351,15 +386,31 @@ private partial def replaceArray (p : Arr) (strict : Bool) (stx : Syntax) : Macr
     return .node info kind (← args.mapM (replaceArray p strict))
   | _ => return stx
 
+/-- The operators whose right operand runs only depending on the left one. -/
+private def lazyOps : List SyntaxNodeKind :=
+  [`«term_&&_», `«term_||_», `«term_∧_», `«term_∨_»]
+
+/-- The terms that bind variables, or choose what runs, in all their parts. -/
+private def lazyTerms : List SyntaxNodeKind :=
+  [``Lean.Parser.Term.fun, ``Lean.Parser.Term.matchAlts, ``Lean.Parser.Term.let,
+    ``Lean.Parser.Term.have]
+
 /--
 Replaces the reads `a[i]` of the program's array `a` in the terms of `stx` by fresh variables, from
 the inside out and left to right, and returns them with their indices, in the order to read them.
+The reads run before the statement, so a read under a binder or in a branch of the statement, where
+`lazy` holds, is an error: lifted out, its index could lose its variables, or its bound the branch's
+condition.
 -/
-private partial def liftReads (arr : Ident) (stx : Syntax) :
+private partial def liftReads (arr : Ident) (lazy : Bool) (stx : Syntax) :
     StateT (Array (Ident × Term)) MacroM Syntax := do
   if let `($a:ident[$i]) := stx then
     if a.getId == arr.getId then
-      let i ← liftReads arr i
+      if lazy then
+        Macro.throwErrorAt stx s!"`inplace` reads `{arr.getId}[i]` before the statement runs, so \
+          it can't read under a binder or in a branch of a term: read the element first, with \
+          `let x ← {arr.getId}[i]`, or branch with an `if` statement"
+      let i ← liftReads arr lazy i
       let x ← withFreshMacroScope `(x)
       modify (·.push (⟨x⟩, ⟨i⟩))
       return x
@@ -367,7 +418,13 @@ private partial def liftReads (arr : Ident) (stx : Syntax) :
   | .node info kind args =>
     -- The reads of a nested block belong to its own statements, and proofs read nothing.
     if kind == ``inplaceSeq || kind == ``Lean.Parser.Term.byTactic then return stx
-    return .node info kind (← args.mapM (liftReads arr))
+    let lazyFrom :=
+      if lazyTerms.contains kind then 0
+      else if lazyOps.contains kind then 2
+      else if kind == ``termIfThenElse || kind == ``termDepIfThenElse then
+        (args.findIdx? (·.isToken "then")).getD args.size
+      else args.size
+    return .node info kind (← args.mapIdxM fun k arg => liftReads arr (lazy || lazyFrom ≤ k) arg)
   | _ => return stx
 
 /-- The proof of the bound of an index, `i.toNat < size`, from `i.toNat < arr.size`. -/
@@ -398,15 +455,10 @@ private def replaceStmt (p : Arr) (s : TSyntax `inplaceStmt) : MacroM (TSyntax `
 /-- Runs `f` on the statement `s` with its nested reads lifted, and puts the reads before it. -/
 private def lifting (p : Arr) (s : TSyntax `inplaceStmt)
     (f : TSyntax `inplaceStmt → MacroM Term) : MacroM Term := do
-  let (s, reads) ← (liftReads p.arr (← replaceStmt p s)).run #[]
+  -- A `have` is about the array before the program, and reads nothing.
+  if let `(inplaceStmt| have $_:ident : $_ := $_) := s then return ← f s
+  let (s, reads) ← (liftReads p.arr false (← replaceStmt p s)).run #[]
   withReads p reads (← f ⟨s⟩)
-
-/-- The tuple of the variables `xs`, or `()`. -/
-private def tuple (xs : Array Ident) : MacroM Term :=
-  match xs with
-  | #[] => `(())
-  | #[x] => pure x
-  | _ => `(($(xs[0]!), $(xs[1:].toArray),*))
 
 mutual
 
@@ -421,7 +473,8 @@ private partial def expandSeq (p : Arr) (ending : Term → MacroM Term) (mvars :
   | s :: rest => withRef s do
     if let `(inplaceStmt| return $_) := s then
       unless rest.isEmpty && top do
-        Macro.throwError "`return` must be the last statement of the program"
+        Macro.throwError "`return` must be the last statement of the program, or of a branch of \
+          the program's last `if`"
       return ← lifting p s fun s => do
         let `(inplaceStmt| return $e) := s | Macro.throwUnsupported
         ending e
@@ -440,8 +493,15 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
   | `(inplaceStmt| $a:ident[$i] := $v) =>
     checkArray arr a
     `(.writeThen $i $(← bound p) $v $(← k mvars))
-  | `(inplaceStmt| let mut $x:ident := $e) =>
-    `(let $x:ident := $e; $(← k (mvars.push x)))
+  | `(inplaceStmt| let mut $x:ident $[: $ty]? := $e) =>
+    match ty with
+    | some ty => `(let $x:ident : $ty := $e; $(← k (mvars.push x)))
+    | none => `(let $x:ident := $e; $(← k (mvars.push x)))
+  | `(inplaceStmt| let $x:ident : $ty := $e) =>
+    `(let $x:ident : $ty := $e; $(← k mvars))
+  | `(inplaceStmt| let $x:ident ← $m) =>
+    if let `($b:ident[$_]) := m then checkArray arr b
+    `(.bind $m fun $x => $(← k mvars))
   | `(inplaceStmt| let $p := $e) =>
     `(match $e:term with | $p:term => $(← k mvars))
   | `(inplaceStmt| have $h:ident : $t := $p) =>
@@ -452,40 +512,77 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
         `let mut`, or carry it into the loop with `with ({x.getId} := {x.getId})`"
     `(let $x:ident := $e; $(← k mvars))
   | `(inplaceStmt| if $[$h :]? $c then $t;* $[else $e;*]?) =>
-    -- The rest of the program, as a function of the mutable variables.
-    let kont ← withFreshMacroScope `(kont)
-    let call ← if mvars.isEmpty then `($kont ()) else `($kont $mvars*)
-    let t ← expandSeq p ending mvars call false t.getElems.toList
-    let e ← match e with
-      | some e => expandSeq p ending mvars call false e.getElems.toList
-      | none => pure call
-    let branch ← match h with
-      | some h => `(.dite $c (fun $h => $t) (fun $h => $e))
-      | none => `(.ite $c $t $e)
-    let rest ← k mvars
-    let fn ← if mvars.isEmpty then `(fun (_ : Unit) => $rest) else `(fun $mvars* => $rest)
-    `((fun $kont => $branch) $fn)
-  | `(inplaceStmt| for $j in $[reverse%$rev]? $range $[with $[($xs := $inits)]*]? do $body;*) =>
+    expandIf p ending mvars (k mvars) top rest.isEmpty h c t.getElems.toList
+      (e.map (·.getElems.toList))
+  | `(inplaceStmt| unless $c do $t;*) =>
+    expandIf p ending mvars (k mvars) top rest.isEmpty none (← `(¬$c)) t.getElems.toList none
+  | `(inplaceStmt| for $j in $[reverse%$rev]? $range $[with $[($xs $[: $ts]? := $is)]*]? do $b;*) =>
     let (lo, hi) ← match range with
       | `($lo...$hi) | `($lo...<$hi) => pure (lo, hi)
       | `(*...$hi) | `(*...<$hi) => pure (← `((0 : USize)), hi)
       | _ => Macro.throwErrorAt range "expected a range `lo...hi` or `*...hi`"
-    let xs := xs.getD #[]
-    let inits := inits.getD #[]
-    let b ← expandSeq p ending xs (← `(.pure $(← tuple xs))) false body.getElems.toList
-    -- The loop calls the rest of the program itself, so its variables reach it unboxed.
+    let xs : Array Ident := xs.getD #[]
+    let inits ← (is.getD #[]).zip (ts.getD #[]) |>.mapM fun
+      | (init, some ty) => `(($init : $ty))
+      | (init, none) => pure init
+    if xs.size > 4 then Macro.throwError "a loop has at most four variables"
+    -- The body ends by calling `next` on the loop's variables, which runs the next step, and the
+    -- loop ends by calling the rest of the program itself: the variables are arguments of both,
+    -- so they stay unboxed, and a nested loop ends by calling the outer `next`.
+    let next ← withFreshMacroScope `(next)
+    let args : Array Term := xs.map fun x => x
+    let call ← if xs.isEmpty then `($next ()) else `($next $args*)
+    let b ← expandSeq p ending xs call false b.getElems.toList
     let rest ← k (mvars ++ xs)
-    match rev.isSome, xs, inits with
-    | true, #[], #[] => `(.forInRevBind $lo $hi () (fun $j hlo hj _ => $b) fun _ => $rest)
-    | true, #[x], #[init] => `(.forInRevBind $lo $hi $init (fun $j hlo hj $x => $b) fun $x => $rest)
-    | true, #[x, y], #[initx, inity] =>
-      `(.forInRev2Bind $lo $hi $initx $inity (fun $j hlo hj $x $y => $b) fun $x $y => $rest)
-    | false, #[], #[] => `(.forInBind $lo $hi () (fun $j hlo hj _ => $b) fun _ => $rest)
-    | false, #[x], #[init] => `(.forInBind $lo $hi $init (fun $j hlo hj $x => $b) fun $x => $rest)
-    | false, #[x, y], #[initx, inity] =>
-      `(.forIn2Bind $lo $hi $initx $inity (fun $j hlo hj $x $y => $b) fun $x $y => $rest)
-    | _, _, _ => Macro.throwError "a loop has at most two variables"
+    let body ← if xs.isEmpty then `(fun $j hlo hj $next _ => $b) else
+      `(fun $j hlo hj $next $xs* => $b)
+    let rest ← if xs.isEmpty then `(fun _ => $rest) else `(fun $xs* => $rest)
+    match rev.isSome, inits.size with
+    | false, 0 => `(.forIn $lo $hi () $body $rest)
+    | false, 1 => `(.forIn $lo $hi $inits* $body $rest)
+    | false, 2 => `(.forIn2 $lo $hi $inits* $body $rest)
+    | false, 3 => `(.forIn3 $lo $hi $inits* $body $rest)
+    | false, _ => `(.forIn4 $lo $hi $inits* $body $rest)
+    | true, 0 => `(.forInRev $lo $hi () $body $rest)
+    | true, 1 => `(.forInRev $lo $hi $inits* $body $rest)
+    | true, 2 => `(.forInRev2 $lo $hi $inits* $body $rest)
+    | true, 3 => `(.forInRev3 $lo $hi $inits* $body $rest)
+    | true, _ => `(.forInRev4 $lo $hi $inits* $body $rest)
   | _ => Macro.throwUnsupported
+
+/--
+The program of `if h : c then t else e` followed by the rest `rest` of the program, where `last`
+says whether the `if` is the last statement, so that the branches of the program's last `if` can
+end it with `return`.
+-/
+private partial def expandIf (p : Arr) (ending : Term → MacroM Term) (mvars : Array Ident)
+    (rest : MacroM Term) (top last : Bool) (h : Option Ident) (c : Term)
+    (t : List (TSyntax `inplaceStmt)) (e : Option (List (TSyntax `inplaceStmt))) :
+    MacroM Term := do
+  if top && last then
+    -- The rest of the program is its end, which the branches can share without a function, and
+    -- must, when they both `return`, since the function's type would then be unknown.
+    let rest ← rest
+    let t ← expandSeq p ending mvars rest true t
+    let e ← match e with
+      | some e => expandSeq p ending mvars rest true e
+      | none => pure rest
+    return ← match h with
+      | some h => `(.dite $c (fun $h => $t) (fun $h => $e))
+      | none => `(.ite $c $t $e)
+  -- The rest of the program, as a function of the mutable variables.
+  let kont ← withFreshMacroScope `(kont)
+  let call ← if mvars.isEmpty then `($kont ()) else `($kont $mvars*)
+  let t ← expandSeq p ending mvars call false t
+  let e ← match e with
+    | some e => expandSeq p ending mvars call false e
+    | none => pure call
+  let branch ← match h with
+    | some h => `(.dite $c (fun $h => $t) (fun $h => $e))
+    | none => `(.ite $c $t $e)
+  let rest ← rest
+  let fn ← if mvars.isEmpty then `(fun (_ : Unit) => $rest) else `(fun $mvars* => $rest)
+  `((fun $kont => $branch) $fn)
 
 end
 

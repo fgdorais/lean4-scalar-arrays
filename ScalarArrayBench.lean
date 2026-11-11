@@ -329,6 +329,23 @@ def extras (rounds n : Nat) : IO (List Row) := do
             k := k + 1
         return k
       r.1,
+    ← one "UInt64 rows of 4, nested inplace loops" w fun a _ =>
+      have := a.toNat_usize_le
+      let rows := a.usize / 4
+      have : 4 * rows.toNat ≤ a.size ∧ 4 * rows.toNat < USize.size := by
+        have := USize.toNat_lt_size a.usize
+        simp only [rows, USize.toNat_div]; lia
+      let r := inplace a do
+        for r in 0...rows with (tot := (0 : UInt64)) do
+          for c in 0...4 with (acc := (0 : UInt64)) (t := tot) do
+            have hc : (4 * r + c).toNat < a.size := by inplace_bound
+            let x ← a[4 * r + c]
+            acc := acc + x
+            a[4 * r + c] := acc
+            t := t + x
+          tot := t
+        return tot
+      r.1,
     -- lean4-mpn's FFT residues are windows of about 137 limbs.
     ← one "UInt64 add 137, foldlInPlace2" (w.extract 0 411) fun a n =>
       butterflies addFold2 a 137 (n / 137),
