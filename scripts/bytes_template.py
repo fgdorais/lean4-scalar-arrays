@@ -30,6 +30,7 @@ public import ScalarArray.Int32
 public import ScalarArray.Int64
 public import ScalarArray.Float32
 import all ScalarArray.Internal
+import ScalarArray.InPlaceSyntax
 import Std.Tactic.BVDecide
 
 /-!
@@ -147,7 +148,9 @@ def section(name, elem, u, n, to_u, of_u, swap):
     if swap:
         out.append(f'''
 private def byteSwapImpl (a : {A}) : {A} :=
-  a.toSlice.foldlInPlaceThen () (fun _ _ x _ => (x.byteSwap, ())) (fun s _ => s.array)
+  (inplace a do
+    for i in 0...a.usize do
+      a[i] := a[i].byteSwap).2
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
