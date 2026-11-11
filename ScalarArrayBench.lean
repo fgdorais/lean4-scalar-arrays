@@ -235,8 +235,8 @@ passes, one `foldlInPlace2Then` for each result.
         let s := x + y + c
         a[0 + j] := s
         a[2 * len + j] := x - y - b
-        let c := carry x s c
-        let b := borrow x y b
+        c := carry x s c
+        b := borrow x y b
       return (c, b)
     (r.2, r.1.1 + r.1.2)
   else (a, 0)
@@ -254,8 +254,8 @@ passes, one `foldlInPlace2Then` for each result.
         let s := x + y + c
         a[0 + j] := s
         a[2 * len + j] := x - y - b
-        let c := carry x s c
-        let b := borrow x y b
+        c := carry x s c
+        b := borrow x y b
       return (c, b)
     then fun (c, b) a _ => (a, c + b)
   else (a, 0)
