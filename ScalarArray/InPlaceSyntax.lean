@@ -49,15 +49,28 @@ inplace a do
 * `if c then … else …` and `if h : c then … else …` run one of two blocks, which may read, write,
   loop and assign mutable variables. The `else` block is optional, and `unless c do …` is
   `if ¬c then …`.
+* `match e with | p => … | q => …` runs the block of the first pattern that `e` matches, and
+  `match e, f with | p, q => …` matches several terms.
 * `for j in lo...hi do …` loops over `lo ≤ j < hi` upward, and `for j in reverse lo...hi do …`
-  over the same range downward, from `hi - 1` to `lo`. The bounds are `USize`s; `lo...<hi` and
-  `*...hi` (from `0`) work too, and `lo.toNat ≤ j.toNat` and `j.toNat < hi.toNat` are in context
-  in the body. An optional `with (x := init) …` clause names the loop's variables, as
-  `(x : t := init)` with their types: up to four, which the loop keeps as separate unboxed
-  arguments. They are mutable in the body, and they hold their last values after the loop. Loops
-  nest, and a nested loop allocates nothing either.
-* `return e`, last, gives the program's result, and so may `return` in both branches of the
-  program's last `if`. Without it, the result is `()`.
+  over the same range downward, from `hi - 1` to `lo`. The bounds are `USize`s, and the ranges are
+  those of core: `lo...hi` and `lo...<hi`, `lo...=hi` (up to `hi`), `lo<...hi` and `lo<...=hi`
+  (from `lo + 1`), and `*...hi` and `*...=hi` (from `0`). `lo.toNat ≤ j.toNat` and
+  `j.toNat < hi.toNat` are in context in the body, or `j.toNat ≤ hi.toNat` and
+  `lo.toNat < j.toNat` for the other ranges, which need `hi.toNat + 1 < USize.size` and
+  `lo.toNat + 1 < USize.size`, proved like the bounds of indices. `for j in lo...hi by s do …` runs
+  over `lo`, `lo + s`, … below `hi`, for `s > 0`, and `reverse` runs over the same indices
+  downward.
+* An optional `with (x := init) …` clause names the loop's variables, as `(x : t := init)` with
+  their types: up to four, which the loop keeps as separate unboxed arguments. They are mutable in
+  the body, and they hold their last values after the loop. Loops nest, and a nested loop
+  allocates nothing either.
+* `while c do …` and `while h : c do …` loop while `c` holds, with a `with` clause like `for`. The
+  condition runs, with its reads, before each step. A `while` loop stops after `USize.size - 1`
+  steps at the most.
+* `break` leaves the innermost loop, and its variables keep their current values after it.
+  `continue` goes on with the loop's next step.
+* `return e` ends the program with the result `e`, anywhere, even in a loop. Without it, the result
+  is `()`. Nothing in a block can follow a `return`, a `break` or a `continue`.
 
 A loop body can assign only its own variables: to update a variable across a loop, carry it, as
 `with (c := c)`.
@@ -87,15 +100,16 @@ The program expands to a tail program (`XArray.InPlace.Tail`) on arrays of size 
 and the program uses them in place of `a.size` and `a.usize`. So nothing in the compiled program
 refers to `a`, which the compiler would otherwise keep alive past the point where the program makes
 the array exclusive, and the array would be copied. The program ends with `Tail.done x k`, where `k`
-is the `then` continuation or makes the pair. Its statements expand to the tail programs
-`readThen`, `writeThen`, `ite`, `dite` and the loops `Tail.forIn`, `Tail.forIn2`, … and
-`Tail.forInRev`, …, in continuation-passing style: a loop body ends by calling `next` on the loop's
-variables, which runs the next step, and the loop ends by calling the rest of the program, so the
-variables are arguments of both and stay unboxed. A nested loop ends by calling the outer loop's
+is the `then` continuation or makes the pair. Its statements expand to the tail programs `readThen`,
+`writeThen`, `ite`, `dite` and the loops `Tail.forIn`, `Tail.forIn2`, … and `Tail.forInRev`, …, in
+continuation-passing style: a loop body ends by calling `next` on the loop's variables, which runs
+the next step, and the loop ends by calling the rest of the program, so the variables are arguments
+of both and stay unboxed. `continue` calls `next`, and `break` calls the rest of the program, which
+a loop that `break`s binds to a local function. A nested loop ends by calling the outer loop's
 `next`, so the two compile to mutually recursive loops with no allocation, and the program compiles
-to the same loops as a hand-written one. The rest of the program after an `if` becomes a local function of
-the mutable variables, which the compiler turns into a join point: an `if` in a loop allocates
-nothing.
+to the same loops as a hand-written one. The rest of the program after an `if` becomes a local
+function of the mutable variables, which the compiler turns into a join point: an `if` in a loop
+allocates nothing.
 
 ## Bounds
 
@@ -137,7 +151,8 @@ else UInt64Array.mk (Array.replicate a.size 0)
   may use `a`, and so may `then k`, which runs after the program, but `k` keeps the old array alive
   if it uses more than its size.
 * Reads in terms are written `a[i]`, not `(← a[i])`.
-* A loop has at most four variables, and its range is `lo...hi`, `lo...<hi`, `*...hi` or `*...<hi`.
+* A loop has at most four variables.
+* A block has at least one statement.
 * `have` takes a name: `have h : t := p`.
 -/
 
@@ -157,6 +172,78 @@ public theorem mod_eq_sub_of_le_of_lt {x m : Nat} (h₁ : m ≤ x) (h₂ : x < 2
 /-- The platform word has at least 32 bits. -/
 public theorem two_pow_32_le_size : 2 ^ 32 ≤ 2 ^ System.Platform.numBits := by
   rcases System.Platform.numBits_eq with h | h <;> rw [h] <;> decide
+
+private theorem toNat_one' : (1 : USize).toNat = 1 := by simp
+
+/--
+The number of steps of the range `lo...hi` by `s`, for `s > 0`: of the indices `lo + s * k` below
+`hi`.
+-/
+@[inline, expose]
+public def stepCount (lo hi s : USize) : USize :=
+  if lo < hi then (hi - lo - 1) / s + 1 else 0
+
+private theorem step_toNat {lo hi s k : USize} (hk : k.toNat < (stepCount lo hi s).toNat) :
+    (lo + s * k).toNat = lo.toNat + s.toNat * k.toNat ∧
+      lo.toNat + s.toNat * k.toNat < hi.toNat := by
+  unfold stepCount at hk
+  split at hk
+  · rename_i h
+    have hlt : lo.toNat < hi.toNat := h
+    have hd : (hi - lo - 1).toNat = hi.toNat - lo.toNat - 1 := by
+      have h1 : (hi - lo).toNat = hi.toNat - lo.toNat :=
+        USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 (by lia))
+      rw [USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 (by rw [h1, toNat_one']; lia)),
+        h1, toNat_one']
+    have hq : ((hi - lo - 1) / s).toNat = (hi.toNat - lo.toNat - 1) / s.toNat := by
+      rw [USize.toNat_div, hd]
+    have hq1 : ((hi - lo - 1) / s + 1).toNat = (hi.toNat - lo.toNat - 1) / s.toNat + 1 := by
+      rw [USize.toNat_add, hq, toNat_one']
+      apply Nat.mod_eq_of_lt
+      have := Nat.div_le_self (hi.toNat - lo.toNat - 1) s.toNat
+      have := hi.toNat_lt_size
+      lia
+    rw [hq1] at hk
+    have hk' : k.toNat ≤ (hi.toNat - lo.toNat - 1) / s.toNat := by lia
+    have hsk : s.toNat * k.toNat ≤ hi.toNat - lo.toNat - 1 :=
+      Nat.le_trans (Nat.mul_le_mul_left _ hk') (Nat.mul_div_le _ _)
+    have hsz := hi.toNat_lt_size
+    refine ⟨?_, by lia⟩
+    rw [USize.toNat_add, USize.toNat_mul, Nat.mod_eq_of_lt (a := s.toNat * k.toNat) (by lia),
+      Nat.mod_eq_of_lt (by lia)]
+  · simp at hk
+
+/--
+`f k`. The notation `inplace` writes a loop that may `break` as `withExit (fun brk => loop) k`, with
+the rest `k` of the program after the loop, which `break` calls: elaborated as the arguments of
+`withExit`, the loop comes first and fixes the type of `k`.
+-/
+@[inline, expose]
+public def withExit {α : Sort u} {β : Sort v} (f : α → β) (k : α) : β := f k
+
+/-- The index `lo + s * k` of the step `k` of `lo...hi` by `s` is at least `lo`. -/
+public theorem step_le {lo hi s k : USize} (hk : k.toNat < (stepCount lo hi s).toNat) :
+    lo.toNat ≤ (lo + s * k).toNat := by
+  rw [(step_toNat hk).1]; lia
+
+/-- The index `lo + s * k` of the step `k` of `lo...hi` by `s` is below `hi`. -/
+public theorem step_lt {lo hi s k : USize} (hk : k.toNat < (stepCount lo hi s).toNat) :
+    (lo + s * k).toNat < hi.toNat := by
+  rw [(step_toNat hk).1]; exact (step_toNat hk).2
+
+private theorem toNat_succ {x : USize} (h : x.toNat + 1 < USize.size) :
+    (x + 1).toNat = x.toNat + 1 := by
+  rw [USize.toNat_add, toNat_one', Nat.mod_eq_of_lt h]
+
+/-- The index of a loop over `lo...hi + 1`, which is `lo...=hi`, is at most `hi`. -/
+public theorem le_of_lt_succ {hi j : USize} (h : hi.toNat + 1 < USize.size)
+    (hj : j.toNat < (hi + 1).toNat) : j.toNat ≤ hi.toNat := by
+  rw [toNat_succ h] at hj; lia
+
+/-- The index of a loop over `lo + 1...hi`, which is `lo<...hi`, is above `lo`. -/
+public theorem lt_of_succ_le {lo j : USize} (h : lo.toNat + 1 < USize.size)
+    (hj : (lo + 1).toNat ≤ j.toNat) : lo.toNat < j.toNat := by
+  rw [toNat_succ h] at hj; lia
 
 end ScalarArray.InPlaceSyntax
 
@@ -301,7 +388,7 @@ open Lean Elab Tactic Meta in
 declare_syntax_cat inplaceStmt
 
 /-- A sequence of statements of an `inplace` program. -/
-syntax inplaceSeq := sepByIndentSemicolon(inplaceStmt)
+syntax inplaceSeq := sepBy1IndentSemicolon(inplaceStmt)
 
 /-- `let x ← a[i]` reads the element of `a` at `i`. -/
 syntax "let " ident " ← " ident "[" term "]" : inplaceStmt
@@ -328,10 +415,26 @@ syntax (priority := low) term:max " := " term : inplaceStmt
 syntax "if " (atomic(ident " : "))? term " then" inplaceSeq (" else" inplaceSeq)? : inplaceStmt
 /-- `unless c do …` runs the block if `c` doesn't hold. -/
 syntax "unless " termBeforeDo " do" inplaceSeq : inplaceStmt
-/-- A loop over `j` in `lo...hi` or `reverse lo...hi`, with the variables of its `with` clause. -/
-syntax "for " ident " in " (&"reverse ")? termBeforeDo
-  (" with" (ppSpace "(" ident (" : " term)? " := " term ")")+)? " do" inplaceSeq : inplaceStmt
-/-- `return e` gives the program's result. -/
+/-- The variables of a loop, `with (x := init) (y : t := init) …`. -/
+syntax inplaceLoopVars := " with" (ppSpace "(" ident (" : " term)? " := " term ")")+
+/--
+A loop over `j` in a range such as `lo...hi` or `reverse lo...hi`, by steps of `s` with `by s`, with
+the variables of its `with` clause.
+-/
+syntax (name := inplaceFor) "for " ident " in " (&"reverse ")? termBeforeDo (" by " termBeforeDo)?
+  (inplaceLoopVars)? " do" inplaceSeq : inplaceStmt
+/-- A loop that runs while `c` holds, with the variables of its `with` clause. -/
+syntax (name := inplaceWhile) "while " (atomic(ident " : "))? termBeforeDo (inplaceLoopVars)?
+  " do" inplaceSeq : inplaceStmt
+/-- `break` leaves the innermost loop, with the current values of its variables. -/
+syntax (name := inplaceBreak) "break" : inplaceStmt
+/-- `continue` goes on with the next step of the innermost loop. -/
+syntax (name := inplaceContinue) "continue" : inplaceStmt
+/-- An alternative `| p => …` of a `match` statement. -/
+syntax inplaceMatchAlt := ppDedent(ppLine) "| " sepBy1(term, ", ") " => " inplaceSeq
+/-- `match e with | p => … | q => …` runs the block of the first pattern that `e` matches. -/
+syntax (name := inplaceMatch) "match " sepBy1(term, ", ") " with" (inplaceMatchAlt)+ : inplaceStmt
+/-- `return e` ends the program with the result `e`. -/
 syntax "return " term : inplaceStmt
 
 /--
@@ -339,8 +442,8 @@ syntax "return " term : inplaceStmt
 returns the program's result and the new array, or, with `then k`, `k` on them and the new array's
 size. See the module documentation of `ScalarArray.InPlaceSyntax`.
 -/
-syntax (name := inplaceTerm) "inplace " ident " do" inplaceSeq (ppDedent(ppLine) "then " term)? :
-  term
+syntax (name := inplaceTerm) "inplace " termBeforeDo " do" inplaceSeq
+  (ppDedent(ppLine) "then " term)? : term
 
 open Lean
 
@@ -478,32 +581,146 @@ private def checkNoShadow (mvars : Array Ident) (xs : Array Ident) : MacroM Unit
       Macro.throwErrorAt x s!"mutable variable `{x.getId}` cannot be shadowed: assign it with \
         `{x.getId} := e`, or in a pattern, as in `({x.getId}, y) := e`"
 
+/-- A fresh identifier named `n`. -/
+private def fresh (n : Name) : MacroM Ident :=
+  withFreshMacroScope do return mkIdent (← Macro.addMacroScope n)
+
+/-- `f xs`, or `f ()` without variables. -/
+private def call (f : Ident) (xs : Array Ident) : MacroM Term :=
+  if xs.isEmpty then `($f ()) else `($f $xs*)
+
+/-- The loop body `fun j hlo hj next xs => body`, or `fun j hlo hj next _ => body`. -/
+private def lam (j hlo hj next : Ident) (xs : Array Ident) (body : Term) : MacroM Term :=
+  if xs.isEmpty then `(fun $j $hlo $hj $next _ => $body) else
+    `(fun $j $hlo $hj $next $xs* => $body)
+
+/-- The variables of a `with` clause and their initial values, with their types. -/
+private def loopVars (vars : Option (TSyntax ``inplaceLoopVars)) :
+    MacroM (Array Ident × Array Term) := do
+  let some vars := vars | return (#[], #[])
+  let `(inplaceLoopVars| with $[($xs $[: $ts]? := $is)]*) := vars | Macro.throwUnsupported
+  let inits ← (is.zip ts).mapM fun
+    | (init, some ty) => `(($init : $ty))
+    | (init, none) => pure init
+  return (xs, inits)
+
+/-- The loop function, `.forIn`, `.forIn2`, … or `.forInRev`, …, for `n` variables. -/
+private def loopFn (rev : Bool) (n : Nat) : MacroM Term :=
+  match rev, n with
+  | false, 0 | false, 1 => `(.forIn) | false, 2 => `(.forIn2) | false, 3 => `(.forIn3)
+  | false, _ => `(.forIn4)
+  | true, 0 | true, 1 => `(.forInRev) | true, 2 => `(.forInRev2) | true, 3 => `(.forInRev3)
+  | true, _ => `(.forInRev4)
+
+/-- The innermost loop of a statement: the calls that `continue` and `break` make. -/
+private structure InplaceLoop where
+  /-- The call of the loop's next step on its variables, which `continue` makes. -/
+  next : Term
+  /-- The call of the rest of the program after the loop on its variables, which `break` makes. -/
+  brk : Term
+
+/--
+Whether the statement `stx`, or a statement nested in it outside of nested loops, is a `break`:
+then its loop binds the rest of the program, which `break` calls.
+-/
+private partial def hasBreak (stx : Syntax) : Bool :=
+  if stx.getKind == ``inplaceBreak then true
+  else if stx.getKind == ``inplaceFor || stx.getKind == ``inplaceWhile then false
+  else stx.getArgs.any hasBreak
+
+/--
+Whether the statements `stmts` never reach their end: they end with `return`, `break` or
+`continue`, or with an `if` or a `match` whose blocks all never reach their ends.
+-/
+private partial def ends (stmts : List (TSyntax `inplaceStmt)) : Bool :=
+  match stmts.getLast? with
+  | none => false
+  | some s => match s with
+    | `(inplaceStmt| return $_) | `(inplaceStmt| break) | `(inplaceStmt| continue) => true
+    | `(inplaceStmt| if $[$_ :]? $_ then $t;* else $e;*) =>
+      ends t.getElems.toList && ends e.getElems.toList
+    | `(inplaceStmt| match $_,* with $alts:inplaceMatchAlt*) =>
+      alts.all fun
+        | `(inplaceMatchAlt| | $_,* => $b;*) => ends b.getElems.toList
+        | _ => false
+    | _ => false
+
+/--
+The bounds `lo` and `hi` of a loop over `lo...<hi` for the range `range`, with the facts to prove
+before the loop, and a function of the loop's index `j` and of the proofs `hlo` and `hj` of
+`lo.toNat ≤ j.toNat` and `j.toNat < hi.toNat` that adds the bounds of `j` in the range's own terms
+to a body. `lo...=hi` and `lo<...hi` loop over `lo...<hi + 1` and `lo + 1...<hi`, so they need
+`hi + 1` and `lo + 1` not to wrap around.
+-/
+private def rangeBounds (range : Term) :
+    MacroM (Term × Term × Array (Ident × Term) × (Term → Term → Term → Term → MacroM Term)) := do
+  let zero ← `((0 : USize))
+  let hh ← fresh `hh
+  let hl ← fresh `hl
+  -- The facts about `j` of the range's upper and lower bounds, after the loop's own.
+  let upper (hi : Term) (j hj b : Term) : MacroM Term :=
+    `(have _ : USize.toNat $j ≤ USize.toNat $hi :=
+        ScalarArray.InPlaceSyntax.le_of_lt_succ $hh $hj; $b)
+  let lower (lo : Term) (j hlo b : Term) : MacroM Term :=
+    `(have _ : USize.toNat $lo < USize.toNat $j :=
+        ScalarArray.InPlaceSyntax.lt_of_succ_le $hl $hlo; $b)
+  let factHi (hi : Term) : MacroM (Ident × Term) :=
+    return (hh, ← `(USize.toNat $hi + 1 < USize.size))
+  let factLo (lo : Term) : MacroM (Ident × Term) :=
+    return (hl, ← `(USize.toNat $lo + 1 < USize.size))
+  match range with
+  | `($lo...$hi) | `($lo...<$hi) => pure (lo, hi, #[], fun _ _ _ b => pure b)
+  | `(*...$hi) | `(*...<$hi) => pure (zero, hi, #[], fun _ _ _ b => pure b)
+  | `($lo...=$hi) => pure (lo, ← `($hi + 1), #[← factHi hi], fun j _ hj b => upper hi j hj b)
+  | `(*...=$hi) => pure (zero, ← `($hi + 1), #[← factHi hi], fun j _ hj b => upper hi j hj b)
+  | `($lo<...$hi) | `($lo<...<$hi) =>
+    pure (← `($lo + 1), hi, #[← factLo lo], fun j hlo _ b => lower lo j hlo b)
+  | `($lo<...=$hi) =>
+    pure (← `($lo + 1), ← `($hi + 1), #[← factLo lo, ← factHi hi], fun j hlo hj b => do
+      upper hi j hj (← lower lo j hlo b))
+  | _ => Macro.throwErrorAt range "expected a range such as `lo...hi`, `lo...=hi`, `lo<...hi` or \
+      `*...hi`"
+
 mutual
 
 /--
 The program of the statements `stmts` on the array `p.arr`, ending with `ret`, where `mvars` are the
-mutable variables in scope and `top` says whether the statements end the whole program, where a
-`return e` can end them with `ending e`.
+mutable variables in scope, `loop` is the innermost loop, and `return e` ends the whole program
+with `ending e`.
 -/
 private partial def expandSeq (p : Arr) (ending : Term → MacroM Term) (mvars : Array Ident)
-    (ret : Term) (top : Bool) : List (TSyntax `inplaceStmt) → MacroM Term
+    (loop : Option InplaceLoop) (ret : Term) : List (TSyntax `inplaceStmt) → MacroM Term
   | [] => pure ret
   | s :: rest => withRef s do
-    if let `(inplaceStmt| return $_) := s then
-      unless rest.isEmpty && top do
-        Macro.throwError "`return` must be the last statement of the program, or of a branch of \
-          the program's last `if`"
-      return ← lifting p s fun s => do
+    let isEnd := match s with
+      | `(inplaceStmt| return $_) | `(inplaceStmt| break) | `(inplaceStmt| continue) => true
+      | _ => false
+    if isEnd then
+      if let some s' := rest.head? then
+        Macro.throwErrorAt s' "this statement is unreachable: it follows a `return`, `break` or \
+          `continue`"
+    match s with
+    | `(inplaceStmt| return $_) =>
+      lifting p s fun s => do
         let `(inplaceStmt| return $e) := s | Macro.throwUnsupported
         ending e
-    lifting p s fun s => expandStmt p ending mvars ret top s rest
+    | `(inplaceStmt| break) =>
+      let some l := loop | Macro.throwError "`break` is only allowed in a loop"
+      pure l.brk
+    | `(inplaceStmt| continue) =>
+      let some l := loop | Macro.throwError "`continue` is only allowed in a loop"
+      pure l.next
+    -- The condition of a `while` runs at each step, so its reads are lifted inside the loop.
+    | `(inplaceStmt| while $[$_ :]? $_ $[$_:inplaceLoopVars]? do $_;*) =>
+      expandStmt p ending mvars loop ret ⟨← replaceArray p true s⟩ rest
+    | _ => lifting p s fun s => expandStmt p ending mvars loop ret s rest
 
 /-- The program of the statement `s` followed by `rest`. -/
 private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars : Array Ident)
-    (ret : Term) (top : Bool) (s : TSyntax `inplaceStmt) (rest : List (TSyntax `inplaceStmt)) :
-    MacroM Term := do
+    (loop : Option InplaceLoop) (ret : Term) (s : TSyntax `inplaceStmt)
+    (rest : List (TSyntax `inplaceStmt)) : MacroM Term := do
   let arr := p.arr
-  let k (mvars : Array Ident) := expandSeq p ending mvars ret top rest
+  let k (mvars : Array Ident) := expandSeq p ending mvars loop ret rest
   match s with
   | `(inplaceStmt| let $x:ident ← $a:ident[$i]) =>
     checkArray arr a
@@ -540,74 +757,124 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
           `let mut`, or carry it into the loop with `with ({x.getId} := {x.getId})`"
     `(match $e:term with | $q:term => $(← k mvars))
   | `(inplaceStmt| if $[$h :]? $c then $t;* $[else $e;*]?) =>
-    expandIf p ending mvars (k mvars) top rest.isEmpty h c t.getElems.toList
-      (e.map (·.getElems.toList))
+    expandBranches p ending mvars loop (k mvars) rest
+      [t.getElems.toList, (e.map (·.getElems.toList)).getD []] fun bs => match h with
+        | some h => `(.dite $c (fun $h => $(bs[0]!)) (fun $h => $(bs[1]!)))
+        | none => `(.ite $c $(bs[0]!) $(bs[1]!))
   | `(inplaceStmt| unless $c do $t;*) =>
-    expandIf p ending mvars (k mvars) top rest.isEmpty none (← `(¬$c)) t.getElems.toList none
-  | `(inplaceStmt| for $j in $[reverse%$rev]? $range $[with $[($xs $[: $ts]? := $is)]*]? do $b;*) =>
-    let (lo, hi) ← match range with
-      | `($lo...$hi) | `($lo...<$hi) => pure (lo, hi)
-      | `(*...$hi) | `(*...<$hi) => pure (← `((0 : USize)), hi)
-      | _ => Macro.throwErrorAt range "expected a range `lo...hi` or `*...hi`"
-    let xs : Array Ident := xs.getD #[]
-    let inits ← (is.getD #[]).zip (ts.getD #[]) |>.mapM fun
-      | (init, some ty) => `(($init : $ty))
-      | (init, none) => pure init
-    if xs.size > 4 then Macro.throwError "a loop has at most four variables"
-    -- The body ends by calling `next` on the loop's variables, which runs the next step, and the
-    -- loop ends by calling the rest of the program itself: the variables are arguments of both,
-    -- so they stay unboxed, and a nested loop ends by calling the outer `next`.
-    let next ← withFreshMacroScope `(next)
-    let args : Array Term := xs.map fun x => x
-    let call ← if xs.isEmpty then `($next ()) else `($next $args*)
-    let b ← expandSeq p ending xs call false b.getElems.toList
-    let rest ← k (mvars ++ xs)
-    let body ← if xs.isEmpty then `(fun $j hlo hj $next _ => $b) else
-      `(fun $j hlo hj $next $xs* => $b)
-    let rest ← if xs.isEmpty then `(fun _ => $rest) else `(fun $xs* => $rest)
-    match rev.isSome, inits.size with
-    | false, 0 => `(.forIn $lo $hi () $body $rest)
-    | false, 1 => `(.forIn $lo $hi $inits* $body $rest)
-    | false, 2 => `(.forIn2 $lo $hi $inits* $body $rest)
-    | false, 3 => `(.forIn3 $lo $hi $inits* $body $rest)
-    | false, _ => `(.forIn4 $lo $hi $inits* $body $rest)
-    | true, 0 => `(.forInRev $lo $hi () $body $rest)
-    | true, 1 => `(.forInRev $lo $hi $inits* $body $rest)
-    | true, 2 => `(.forInRev2 $lo $hi $inits* $body $rest)
-    | true, 3 => `(.forInRev3 $lo $hi $inits* $body $rest)
-    | true, _ => `(.forInRev4 $lo $hi $inits* $body $rest)
+    expandBranches p ending mvars loop (k mvars) rest [t.getElems.toList, []] fun bs =>
+      `(.ite $c $(bs[1]!) $(bs[0]!))
+  | `(inplaceStmt| match $ds,* with $alts:inplaceMatchAlt*) =>
+    let alts ← alts.mapM fun
+      | `(inplaceMatchAlt| | $ps,* => $b;*) => pure (ps, b.getElems.toList)
+      | _ => Macro.throwUnsupported
+    for (ps, _) in alts do
+      checkNoShadow mvars (ps.getElems.flatMap fun p => patternVars p)
+    expandBranches p ending mvars loop (k mvars) rest (alts.toList.map (·.2)) fun bs => do
+      -- Several discriminants are matched as one tuple.
+      let tuple (xs : Array Term) : MacroM Term :=
+        if h : xs.size = 1 then pure xs[0] else `(($(xs[0]!), $(xs.extract 1),*))
+      let d ← tuple ds.getElems
+      let ps ← alts.mapM fun (ps, _) => tuple ps.getElems
+      `(match $d:term with $[| $ps => $bs]*)
+  | `(inplaceStmt| for $j in $[reverse%$rev]? $range $[by $step]? $[$vars:inplaceLoopVars]?
+      do $b;*) =>
+    let (lo, hi, facts, more) ← rangeBounds range
+    let (xs, inits) ← loopVars vars
+    let b := b.getElems.toList
+    let (lo', hi') ← match step with
+      | none => pure (lo, hi)
+      | some step => pure (← `((0 : USize)), ← `(ScalarArray.InPlaceSyntax.stepCount $lo $hi $step))
+    let mkBody (next : Ident) (_ : Term) (body : Term) : MacroM Term := do
+      let hlo ← fresh `hlo
+      let hj ← fresh `hj
+      let body ← more j hlo hj body
+      match step with
+      | none => lam j hlo hj next xs body
+      | some step =>
+        -- The loop runs over the steps `k`, for the indices `j = lo + step * k`.
+        let kk ← fresh `k
+        let hk ← fresh `hk
+        let body ← `((fun ($j : USize) ($hlo : USize.toNat $lo ≤ USize.toNat $j)
+            ($hj : USize.toNat $j < USize.toNat $hi) => $body) ($lo + $step * $kk)
+          (ScalarArray.InPlaceSyntax.step_le $hk) (ScalarArray.InPlaceSyntax.step_lt $hk))
+        lam kk (← fresh `_hk0) hk next xs body
+    let f ← loopFn rev.isSome xs.size
+    let brk := hasBreak (mkNullNode (b.toArray.map (·.raw)))
+    let prog ← expandLoop p ending (k (mvars ++ xs)) xs b brk
+      mkBody fun body k =>
+        if xs.isEmpty then `($f $lo' $hi' () $body $k) else `($f $lo' $hi' $inits* $body $k)
+    let prog ← match step with
+      | none => pure prog
+      | some step => `(have _ : 0 < USize.toNat $step := (by inplace_bound); $prog)
+    facts.foldrM (init := prog) fun (h, t) prog => `(have $h : $t := (by inplace_bound); $prog)
+  | `(inplaceStmt| while $[$h :]? $c $[$vars:inplaceLoopVars]? do $b;*) =>
+    let (xs, inits) ← loopVars vars
+    let b := b.getElems.toList
+    -- A `while` loop is a loop over at most `USize.size - 1` steps that the body leaves when `c`
+    -- fails: it runs the condition, with its reads, at each step.
+    let (c, reads) ← (liftReads p.arr false c).run #[]
+    let c : Term := ⟨c⟩
+    let f ← loopFn false xs.size
+    expandLoop p ending (k (mvars ++ xs)) xs b true
+      (fun next brk body => do
+        let step ← match h with
+          | some h => `(.dite $c (fun $h => $body) (fun _ => $brk))
+          | none => `(.ite $c $body $brk)
+        let step ← withReads p reads step
+        lam (← fresh `_i) (← fresh `_hlo)
+          (← fresh `_hj) next xs step)
+      fun body k =>
+        if xs.isEmpty then `($f 0 ((0 : USize) - 1) () $body $k) else
+          `($f 0 ((0 : USize) - 1) $inits* $body $k)
   | _ => Macro.throwUnsupported
 
 /--
-The program of `if h : c then t else e` followed by the rest `rest` of the program, where `last`
-says whether the `if` is the last statement, so that the branches of the program's last `if` can
-end it with `return`.
+The program of a loop over the variables `xs` with the body `b`, followed by `rest`:
+`mkBody next brk body` is the loop's body for the program `body` of a step, where `brk` is the call
+that leaves the loop, and `mkLoop body k` is the loop with the body `body` and the rest `k`. When
+`brk` holds, the body may leave the loop, and the rest is bound to a local function, which `break`
+calls.
 -/
-private partial def expandIf (p : Arr) (ending : Term → MacroM Term) (mvars : Array Ident)
-    (rest : MacroM Term) (top last : Bool) (h : Option Ident) (c : Term)
-    (t : List (TSyntax `inplaceStmt)) (e : Option (List (TSyntax `inplaceStmt))) :
+private partial def expandLoop (p : Arr) (ending : Term → MacroM Term) (rest : MacroM Term)
+    (xs : Array Ident) (b : List (TSyntax `inplaceStmt)) (brk : Bool)
+    (mkBody : Ident → Term → Term → MacroM Term) (mkLoop : Term → Term → MacroM Term) :
     MacroM Term := do
-  if top && last then
-    -- The rest of the program is its end, which the branches can share without a function, and
-    -- must, when they both `return`, since the function's type would then be unknown.
+  if xs.size > 4 then Macro.throwError "a loop has at most four variables"
+  -- The body ends by calling `next` on the loop's variables, which runs the next step, and the
+  -- loop ends by calling the rest of the program itself: the variables are arguments of both,
+  -- so they stay unboxed, and a nested loop ends by calling the outer `next`.
+  let next ← fresh `next
+  let brkFn ← fresh `brk
+  let callNext ← call next xs
+  let callBrk ← call brkFn xs
+  let body ← expandSeq p ending xs (some { next := callNext, brk := callBrk }) callNext b
+  let body ← mkBody next callBrk body
+  let rest ← rest
+  let restFn ← if xs.isEmpty then `(fun _ => $rest) else `(fun $xs* => $rest)
+  -- `withExit` elaborates the loop before the rest, so that the loop fixes the type of the rest.
+  if brk then `(ScalarArray.InPlaceSyntax.withExit (fun $brkFn => $(← mkLoop body brkFn)) $restFn)
+  else mkLoop body restFn
+
+/--
+The program of a statement with the blocks `bs`, such as an `if` or a `match`, followed by the rest
+`rest` of the program: `mk` makes the statement from the programs of the blocks. The rest becomes a
+local function of the mutable variables, which the blocks call, unless the statement is the last
+of its block: then the blocks end as the block does.
+-/
+private partial def expandBranches (p : Arr) (ending : Term → MacroM Term) (mvars : Array Ident)
+    (loop : Option InplaceLoop) (rest : MacroM Term) (restStmts : List (TSyntax `inplaceStmt))
+    (bs : List (List (TSyntax `inplaceStmt))) (mk : Array Term → MacroM Term) : MacroM Term := do
+  if restStmts.isEmpty then
     let rest ← rest
-    let t ← expandSeq p ending mvars rest true t
-    let e ← match e with
-      | some e => expandSeq p ending mvars rest true e
-      | none => pure rest
-    return ← match h with
-      | some h => `(.dite $c (fun $h => $t) (fun $h => $e))
-      | none => `(.ite $c $t $e)
+    return ← mk (← bs.toArray.mapM fun b => expandSeq p ending mvars loop rest b)
+  if bs.all ends then
+    Macro.throwErrorAt restStmts.head! "this statement is unreachable: every block of the \
+      statement before it ends with `return`, `break` or `continue`"
   -- The rest of the program, as a function of the mutable variables.
-  let kont ← withFreshMacroScope `(kont)
-  let call ← if mvars.isEmpty then `($kont ()) else `($kont $mvars*)
-  let t ← expandSeq p ending mvars call false t
-  let e ← match e with
-    | some e => expandSeq p ending mvars call false e
-    | none => pure call
-  let branch ← match h with
-    | some h => `(.dite $c (fun $h => $t) (fun $h => $e))
-    | none => `(.ite $c $t $e)
+  let kont ← fresh `kont
+  let callK ← call kont mvars
+  let branch ← mk (← bs.toArray.mapM fun b => expandSeq p ending mvars loop callK b)
   let rest ← rest
   let fn ← if mvars.isEmpty then `(fun (_ : Unit) => $rest) else `(fun $mvars* => $rest)
   `((fun $kont => $branch) $fn)
@@ -635,9 +902,12 @@ macro_rules
           ($k : _ → (a'' : type_of% $a) → a''.size = ($a).size → _) x a'
             (h.trans (Eq.symm $p.hsize)))
       | none => `(.done $e fun x a' _ => (x, a'))
-    let prog ← expandSeq p ending #[] (← ending (← `(()))) true stmts.getElems.toList
+    let prog ← expandSeq p ending #[] none (← ending (← `(()))) stmts.getElems.toList
     -- They are bound by a function application, not by `let`, which fails to elaborate when the
     -- program has metavariables left for later, such as the types of loop variables.
     `((fun ($size : Nat) ($p.hsize : ($a).size = $size) ($p.usize : USize)
           (_ : ($p.usize).toNat ≤ ($a).size) => ($a).runInPlaceThenOf $size $p.hsize $prog)
         ($a).size rfl ($a).usize ($a).toNat_usize_le)
+  | `(inplace $e do $_;* $[then $_]?) =>
+    Lean.Macro.throwErrorAt e "`inplace` needs the array as a local variable: bind it first, as \
+      in `let a := e; inplace a do …`"

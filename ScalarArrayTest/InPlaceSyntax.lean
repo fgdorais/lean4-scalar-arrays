@@ -580,3 +580,142 @@ example (a : UInt8Array) (h : 0 < a.size) : Nat × UInt8Array :=
     for j in 0...1 with (k := 0) do
       let k ← a[j]
     return k
+
+/-! Tests of `break`, `continue`, `return` in loops, `while`, `match` and the other ranges. -/
+
+/-- The index of the first zero, by `break`. -/
+private def firstZero (a : UInt32Array) : Option USize :=
+  have := a.toNat_usize_le
+  (inplace a do
+    for j in 0...a.usize with (r := (none : Option USize)) do
+      if a[j] = 0 then
+        r := some j
+        break
+    return r).1
+
+#guard firstZero (UInt32Array.mk #[3, 0, 5, 0]) == some 1
+#guard firstZero (UInt32Array.mk #[3, 1]) == none
+
+/-- The index of the first zero, by `return` in the loop. -/
+private def firstZero' (a : UInt32Array) : Option USize :=
+  have := a.toNat_usize_le
+  (inplace a do
+    for j in 0...a.usize do
+      if a[j] = 0 then
+        return some j
+    return none).1
+
+#guard firstZero' (UInt32Array.mk #[3, 4, 0, 0]) == some 2
+#guard firstZero' (UInt32Array.mk #[3, 1]) == none
+
+/-- The sum of the odd elements, by `continue`, and of the elements before a 0 by `break`. -/
+private def oddSum (a : UInt8Array) : Nat × UInt8Array :=
+  have := a.toNat_usize_le
+  inplace a do
+    for j in 0...a.usize with (s := 0) do
+      let x ← a[j]
+      if x = 0 then break
+      if x % 2 = 0 then continue
+      s := s + x.toNat
+    return s
+
+#guard (oddSum (UInt8Array.mk #[1, 2, 3, 4, 0, 5])).1 == 4
+
+/-- Halves the first element until it is odd, with `while`, and counts the steps. -/
+private def halve (a : UInt64Array) (h : 0 < a.size) : Nat × UInt64Array :=
+  inplace a do
+    while a[0] % 2 = 0 ∧ n < 64 with (n := 0) do
+      a[0] := a[0] / 2
+      n := n + 1
+    return n
+
+#guard halve (UInt64Array.mk #[48, 7]) (by decide) == (4, UInt64Array.mk #[3, 7])
+#guard (halve (UInt64Array.mk #[0]) (by decide)).1 == 64
+
+/-- Nested loops: the inner `break` leaves the inner loop only. -/
+private def rowsUntilZero (a : UInt8Array) (rows : USize) (h : 4 * rows.toNat ≤ a.size) :
+    Nat × UInt8Array :=
+  inplace a do
+    for r in 0...rows with (t := 0) do
+      for c in 0...4 with (t := t) do
+        have hb : (4 * r + c).toNat < a.size := by inplace_bound
+        if a[4 * r + c] = 0 then break
+        t := t + 1
+      t := t
+    return t
+
+#guard
+  let a := UInt8Array.mk #[1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1]
+  if h : 4 * (3 : USize).toNat ≤ a.size then (rowsUntilZero a 3 h).1 == 2 + 4 + 0
+  else false
+
+/-- Classifies the elements with `match`, writing a code for each. -/
+private def classify (a : UInt8Array) : Nat × UInt8Array :=
+  have := a.toNat_usize_le
+  inplace a do
+    for j in 0...a.usize with (z := 0) do
+      let x ← a[j]
+      match x.toNat % 3, x == 0 with
+      | _, true => z := z + 1
+      | 0, _ => a[j] := 30
+      | 1, _ => a[j] := 31
+      | _, _ =>
+        a[j] := 32
+        continue
+      a[j] := a[j] + 100
+    return z
+
+#guard classify (UInt8Array.mk #[0, 3, 4, 5]) == (1, UInt8Array.mk #[100, 130, 131, 32])
+
+/-- Ranges `lo...=hi`, `lo<...hi`, `lo<...=hi` and steps. -/
+private def ranges (a : UInt8Array) (h : 10 ≤ a.size) : List Nat × UInt8Array :=
+  inplace a do
+    let mut l := ([] : List Nat)
+    for j in 2...=4 with (l := l) do
+      l := j.toNat :: l
+    for j in 2<...4 with (l := l) do
+      l := j.toNat :: l
+    for j in 2<...=4 with (l := l) do
+      l := j.toNat :: l
+    for j in 1...9 by 3 with (l := l) do
+      have hb : j.toNat < a.size := by inplace_bound
+      l := (j.toNat + 100 * a[j].toNat) :: l
+    for j in reverse 1...=9 by 4 with (l := l) do
+      l := (j.toNat + 1000) :: l
+    for j in *...=1 with (l := l) do
+      l := j.toNat :: l
+    return l.reverse
+
+#guard (ranges (UInt8Array.mk #[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) (by decide)).1 ==
+  [2, 3, 4, 3, 3, 4, 101, 404, 707, 1009, 1005, 1001, 0, 1]
+
+-- Errors.
+/-- error: `break` is only allowed in a loop -/
+#guard_msgs in
+example (a : UInt8Array) : Unit × UInt8Array :=
+  inplace a do
+    break
+
+/-- error: this statement is unreachable: it follows a `return`, `break` or `continue` -/
+#guard_msgs in
+example (a : UInt8Array) : Nat × UInt8Array :=
+  inplace a do
+    return 1
+    return 2
+
+/--
+error: this statement is unreachable: every block of the statement before it ends with `return`, `break` or `continue`
+-/
+#guard_msgs in
+example (a : UInt8Array) (b : Bool) : Nat × UInt8Array :=
+  inplace a do
+    if b then return 1 else return 2
+    return 3
+
+/--
+error: `inplace` needs the array as a local variable: bind it first, as in `let a := e; inplace a do …`
+-/
+#guard_msgs in
+example (a : UInt8Array) : Unit × UInt8Array :=
+  inplace (a.push 0) do
+    return ()
