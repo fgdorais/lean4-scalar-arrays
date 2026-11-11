@@ -257,3 +257,58 @@ example (a : UInt8Array) (h : 0 < a.size) : UInt8 × UInt8Array :=
       y := 1
     return y
 
+
+/-!
+`then k` hands the program's result and the new array, with its size, to `k`, which the program
+calls where it ends, so no result pair is built.
+-/
+
+/-- The butterfly above, with the windows' carry and borrow and the new array handed to `k`. -/
+@[inline] private def butterflyThen (a : UInt64Array) (xs ys ts len : USize)
+    (k : UInt64 → UInt64 → (a' : UInt64Array) → a'.size = a.size → γ) (none : γ) : γ :=
+  if h : xs.toNat + len.toNat ≤ a.size ∧ ys.toNat + len.toNat ≤ a.size ∧
+      ts.toNat + len.toNat ≤ a.size then
+    have hx := h.1
+    have hy := h.2.1
+    have ht := h.2.2
+    inplace a do
+      for j in 0...len with (c := 0) (b := 0) do
+        let u ← a[xs + j]
+        let v ← a[ys + j]
+        let (s, c) := addc u v c
+        let (d, b) := subb u v b
+        a[xs + j] := s
+        a[ts + j] := d
+      return (c, b)
+    then fun (c, b) a' h => k c b a' h
+  else none
+
+#guard butterflyThen (UInt64Array.mk #[5, 0xFFFFFFFFFFFFFFFF, 7, 6, 1, 3, 0, 0, 0]) 0 3 6 3
+    (fun c b a _ => some ((c, b), a)) none ==
+  butterfly (UInt64Array.mk #[5, 0xFFFFFFFFFFFFFFFF, 7, 6, 1, 3, 0, 0, 0]) 0 3 6 3
+
+-- The size proof chains a second program on the new array.
+#guard
+  let a := UInt8Array.mk #[1, 2, 3]
+  have : (3 : USize).toNat ≤ a.size := by simp [a]
+  inplace a do
+    for j in *...3 with (s := 0) do
+      s := s + a[j]
+      a[j] := s
+    return s
+  then fun s a' h =>
+    have : (3 : USize).toNat ≤ a'.size := by simp [a, h]
+    (s, (inplace a' do
+      for j in *...3 do
+        a'[j] := a'[j] + s).2.toArray) == (6, #[7, 9, 12])
+
+-- Without `return`, the result is `()`; `then` works after an `if` at the end, too.
+#guard
+  let a := Int8Array.mk #[3, -1]
+  have : 1 < a.size := by simp [a]
+  inplace a do
+    if a[0] > a[1] then
+      let x ← a[0]
+      a[0] := a[1]
+      a[1] := x
+  then fun () a' _ => a'.toArray == #[-1, 3]
