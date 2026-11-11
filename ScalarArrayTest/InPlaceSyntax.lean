@@ -22,7 +22,7 @@ private def prefixSums (a : UInt32Array) (len : USize) : Option (UInt32 × UInt3
     some <| inplace a do
       for j in 0...len with (s := 0) do
         let x ← a[j]
-        let s := s + x
+        s := s + x
         a[j] := s
       return s
   else none
@@ -112,7 +112,7 @@ private def shiftUp (a : UInt8Array) (off len : USize) : Option (UInt8 × UInt8A
     some <| inplace a do
       for j in reverse 0...len with (top := 0) do
         let x ← a[off + j]
-        let top := if j + 1 = len then x else top
+        top := if j + 1 = len then x else top
         a[(off + 1) + j] := x
       a[off] := 0
       return top
@@ -146,10 +146,11 @@ private def butterfly (a : UInt64Array) (xs ys ts len : USize) :
       for j in 0...len with (c := 0) (b := 0) do
         let u ← a[xs + j]
         let v ← a[ys + j]
-        let (s, c) := addc u v c
-        let (d, b) := subb u v b
+        let (s, c') := addc u v c
+        let (d, b') := subb u v b
         a[xs + j] := s
         a[ts + j] := d
+        (c, b) := (c', b')
       return (c, b)
   else none
 
@@ -275,10 +276,11 @@ calls where it ends, so no result pair is built.
       for j in 0...len with (c := 0) (b := 0) do
         let u ← a[xs + j]
         let v ← a[ys + j]
-        let (s, c) := addc u v c
-        let (d, b) := subb u v b
+        let (s, c') := addc u v c
+        let (d, b') := subb u v b
         a[xs + j] := s
         a[ts + j] := d
+        (c, b) := (c', b')
       return (c, b)
     then fun (c, b) a' h => k c b a' h
   else none
@@ -567,3 +569,14 @@ example (a : UInt8Array) : Unit × UInt8Array :=
   inplace a do
     for j in 0...0 with (x := 0) (y := 0) (z := 0) (u := 0) (v := 0) do
       x := y + z + u + v
+
+-- A `let` can't shadow a mutable variable, as in `do` notation: assign it instead.
+/--
+error: mutable variable `k` cannot be shadowed: assign it with `k := e`, or in a pattern, as in `(k, y) := e`
+-/
+#guard_msgs in
+example (a : UInt8Array) (h : 0 < a.size) : Nat × UInt8Array :=
+  inplace a do
+    for j in 0...1 with (k := 0) do
+      let k ← a[j]
+    return k
