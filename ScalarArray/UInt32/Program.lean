@@ -43,6 +43,11 @@ variables, and the loop ends with `k`. Each variable is an argument of the loop,
 unboxed, and a nested loop, whose `k` calls the outer `next`, compiles to mutually recursive loops
 with no allocation. They are specified by their one-step equations (`Tail.forInFrom_eq`, …).
 
+A read-only program `InPlace.ReadOnly n γ` is a tail program that never writes: it has the
+combinators of `Tail` but `writeThen` and `bind`. So it runs on the array as it is, without making
+it exclusive, and a shared array is not copied. It runs with `a.runReadOnlyThen r`,
+`a.runReadOnlyThenOf n h r` or `r.run a h`.
+
 The array is never visible to a program: `InPlace` and its state have private constructors, so the
 only code that touches the state is the code in this module, which passes it on linearly. That is
 what lets `write` store without checking that the array is exclusive. The in-place folds of
@@ -1614,6 +1619,484 @@ public theorem forInRev4From_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ :
 
 end Tail
 
+/-! ## Read-only programs -/
+
+/--
+A read-only tail program on an array of size `n`, whose continuation returns a `γ`: a tail program
+that reads the array and never writes it. It has the combinators of `Tail` but `writeThen` and
+`bind`: `ReadOnly.done`, `ReadOnly.readThen`, `ReadOnly.ite`, `ReadOnly.dite` and the loops
+`ReadOnly.forIn`, …, `ReadOnly.forInRev4`. Since none of them writes, `ReadOnly.run` runs it on the
+array as it is, without making it exclusive, so a shared array is not copied. It runs with
+`a.runReadOnlyThen r`, `a.runReadOnlyThenOf n h r` or `r.run a h`, and `inplace a do …` writes one
+when the program has no write.
+-/
+public structure ReadOnly (n : Nat) (γ : Type u) where
+  private mk ::
+  private tail : Tail n γ
+
+namespace ReadOnly
+
+variable {γ : Type w}
+
+/-- Ends the program with the result `x`: hands `x`, the array and its size to `k`. -/
+@[inline]
+public def done (x : α) (k : α → (a : UInt32Array) → a.size = n → γ) : ReadOnly n γ :=
+  ⟨Tail.done x k⟩
+
+/-- `read i h` followed by `k` on the element. -/
+@[inline]
+public def readThen (i : USize) (h : i.toNat < n) (k : UInt32 → ReadOnly n γ) : ReadOnly n γ :=
+  ⟨Tail.readThen i h fun x => (k x).tail⟩
+
+/-- Runs `t` if `c` holds and `e` otherwise, as a branch inside one program, like `Tail.ite`. -/
+@[inline]
+public protected def ite (c : Prop) [Decidable c] (t e : ReadOnly n γ) : ReadOnly n γ :=
+  ⟨Tail.ite c t.tail e.tail⟩
+
+/-- `ReadOnly.ite` where each branch takes the proof of its condition. -/
+@[inline]
+public protected def dite (c : Prop) [Decidable c] (t : c → ReadOnly n γ)
+    (e : ¬c → ReadOnly n γ) : ReadOnly n γ :=
+  ⟨Tail.dite c (fun h => (t h).tail) (fun h => (e h).tail)⟩
+
+/-- `Tail.forInFrom` for read-only programs. It is specified by `ReadOnly.forInFrom_eq`. -/
+@[inline]
+public def forInFrom {β : Type v}
+    (lo hi j₀ : USize) (h : lo.toNat ≤ j₀.toNat) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → ReadOnly n γ) → β → ReadOnly n γ)
+    (k : β → ReadOnly n γ) : ReadOnly n γ :=
+  ⟨Tail.forInFrom lo hi j₀ h init
+    (fun j hlo hj next b =>
+      (body j hlo hj (fun b => ⟨next b⟩) b).tail)
+    fun b => (k b).tail⟩
+
+/-- `Tail.forIn` for read-only programs. -/
+@[inline, expose]
+public def forIn {β : Type v}
+    (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → ReadOnly n γ) → β → ReadOnly n γ)
+    (k : β → ReadOnly n γ) : ReadOnly n γ :=
+  forInFrom lo hi lo (Nat.le_refl _) init body k
+
+/-- `Tail.forInRevFrom` for read-only programs. It is specified by `ReadOnly.forInRevFrom_eq`. -/
+@[inline]
+public def forInRevFrom {β : Type v}
+    (lo hi j₀ : USize) (h : j₀.toNat ≤ hi.toNat) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → ReadOnly n γ) → β → ReadOnly n γ)
+    (k : β → ReadOnly n γ) : ReadOnly n γ :=
+  ⟨Tail.forInRevFrom lo hi j₀ h init
+    (fun j hlo hj next b =>
+      (body j hlo hj (fun b => ⟨next b⟩) b).tail)
+    fun b => (k b).tail⟩
+
+/-- `Tail.forInRev` for read-only programs. -/
+@[inline, expose]
+public def forInRev {β : Type v}
+    (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → ReadOnly n γ) → β → ReadOnly n γ)
+    (k : β → ReadOnly n γ) : ReadOnly n γ :=
+  forInRevFrom lo hi hi (Nat.le_refl _) init body k
+
+/-- `Tail.forIn2From` for read-only programs. It is specified by `ReadOnly.forIn2From_eq`. -/
+@[inline]
+public def forIn2From {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi j₀ : USize) (h : lo.toNat ≤ j₀.toNat) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → ReadOnly n γ) → β₁ → β₂ → ReadOnly n γ)
+    (k : β₁ → β₂ → ReadOnly n γ) : ReadOnly n γ :=
+  ⟨Tail.forIn2From lo hi j₀ h init₁ init₂
+    (fun j hlo hj next b₁ b₂ =>
+      (body j hlo hj (fun b₁ b₂ => ⟨next b₁ b₂⟩) b₁ b₂).tail)
+    fun b₁ b₂ => (k b₁ b₂).tail⟩
+
+/-- `Tail.forIn2` for read-only programs. -/
+@[inline, expose]
+public def forIn2 {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → ReadOnly n γ) → β₁ → β₂ → ReadOnly n γ)
+    (k : β₁ → β₂ → ReadOnly n γ) : ReadOnly n γ :=
+  forIn2From lo hi lo (Nat.le_refl _) init₁ init₂ body k
+
+/-- `Tail.forInRev2From` for read-only programs. It is specified by `ReadOnly.forInRev2From_eq`. -/
+@[inline]
+public def forInRev2From {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi j₀ : USize) (h : j₀.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → ReadOnly n γ) → β₁ → β₂ → ReadOnly n γ)
+    (k : β₁ → β₂ → ReadOnly n γ) : ReadOnly n γ :=
+  ⟨Tail.forInRev2From lo hi j₀ h init₁ init₂
+    (fun j hlo hj next b₁ b₂ =>
+      (body j hlo hj (fun b₁ b₂ => ⟨next b₁ b₂⟩) b₁ b₂).tail)
+    fun b₁ b₂ => (k b₁ b₂).tail⟩
+
+/-- `Tail.forInRev2` for read-only programs. -/
+@[inline, expose]
+public def forInRev2 {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → ReadOnly n γ) → β₁ → β₂ → ReadOnly n γ)
+    (k : β₁ → β₂ → ReadOnly n γ) : ReadOnly n γ :=
+  forInRev2From lo hi hi (Nat.le_refl _) init₁ init₂ body k
+
+/-- `Tail.forIn3From` for read-only programs. It is specified by `ReadOnly.forIn3From_eq`. -/
+@[inline]
+public def forIn3From {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi j₀ : USize) (h : lo.toNat ≤ j₀.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → ReadOnly n γ) → β₁ → β₂ → β₃ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → ReadOnly n γ) : ReadOnly n γ :=
+  ⟨Tail.forIn3From lo hi j₀ h init₁ init₂ init₃
+    (fun j hlo hj next b₁ b₂ b₃ =>
+      (body j hlo hj (fun b₁ b₂ b₃ => ⟨next b₁ b₂ b₃⟩) b₁ b₂ b₃).tail)
+    fun b₁ b₂ b₃ => (k b₁ b₂ b₃).tail⟩
+
+/-- `Tail.forIn3` for read-only programs. -/
+@[inline, expose]
+public def forIn3 {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → ReadOnly n γ) → β₁ → β₂ → β₃ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → ReadOnly n γ) : ReadOnly n γ :=
+  forIn3From lo hi lo (Nat.le_refl _) init₁ init₂ init₃ body k
+
+/-- `Tail.forInRev3From` for read-only programs. It is specified by `ReadOnly.forInRev3From_eq`. -/
+@[inline]
+public def forInRev3From {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi j₀ : USize) (h : j₀.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → ReadOnly n γ) → β₁ → β₂ → β₃ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → ReadOnly n γ) : ReadOnly n γ :=
+  ⟨Tail.forInRev3From lo hi j₀ h init₁ init₂ init₃
+    (fun j hlo hj next b₁ b₂ b₃ =>
+      (body j hlo hj (fun b₁ b₂ b₃ => ⟨next b₁ b₂ b₃⟩) b₁ b₂ b₃).tail)
+    fun b₁ b₂ b₃ => (k b₁ b₂ b₃).tail⟩
+
+/-- `Tail.forInRev3` for read-only programs. -/
+@[inline, expose]
+public def forInRev3 {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → ReadOnly n γ) → β₁ → β₂ → β₃ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → ReadOnly n γ) : ReadOnly n γ :=
+  forInRev3From lo hi hi (Nat.le_refl _) init₁ init₂ init₃ body k
+
+/-- `Tail.forIn4From` for read-only programs. It is specified by `ReadOnly.forIn4From_eq`. -/
+@[inline]
+public def forIn4From {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi j₀ : USize) (h : lo.toNat ≤ j₀.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) → β₁ → β₂ → β₃ → β₄ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) : ReadOnly n γ :=
+  ⟨Tail.forIn4From lo hi j₀ h init₁ init₂ init₃ init₄
+    (fun j hlo hj next b₁ b₂ b₃ b₄ =>
+      (body j hlo hj (fun b₁ b₂ b₃ b₄ => ⟨next b₁ b₂ b₃ b₄⟩) b₁ b₂ b₃ b₄).tail)
+    fun b₁ b₂ b₃ b₄ => (k b₁ b₂ b₃ b₄).tail⟩
+
+/-- `Tail.forIn4` for read-only programs. -/
+@[inline, expose]
+public def forIn4 {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) → β₁ → β₂ → β₃ → β₄ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) : ReadOnly n γ :=
+  forIn4From lo hi lo (Nat.le_refl _) init₁ init₂ init₃ init₄ body k
+
+/-- `Tail.forInRev4From` for read-only programs. It is specified by `ReadOnly.forInRev4From_eq`. -/
+@[inline]
+public def forInRev4From {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi j₀ : USize) (h : j₀.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) → β₁ → β₂ → β₃ → β₄ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) : ReadOnly n γ :=
+  ⟨Tail.forInRev4From lo hi j₀ h init₁ init₂ init₃ init₄
+    (fun j hlo hj next b₁ b₂ b₃ b₄ =>
+      (body j hlo hj (fun b₁ b₂ b₃ b₄ => ⟨next b₁ b₂ b₃ b₄⟩) b₁ b₂ b₃ b₄).tail)
+    fun b₁ b₂ b₃ b₄ => (k b₁ b₂ b₃ b₄).tail⟩
+
+/-- `Tail.forInRev4` for read-only programs. -/
+@[inline, expose]
+public def forInRev4 {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) → β₁ → β₂ → β₃ → β₄ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) : ReadOnly n γ :=
+  forInRev4From lo hi hi (Nat.le_refl _) init₁ init₂ init₃ init₄ body k
+
+/--
+Runs the read-only program `r` on the array `a`, and returns what its continuation returns. The
+array is not made exclusive, since `r` doesn't write it, so it is not copied when it is shared.
+-/
+@[inline]
+public def run (r : ReadOnly n γ) (a : UInt32Array) (h : a.size = n) : γ :=
+  r.tail.fn ⟨a, h⟩
+
+/-- A read-only program runs as its tail program, which makes the array exclusive first. -/
+private theorem run_eq_tail (r : ReadOnly n γ) (a : UInt32Array) (h : a.size = n) :
+    r.run a h = r.tail.run a h := by
+  rw [Tail.run_eq]; rfl
+
+private theorem tail_inj {r r' : ReadOnly n γ} (h : r.tail = r'.tail) : r = r' := by
+  obtain ⟨t⟩ := r; obtain ⟨t'⟩ := r'
+  cases h; rfl
+
+/-- Two read-only programs are equal when they run the same on every array. -/
+@[ext] public theorem ext {r r' : ReadOnly n γ}
+    (h : ∀ a (h : a.size = n), r.run a h = r'.run a h) : r = r' :=
+  tail_inj <| Tail.ext fun a h' => by rw [← run_eq_tail, ← run_eq_tail]; exact h a h'
+
+@[simp] public theorem run_done (x : α) (k : α → (a : UInt32Array) → a.size = n → γ)
+    (a : UInt32Array) (h : a.size = n) : (done x k).run a h = k x a h := by
+  rw [run_eq_tail]; exact Tail.run_done ..
+
+@[simp] public theorem run_readThen (i : USize) (hi : i.toNat < n) (k : UInt32 → ReadOnly n γ)
+    (a : UInt32Array) (h : a.size = n) :
+    (readThen i hi k).run a h = (k (a[i.toNat]'(by rw [h]; exact hi))).run a h := by
+  rw [run_eq_tail, run_eq_tail]; exact Tail.run_readThen i hi (fun x => (k x).tail) a h
+
+@[simp] public theorem ite_eq (c : Prop) [Decidable c] (t e : ReadOnly n γ) :
+    ReadOnly.ite c t e = if c then t else e := by
+  unfold ReadOnly.ite; rw [Tail.ite_eq]; split <;> rfl
+
+@[simp] public theorem dite_eq (c : Prop) [Decidable c] (t : c → ReadOnly n γ)
+    (e : ¬c → ReadOnly n γ) : ReadOnly.dite c t e = if h : c then t h else e h := by
+  unfold ReadOnly.dite; rw [Tail.dite_eq]; split <;> rfl
+
+/-! ### Loops -/
+
+/-- One step of `ReadOnly.forInFrom`. -/
+public theorem forInFrom_eq {β : Type v}
+    (lo hi j : USize) (hlo : lo.toNat ≤ j.toNat) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → ReadOnly n γ) → β → ReadOnly n γ)
+    (k : β → ReadOnly n γ) :
+    forInFrom lo hi j hlo init body k =
+      if hj : j < hi then
+        body j hlo hj
+          (fun b => forInFrom lo hi (j + 1) (forIn_le_succ hlo hj) b body k)
+          init
+      else k init := by
+  apply tail_inj
+  show Tail.forInFrom .. = _
+  rw [Tail.forInFrom_eq]
+  by_cases hj : j < hi
+  · simp only [hj, ↓reduceDIte]; rfl
+  · simp only [hj, ↓reduceDIte]
+
+@[simp] public theorem forIn_eq {β : Type v}
+    (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → ReadOnly n γ) → β → ReadOnly n γ)
+    (k : β → ReadOnly n γ) :
+    forIn lo hi init body k =
+      forInFrom lo hi lo (Nat.le_refl _) init body k := by
+  rfl
+
+/-- One step of `ReadOnly.forInRevFrom`. -/
+public theorem forInRevFrom_eq {β : Type v}
+    (lo hi j : USize) (hj : j.toNat ≤ hi.toNat) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → ReadOnly n γ) → β → ReadOnly n γ)
+    (k : β → ReadOnly n γ) :
+    forInRevFrom lo hi j hj init body k =
+      if h : lo < j then
+        body (j - 1) (forInRev_le_pred h) (forInRev_pred_lt hj h)
+          (fun b =>
+            forInRevFrom lo hi (j - 1) (Nat.le_of_lt (forInRev_pred_lt hj h)) b body k)
+          init
+      else k init := by
+  apply tail_inj
+  show Tail.forInRevFrom .. = _
+  rw [Tail.forInRevFrom_eq]
+  by_cases h : lo < j
+  · simp only [h, ↓reduceDIte]; rfl
+  · simp only [h, ↓reduceDIte]
+
+@[simp] public theorem forInRev_eq {β : Type v}
+    (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → ReadOnly n γ) → β → ReadOnly n γ)
+    (k : β → ReadOnly n γ) :
+    forInRev lo hi init body k =
+      forInRevFrom lo hi hi (Nat.le_refl _) init body k := by
+  rfl
+
+/-- One step of `ReadOnly.forIn2From`. -/
+public theorem forIn2From_eq {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi j : USize) (hlo : lo.toNat ≤ j.toNat) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → ReadOnly n γ) → β₁ → β₂ → ReadOnly n γ)
+    (k : β₁ → β₂ → ReadOnly n γ) :
+    forIn2From lo hi j hlo init₁ init₂ body k =
+      if hj : j < hi then
+        body j hlo hj
+          (fun b₁ b₂ => forIn2From lo hi (j + 1) (forIn_le_succ hlo hj) b₁ b₂ body k)
+          init₁ init₂
+      else k init₁ init₂ := by
+  apply tail_inj
+  show Tail.forIn2From .. = _
+  rw [Tail.forIn2From_eq]
+  by_cases hj : j < hi
+  · simp only [hj, ↓reduceDIte]; rfl
+  · simp only [hj, ↓reduceDIte]
+
+@[simp] public theorem forIn2_eq {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → ReadOnly n γ) → β₁ → β₂ → ReadOnly n γ)
+    (k : β₁ → β₂ → ReadOnly n γ) :
+    forIn2 lo hi init₁ init₂ body k =
+      forIn2From lo hi lo (Nat.le_refl _) init₁ init₂ body k := by
+  rfl
+
+/-- One step of `ReadOnly.forInRev2From`. -/
+public theorem forInRev2From_eq {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi j : USize) (hj : j.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → ReadOnly n γ) → β₁ → β₂ → ReadOnly n γ)
+    (k : β₁ → β₂ → ReadOnly n γ) :
+    forInRev2From lo hi j hj init₁ init₂ body k =
+      if h : lo < j then
+        body (j - 1) (forInRev_le_pred h) (forInRev_pred_lt hj h)
+          (fun b₁ b₂ =>
+            forInRev2From lo hi (j - 1) (Nat.le_of_lt (forInRev_pred_lt hj h)) b₁ b₂ body k)
+          init₁ init₂
+      else k init₁ init₂ := by
+  apply tail_inj
+  show Tail.forInRev2From .. = _
+  rw [Tail.forInRev2From_eq]
+  by_cases h : lo < j
+  · simp only [h, ↓reduceDIte]; rfl
+  · simp only [h, ↓reduceDIte]
+
+@[simp] public theorem forInRev2_eq {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → ReadOnly n γ) → β₁ → β₂ → ReadOnly n γ)
+    (k : β₁ → β₂ → ReadOnly n γ) :
+    forInRev2 lo hi init₁ init₂ body k =
+      forInRev2From lo hi hi (Nat.le_refl _) init₁ init₂ body k := by
+  rfl
+
+/-- One step of `ReadOnly.forIn3From`. -/
+public theorem forIn3From_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi j : USize) (hlo : lo.toNat ≤ j.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → ReadOnly n γ) → β₁ → β₂ → β₃ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → ReadOnly n γ) :
+    forIn3From lo hi j hlo init₁ init₂ init₃ body k =
+      if hj : j < hi then
+        body j hlo hj
+          (fun b₁ b₂ b₃ => forIn3From lo hi (j + 1) (forIn_le_succ hlo hj) b₁ b₂ b₃ body k)
+          init₁ init₂ init₃
+      else k init₁ init₂ init₃ := by
+  apply tail_inj
+  show Tail.forIn3From .. = _
+  rw [Tail.forIn3From_eq]
+  by_cases hj : j < hi
+  · simp only [hj, ↓reduceDIte]; rfl
+  · simp only [hj, ↓reduceDIte]
+
+@[simp] public theorem forIn3_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → ReadOnly n γ) → β₁ → β₂ → β₃ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → ReadOnly n γ) :
+    forIn3 lo hi init₁ init₂ init₃ body k =
+      forIn3From lo hi lo (Nat.le_refl _) init₁ init₂ init₃ body k := by
+  rfl
+
+/-- One step of `ReadOnly.forInRev3From`. -/
+public theorem forInRev3From_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi j : USize) (hj : j.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → ReadOnly n γ) → β₁ → β₂ → β₃ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → ReadOnly n γ) :
+    forInRev3From lo hi j hj init₁ init₂ init₃ body k =
+      if h : lo < j then
+        body (j - 1) (forInRev_le_pred h) (forInRev_pred_lt hj h)
+          (fun b₁ b₂ b₃ =>
+            forInRev3From lo hi (j - 1) (Nat.le_of_lt (forInRev_pred_lt hj h)) b₁ b₂ b₃ body k)
+          init₁ init₂ init₃
+      else k init₁ init₂ init₃ := by
+  apply tail_inj
+  show Tail.forInRev3From .. = _
+  rw [Tail.forInRev3From_eq]
+  by_cases h : lo < j
+  · simp only [h, ↓reduceDIte]; rfl
+  · simp only [h, ↓reduceDIte]
+
+@[simp] public theorem forInRev3_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → ReadOnly n γ) → β₁ → β₂ → β₃ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → ReadOnly n γ) :
+    forInRev3 lo hi init₁ init₂ init₃ body k =
+      forInRev3From lo hi hi (Nat.le_refl _) init₁ init₂ init₃ body k := by
+  rfl
+
+/-- One step of `ReadOnly.forIn4From`. -/
+public theorem forIn4From_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi j : USize) (hlo : lo.toNat ≤ j.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) → β₁ → β₂ → β₃ → β₄ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) :
+    forIn4From lo hi j hlo init₁ init₂ init₃ init₄ body k =
+      if hj : j < hi then
+        body j hlo hj
+          (fun b₁ b₂ b₃ b₄ => forIn4From lo hi (j + 1) (forIn_le_succ hlo hj) b₁ b₂ b₃ b₄ body k)
+          init₁ init₂ init₃ init₄
+      else k init₁ init₂ init₃ init₄ := by
+  apply tail_inj
+  show Tail.forIn4From .. = _
+  rw [Tail.forIn4From_eq]
+  by_cases hj : j < hi
+  · simp only [hj, ↓reduceDIte]; rfl
+  · simp only [hj, ↓reduceDIte]
+
+@[simp] public theorem forIn4_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) → β₁ → β₂ → β₃ → β₄ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) :
+    forIn4 lo hi init₁ init₂ init₃ init₄ body k =
+      forIn4From lo hi lo (Nat.le_refl _) init₁ init₂ init₃ init₄ body k := by
+  rfl
+
+/-- One step of `ReadOnly.forInRev4From`. -/
+public theorem forInRev4From_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi j : USize) (hj : j.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) → β₁ → β₂ → β₃ → β₄ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) :
+    forInRev4From lo hi j hj init₁ init₂ init₃ init₄ body k =
+      if h : lo < j then
+        body (j - 1) (forInRev_le_pred h) (forInRev_pred_lt hj h)
+          (fun b₁ b₂ b₃ b₄ =>
+            forInRev4From lo hi (j - 1) (Nat.le_of_lt (forInRev_pred_lt hj h)) b₁ b₂ b₃ b₄ body k)
+          init₁ init₂ init₃ init₄
+      else k init₁ init₂ init₃ init₄ := by
+  apply tail_inj
+  show Tail.forInRev4From .. = _
+  rw [Tail.forInRev4From_eq]
+  by_cases h : lo < j
+  · simp only [h, ↓reduceDIte]; rfl
+  · simp only [h, ↓reduceDIte]
+
+@[simp] public theorem forInRev4_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) → β₁ → β₂ → β₃ → β₄ → ReadOnly n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → ReadOnly n γ) :
+    forInRev4 lo hi init₁ init₂ init₃ init₄ body k =
+      forInRev4From lo hi hi (Nat.le_refl _) init₁ init₂ init₃ init₄ body k := by
+  rfl
+end ReadOnly
+
 end InPlace
 
 /--
@@ -1655,6 +2138,30 @@ public def runInPlaceThenOf {γ : Type u} (a : UInt32Array) (n : Nat) (h : a.siz
 @[simp] public theorem runInPlaceThenOf_eq {γ : Type u} (a : UInt32Array) (n : Nat)
     (h : a.size = n) (t : InPlace.Tail n γ) :
     a.runInPlaceThenOf n h t = t.run a h := by
+  rfl
+
+/--
+Runs the read-only program `r` on `a`, and returns what its continuation returns: `r.run a rfl`.
+The array is not made exclusive, so it is not copied when it is shared.
+-/
+@[inline, expose]
+public def runReadOnlyThen {γ : Type u} (a : UInt32Array) (r : InPlace.ReadOnly a.size γ) : γ :=
+  r.run a rfl
+
+@[simp] public theorem runReadOnlyThen_eq {γ : Type u} (a : UInt32Array)
+    (r : InPlace.ReadOnly a.size γ) :
+    a.runReadOnlyThen r = r.run a rfl := by
+  rfl
+
+/-- `runReadOnlyThen` for a size `n` of `a`, like `runInPlaceThenOf`: `r.run a h`. -/
+@[inline, expose]
+public def runReadOnlyThenOf {γ : Type u} (a : UInt32Array) (n : Nat) (h : a.size = n)
+    (r : InPlace.ReadOnly n γ) : γ :=
+  r.run a h
+
+@[simp] public theorem runReadOnlyThenOf_eq {γ : Type u} (a : UInt32Array) (n : Nat)
+    (h : a.size = n) (r : InPlace.ReadOnly n γ) :
+    a.runReadOnlyThenOf n h r = r.run a h := by
   rfl
 
 end UInt32Array

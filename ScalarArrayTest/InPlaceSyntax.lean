@@ -362,6 +362,30 @@ rest of the program after an `if` with loops uses mutable variables, or the arra
 
 #guard UInt32Array.inplaceSizeAfterIfInPlace 1
 
+/-- The index of the first zero in `a`, if any, as a read-only program with an `if`. -/
+@[noinline] private def firstZero (a : UInt32Array) : Option USize :=
+  inplace a do
+    for j in reverse 0...a.usize with (r := (none : Option USize)) do
+      let x ← a[j]
+      if x = 0 then
+        r := some j
+    return r
+  then fun r _ _ => r
+
+-- A program that never writes runs on the array as it is: a shared array is not copied.
+@[noinline] def UInt32Array.inplaceReadOnlyShared (x : UInt32) : Bool :=
+  let a := (UInt32Array.emptyWithCapacity 4).push x |>.push 0 |>.push 3
+  let p := rawAddr a
+  have := a.toNat_usize_le
+  let r := inplace a do
+    for j in 0...a.usize with (s := 0) do
+      s := s + a[j]
+    return s
+  rawAddr r.2 == p && r.1 == x + 3 && firstZero a == some 1 && a.toArray == #[x, 0, 3]
+
+#guard UInt32Array.inplaceReadOnlyShared 1
+#guard firstZero (UInt32Array.mk #[1, 2, 3]) == none
+
 -- Inside the program, `a` is the array before the program runs, so uses of it other than `a[i]`,
 -- `a.size` and `a.usize` are errors.
 /--

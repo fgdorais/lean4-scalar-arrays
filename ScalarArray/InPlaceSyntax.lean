@@ -95,6 +95,10 @@ to the same loops as a hand-written one. The rest of the program after an `if` b
 the mutable variables, which the compiler turns into a join point: an `if` in a loop allocates
 nothing.
 
+A program with no write, neither `a[i] := e` nor `let x ← m`, expands instead to a read-only
+program (`XArray.InPlace.ReadOnly`), with the same statements, run with `a.runReadOnlyThenOf n h`.
+It runs on the array as it is, so a shared array is not copied.
+
 ## Bounds
 
 The bound of each index is proved by the tactic `inplace_bound`, from the hypotheses in context:
@@ -586,6 +590,17 @@ private partial def expandIf (p : Arr) (ending : Term → MacroM Term) (mvars : 
 
 end
 
+/--
+Whether the statements `stx`, or any statement nested in them, may write the array: `a[i] := e`
+writes it, and so may an in-place program `m` in `let x ← m`.
+-/
+private partial def mayWrite (stx : Syntax) : Bool :=
+  match (⟨stx⟩ : TSyntax `inplaceStmt) with
+  | `(inplaceStmt| let $_:ident ← $_:ident[$_]) => false
+  | `(inplaceStmt| $_:ident[$_] := $_) => true
+  | `(inplaceStmt| let $_:ident ← $_) => true
+  | _ => stx.getArgs.any mayWrite
+
 end
 
 macro_rules
@@ -610,6 +625,11 @@ macro_rules
     let prog ← expandSeq p ending #[] (← ending (← `(()))) true stmts.getElems.toList
     -- They are bound by a function application, not by `let`, which fails to elaborate when the
     -- program has metavariables left for later, such as the types of loop variables.
+    -- A program that never writes is a read-only program, which runs on the array as it is: a
+    -- shared array is not copied.
+    let run ← if stmts.getElems.any (mayWrite ·.raw) then
+        `(($a).runInPlaceThenOf $size $p.hsize $prog)
+      else `(($a).runReadOnlyThenOf $size $p.hsize $prog)
     `((fun ($size : Nat) ($p.hsize : ($a).size = $size) ($p.usize : USize)
-          (_ : ($p.usize).toNat ≤ ($a).size) => ($a).runInPlaceThenOf $size $p.hsize $prog)
+          (_ : ($p.usize).toNat ≤ ($a).size) => $run)
         ($a).size rfl ($a).usize ($a).toNat_usize_le)
