@@ -75,13 +75,14 @@ The program expands to a tail program (`XArray.InPlace.Tail`) on arrays of size 
 `a.runInPlaceThenOf n h`, where `n` and `a.usize` are bound to variables before the program runs,
 and the program uses them in place of `a.size` and `a.usize`. So nothing in the compiled program
 refers to `a`, which the compiler would otherwise keep alive past the point where the program makes
-the array exclusive, and the array would be copied. The program ends with `Tail.done x k`, where `k` is the `then` continuation or makes the pair. Its statements
-expand to `readThen`, `writeThen`, `ite`, `dite` and the `forInBind`, `forIn2Bind`, `forInRevBind`
-and `forInRev2Bind` loops, of `Tail` at the top level and of `InPlace` in loop bodies, so it
-compiles to the same loop as a hand-written program, with the loop variables unboxed, and the loop
-calls the rest of the program itself, so its variables reach it unboxed too. The rest of the
-program after an `if` becomes a local function of the mutable variables, which the compiler turns
-into a join point: an `if` in a loop allocates nothing.
+the array exclusive, and the array would be copied. The program ends with `Tail.done x k`, where `k`
+is the `then` continuation or makes the pair. Its statements expand to `readThen`, `writeThen`,
+`ite`, `dite` and the `forInBind`, `forIn2Bind`, `forInRevBind` and `forInRev2Bind` loops, of `Tail`
+at the top level and of `InPlace` in loop bodies, so it compiles to the same loop as a hand-written
+program, with the loop variables unboxed, and the loop calls the rest of the program itself, so its
+variables reach it unboxed too. The rest of the program after an `if` becomes a local function of
+the mutable variables, which the compiler turns into a join point: an `if` in a loop allocates
+nothing.
 
 ## Bounds
 
@@ -461,7 +462,8 @@ macro_rules
       | some k => do
         let k : Lean.Term := ⟨← replaceArray p false k⟩
         `(.done $e fun x a' h =>
-          ($k : _ → (a'' : type_of% $a) → a''.size = ($a).size → _) x a' (h.trans (Eq.symm $p.hsize)))
+          ($k : _ → (a'' : type_of% $a) → a''.size = ($a).size → _) x a'
+            (h.trans (Eq.symm $p.hsize)))
       | none => `(.done $e fun x a' _ => (x, a'))
     let prog ← expandSeq p ending #[] (← ending (← `(()))) true stmts.getElems.toList
     -- They are bound by a function application, not by `let`, which fails to elaborate when the
