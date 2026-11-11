@@ -42,7 +42,9 @@ inplace a do
   binds its result, so that programs compose.
 * `let p := e` binds a pure value, where `p` can be a pattern such as `(s, c)`, and
   `let x : t := e` one of type `t`.
-* `let mut x := e` or `let mut x : t := e` declares a mutable variable, and `x := e` assigns it.
+* `let mut x := e` or `let mut x : t := e` declares a mutable variable, and `x := e` assigns it,
+  or `(x, y) := e` for a pattern of mutable variables. As in `do` notation, a `let` can't shadow
+  a mutable variable.
 * `have h : t := p` adds a fact to the context, for the bounds of later indices.
 * `if c then … else …` and `if h : c then … else …` run one of two blocks, which may read, write,
   loop and assign mutable variables. The `else` block is optional, and `unless c do …` is
@@ -320,6 +322,8 @@ syntax "let " term " := " term : inplaceStmt
 syntax "have " ident " : " term " := " term : inplaceStmt
 /-- `x := e` assigns the mutable variable `x`. -/
 syntax ident " := " term : inplaceStmt
+/-- `(x, y) := e` assigns the mutable variables of the pattern `(x, y)`. -/
+syntax (priority := low) term:max " := " term : inplaceStmt
 /-- `if c then … else …` runs one of two blocks. -/
 syntax "if " (atomic(ident " : "))? term " then" inplaceSeq (" else" inplaceSeq)? : inplaceStmt
 /-- `unless c do …` runs the block if `c` doesn't hold. -/
@@ -460,6 +464,20 @@ private def lifting (p : Arr) (s : TSyntax `inplaceStmt)
   let (s, reads) ← (liftReads p.arr false (← replaceStmt p s)).run #[]
   withReads p reads (← f ⟨s⟩)
 
+/-- The variables of the pattern `stx`: its identifiers with atomic names. -/
+private partial def patternVars (stx : Syntax) : Array Ident :=
+  match stx with
+  | .ident _ _ id _ => if id.isAtomic && !id.isAnonymous then #[⟨stx⟩] else #[]
+  | .node _ _ args => args.flatMap patternVars
+  | _ => #[]
+
+/-- Checks that the variables bound by a `let` don't shadow the mutable variables `mvars`. -/
+private def checkNoShadow (mvars : Array Ident) (xs : Array Ident) : MacroM Unit :=
+  for x in xs do
+    if mvars.any (·.getId == x.getId) then
+      Macro.throwErrorAt x s!"mutable variable `{x.getId}` cannot be shadowed: assign it with \
+        `{x.getId} := e`, or in a pattern, as in `({x.getId}, y) := e`"
+
 mutual
 
 /--
@@ -489,6 +507,7 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
   match s with
   | `(inplaceStmt| let $x:ident ← $a:ident[$i]) =>
     checkArray arr a
+    checkNoShadow mvars #[x]
     `(.readThen $i $(← bound p) fun $x => $(← k mvars))
   | `(inplaceStmt| $a:ident[$i] := $v) =>
     checkArray arr a
@@ -498,11 +517,14 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
     | some ty => `(let $x:ident : $ty := $e; $(← k (mvars.push x)))
     | none => `(let $x:ident := $e; $(← k (mvars.push x)))
   | `(inplaceStmt| let $x:ident : $ty := $e) =>
+    checkNoShadow mvars #[x]
     `(let $x:ident : $ty := $e; $(← k mvars))
   | `(inplaceStmt| let $x:ident ← $m) =>
     if let `($b:ident[$_]) := m then checkArray arr b
+    checkNoShadow mvars #[x]
     `(.bind $m fun $x => $(← k mvars))
   | `(inplaceStmt| let $p := $e) =>
+    checkNoShadow mvars (patternVars p)
     `(match $e:term with | $p:term => $(← k mvars))
   | `(inplaceStmt| have $h:ident : $t := $p) =>
     `(have $h:ident : $t := $p; $(← k mvars))
@@ -511,6 +533,12 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
       Macro.throwErrorAt x s!"`{x.getId}` is not a mutable variable here: declare it with \
         `let mut`, or carry it into the loop with `with ({x.getId} := {x.getId})`"
     `(let $x:ident := $e; $(← k mvars))
+  | `(inplaceStmt| $q:term := $e) =>
+    for x in patternVars q do
+      unless mvars.any (·.getId == x.getId) do
+        Macro.throwErrorAt x s!"`{x.getId}` is not a mutable variable here: declare it with \
+          `let mut`, or carry it into the loop with `with ({x.getId} := {x.getId})`"
+    `(match $e:term with | $q:term => $(← k mvars))
   | `(inplaceStmt| if $[$h :]? $c then $t;* $[else $e;*]?) =>
     expandIf p ending mvars (k mvars) top rest.isEmpty h c t.getElems.toList
       (e.map (·.getElems.toList))
