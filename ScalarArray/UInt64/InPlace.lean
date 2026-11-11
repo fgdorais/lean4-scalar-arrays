@@ -164,27 +164,11 @@ public def reverse.loop (s : UInt64Array.Slice) (i j : Nat) (hj : j < s.size) :
   if h : i < j then reverse.loop (s.swap i j (by lia)) (i + 1) (j - 1) (by simp; lia) else s
 termination_by j - i
 
-private unsafe def reverseImpl (s : UInt64Array.Slice) : UInt64Array.Slice :=
-  match s with
-  | ⟨⟨a, start, stop, h, _⟩⟩ =>
-    if start < stop then
-      ⟨⟨loop a.ensureExclusive start.toUSize (stop.toUSize - 1), start, stop, h, lcProof⟩⟩
-    else
-      s
-where
-  loop (a : UInt64Array) (i j : USize) : UInt64Array :=
-    if i < j then
-      let x := a.uget i lcProof
-      let y := a.uget j lcProof
-      loop (setUnsafe (setUnsafe a i y) j x) (i + 1) (j - 1)
-    else
-      a
-
 /--
 Reverses the order of the elements of the slice, in place like `set`. The array is made exclusive
 once, before the loop, which then stores without checks.
 -/
-@[implemented_by reverseImpl, expose]
+@[expose]
 public def reverse (s : UInt64Array.Slice) : UInt64Array.Slice :=
   if h : 0 < s.size then reverse.loop s 0 (s.size - 1) (by lia) else s
 
@@ -454,6 +438,113 @@ private theorem window_slice (s : UInt64Array.Slice) (hN : s.array.size < USize.
   have h₁ := s.stop_le_array_size
   have h₂ := s.start_le_stop
   rw [toNat_size_toUSize s hN, toNat_start_toUSize s hN, size_eq]; lia
+
+/-! ## `reverse` as an in-place program -/
+
+private theorem reverse_lt_left {k m : USize} (hk : k.toNat < (m / 2).toNat) :
+    k.toNat < m.toNat := by
+  rw [USize.toNat_div] at hk; simp at hk; lia
+
+private theorem reverse_toNat_right {k m : USize} (hk : k.toNat < (m / 2).toNat) :
+    (m - 1 - k).toNat = m.toNat - 1 - k.toNat := by
+  rw [USize.toNat_div] at hk; simp at hk
+  have h1 : (1 : USize) ≤ m := USize.le_iff_toNat_le.2 (by simp; lia)
+  have h2 : k ≤ m - 1 := USize.le_iff_toNat_le.2 (by rw [USize.toNat_sub_of_le _ _ h1]; simp; lia)
+  rw [USize.toNat_sub_of_le _ _ h2, USize.toNat_sub_of_le _ _ h1]; simp
+
+private theorem reverse_lt_right {k m : USize} (hk : k.toNat < (m / 2).toNat) :
+    (m - 1 - k).toNat < m.toNat := by
+  rw [reverse_toNat_right hk]; have := reverse_lt_left hk; lia
+
+/--
+The program of `reverse` on the window of `m` elements at `lo`, from step `k₀` up: step `k` swaps
+the elements at `lo + k` and `lo + (m - 1 - k)`, for `k < m / 2`.
+-/
+@[inline]
+private def reverseProg {n : Nat} (lo m : USize) (hw : lo.toNat + m.toNat ≤ n) (k₀ : USize) :
+    InPlace n PUnit.{1} :=
+  InPlace.forInFrom 0 (m / 2) k₀ (by simp) ⟨⟩ fun k _ hk _ =>
+    InPlace.readThen (lo + k) (InPlace.toNat_add_lt_of_window hw (reverse_lt_left hk)) fun x =>
+    InPlace.readThen (lo + (m - 1 - k))
+      (InPlace.toNat_add_lt_of_window hw (reverse_lt_right hk)) fun y =>
+    InPlace.writeThen (lo + k) (InPlace.toNat_add_lt_of_window hw (reverse_lt_left hk)) y <|
+    InPlace.write (lo + (m - 1 - k)) (InPlace.toNat_add_lt_of_window hw (reverse_lt_right hk)) x
+
+private theorem run_reverseProg (lo m : USize) (N : Nat) (hN : N < USize.size)
+    (hw : lo.toNat + m.toNat ≤ N) (s : UInt64Array.Slice) (hs : s.size = m.toNat)
+    (hpos : 0 < s.size) (hstart : s.start = lo.toNat) (c : UInt64Array) (hca : s.array = c)
+    (hc : c.size = N) (k : USize) (hk : k.toNat ≤ (m / 2).toNat) :
+    (reverseProg lo m hw k).run c hc =
+      (⟨⟩, (reverse.loop s k.toNat (s.size - 1 - k.toNat) (by lia)).array) := by
+  subst hca
+  unfold reverseProg
+  rw [InPlace.forInFrom_eq, reverse.loop]
+  have hm2 : (m / 2).toNat = m.toNat / 2 := by rw [USize.toNat_div]; simp
+  by_cases hkl : k < m / 2
+  · have hkl' : k.toNat < (m / 2).toNat := hkl
+    have hij : k.toNat < s.size - 1 - k.toNat := by lia
+    rw [dite_eq_left_of_eq_true (eq_true hkl), dite_eq_left_of_eq_true (eq_true hij)]
+    simp only [InPlace.run_bind, InPlace.run_readThen, InPlace.run_writeThen, InPlace.run_write]
+    have hr := reverse_toNat_right hkl'
+    have hl := reverse_lt_left hkl'
+    have ex := toNat_add_of_window hN hw hl
+    have ey := toNat_add_of_window hN hw (reverse_lt_right hkl')
+    have h1 : (k + 1).toNat ≤ (m / 2).toNat := by rw [toNat_succ_of_lt' hkl']; lia
+    have ih := run_reverseProg lo m N hN hw
+      (s.swap k.toNat (s.size - 1 - k.toNat) (by lia) (by lia)) (by simpa using hs)
+      (by simpa using hpos) (by simpa using hstart) _ rfl
+      (by simp only [swap_eq, array_set, UInt64Array.size_set]; exact hc) (k + 1) h1
+    unfold reverseProg at ih
+    have hset : ∀ (h₁ : (lo + k).toNat < s.array.size) (h₂ : (lo + (m - 1 - k)).toNat < s.array.size),
+        (s.array.set (lo + k).toNat s.array[(lo + (m - 1 - k)).toNat] h₁).set
+          (lo + (m - 1 - k)).toNat s.array[(lo + k).toNat] (by rw [UInt64Array.size_set]; exact h₂) =
+          (s.swap k.toNat (s.size - 1 - k.toNat) (by lia) (by lia)).array := by
+      intro h₁ h₂
+      simp only [swap_eq, array_set, start_set, Slice.getElem_eq, ex, ey, hstart, hr, hs]
+    simp only [size_swap, toNat_succ_of_lt' hkl'] at ih
+    simp only [hset]
+    exact ih
+  · have hkl' : ¬k.toNat < (m / 2).toNat := hkl
+    have hij : ¬k.toNat < s.size - 1 - k.toNat := by lia
+    rw [dite_eq_right_of_eq_false (eq_false hkl), dite_eq_right_of_eq_false (eq_false hij)]
+    simp only [InPlace.run_pure]
+termination_by (m / 2).toNat - k.toNat
+decreasing_by rw [toNat_succ_of_lt' hkl']; lia
+
+/-- For internal use only. -/
+@[inline]
+public def reverseImpl (s : UInt64Array.Slice) : UInt64Array.Slice :=
+  match s with
+  | ⟨⟨a, start, stop, h₁, h₂⟩⟩ =>
+    if h : a.size < USize.size ∧ start < stop then
+      have hw : start.toUSize.toNat + (stop - start).toUSize.toNat ≤ a.size := by
+        rw [toNat_toUSize_of_lt (by lia), toNat_toUSize_of_lt (by lia)]; lia
+      let r := a.runInPlace (reverseProg start.toUSize (stop - start).toUSize hw 0)
+      ⟨⟨r.2, start, stop, h₁, by rw [show r.2.size = a.size from InPlace.size_run ..]; exact h₂⟩⟩
+    else
+      reverse ⟨⟨a, start, stop, h₁, h₂⟩⟩
+
+@[csimp] public theorem reverse_eq_reverseImpl : @reverse = @reverseImpl := by
+  funext s
+  obtain ⟨⟨a, start, stop, h₁, h₂⟩⟩ := s
+  rw [reverseImpl]
+  by_cases h : a.size < USize.size ∧ start < stop
+  · rw [dite_eq_left_of_eq_true (eq_true h)]
+    have hw : start.toUSize.toNat + (stop - start).toUSize.toNat ≤ a.size := by
+      rw [toNat_toUSize_of_lt (by lia), toNat_toUSize_of_lt (by lia)]; lia
+    let s : UInt64Array.Slice := ⟨⟨a, start, stop, h₁, h₂⟩⟩
+    have hs : s.size = (stop - start).toUSize.toNat := by
+      rw [toNat_toUSize_of_lt (by lia)]; rfl
+    have hpos : 0 < s.size := by rw [hs, toNat_toUSize_of_lt (by lia)]; lia
+    have key := run_reverseProg start.toUSize (stop - start).toUSize a.size h.1 hw s hs hpos
+      (toNat_toUSize_of_lt (m := start) (by lia)).symm a rfl rfl 0 (by simp)
+    apply slice_ext
+    · show (reverse s).array = _
+      rw [reverse, dite_eq_left_of_eq_true (eq_true hpos)]
+      exact (congrArg Prod.snd key).symm
+    · exact start_reverse s
+    · exact stop_reverse s
+  · rw [dite_eq_right_of_eq_false (eq_false h)]
 
 /-- For internal use only. -/
 @[inline]
