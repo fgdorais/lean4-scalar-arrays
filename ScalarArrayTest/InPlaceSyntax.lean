@@ -312,3 +312,72 @@ calls where it ends, so no result pair is built.
       a[0] := a[1]
       a[1] := x
   then fun () a' _ => a'.toArray == #[-1, 3]
+
+/-!
+The program doesn't keep the array alive, so an exclusive array is updated in place even when the
+rest of the program after an `if` with loops uses mutable variables, or the array's size.
+-/
+
+/-- Sums the first `n` elements, forward or as a base-3 number backward, then fills them with it. -/
+@[noinline] private def fillWithSum (a : UInt32Array) (n : USize) (h : n.toNat ≤ a.size)
+    (b : Bool) : UInt32Array :=
+  inplace a do
+    let mut t := 0
+    if b then
+      for j in 0...n with (t := t) do
+        t := t + a[j]
+    else
+      for j in reverse 0...n with (t := t) do
+        t := t * 3 + a[j]
+    for j in 0...n with (t := t) do
+      a[j] := t
+  then fun _ a' _ => a'
+
+@[noinline] def UInt32Array.inplaceIfLoopsInPlace (x : UInt32) (b : Bool) : Bool :=
+  let a := (UInt32Array.emptyWithCapacity 4).push x |>.push 2 |>.push 3
+  let p := rawAddr a
+  let a := fillWithSum a a.usize a.toNat_usize_le b
+  rawAddr a == p && a.toArray == if b then #[x + 5, x + 5, x + 5] else
+    let t := (3 * 3 + 2) * 3 + x
+    #[t, t, t]
+
+#guard UInt32Array.inplaceIfLoopsInPlace 1 true
+#guard UInt32Array.inplaceIfLoopsInPlace 1 false
+
+/-- Sets the first element, if asked, then fills the array with it. -/
+@[noinline] private def fillWithFirst (a : UInt32Array) (h : 0 < a.size) (b : Bool) :
+    UInt32Array :=
+  inplace a do
+    if b then
+      a[0] := 7
+    for j in 0...a.usize with (t := a[0]) do
+      a[j] := t
+  then fun _ a' _ => a'
+
+@[noinline] def UInt32Array.inplaceSizeAfterIfInPlace (x : UInt32) : Bool :=
+  let a := (UInt32Array.emptyWithCapacity 4).push x |>.push 2 |>.push 3
+  let p := rawAddr a
+  let a := fillWithFirst a (by simp [a]) true
+  rawAddr a == p && a.toArray == #[7, 7, 7]
+
+#guard UInt32Array.inplaceSizeAfterIfInPlace 1
+
+-- Inside the program, `a` is the array before the program runs, so uses of it other than `a[i]`,
+-- `a.size` and `a.usize` are errors.
+/--
+error: inside `inplace a do`, `a` is the array before the program runs: read its current elements with `a[i]`, at a `USize` index `i`, and its size with `a.size` or `a.usize`
+-/
+#guard_msgs in
+example (a : UInt8Array) (h : 0 < a.size) : UInt8 × UInt8Array :=
+  inplace a do
+    a[0] := 42
+    return a[0]!
+
+/--
+error: inside `inplace a do`, `a` is the array before the program runs: read its current elements with `a[i]`, at a `USize` index `i`, and its size with `a.size` or `a.usize`
+-/
+#guard_msgs in
+example (a : UInt8Array) (h : 0 < a.size) : Nat × UInt8Array :=
+  inplace a do
+    a[0] := 42
+    return a.toArray.size
