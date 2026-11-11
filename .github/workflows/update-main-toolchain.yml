@@ -57,7 +57,7 @@ jobs:
 
       - name: Install Lean
         if: steps.toolchain.outputs.updated == 'true'
-        uses: leanprover/lean-action@f061402b660e0c34644504b324e830f2991d4865 # v1.6.1
+        uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
         with:
           auto-config: false
           use-github-cache: false
@@ -68,7 +68,7 @@ jobs:
 
       - name: Create pull request
         if: steps.toolchain.outputs.updated == 'true'
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
         with:
           token: ${{ secrets.BATTERIES_CELL_TOKEN }}
           commit-message: "chore: update toolchain to ${{ steps.toolchain.outputs.toolchain_rev }}"
