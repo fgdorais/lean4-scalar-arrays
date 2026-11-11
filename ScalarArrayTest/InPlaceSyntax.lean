@@ -381,3 +381,64 @@ example (a : UInt8Array) (h : 0 < a.size) : Nat × UInt8Array :=
   inplace a do
     a[0] := 42
     return a.toArray.size
+
+-- Reads run before their statement, so reads under a binder or in a branch of a term are errors.
+/--
+error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a branch of a term: read the element first, with `let x ← a[i]`, or branch with an `if` statement
+-/
+#guard_msgs in
+example (a : UInt8Array) (j : USize) (h : 0 < a.size) : Unit × UInt8Array :=
+  inplace a do
+    a[0] := if h : j.toNat < a.size then a[j] else 0
+
+/--
+error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a branch of a term: read the element first, with `let x ← a[i]`, or branch with an `if` statement
+-/
+#guard_msgs in
+example (a : UInt8Array) (n : USize) (h : n.toNat ≤ a.size) : Bool × UInt8Array :=
+  inplace a do
+    for j in 0...n with (r := false) do
+      if j + 1 < n && a[j + 1] > a[j] then
+        r := true
+    return r
+
+/--
+error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a branch of a term: read the element first, with `let x ← a[i]`, or branch with an `if` statement
+-/
+#guard_msgs in
+example (a : UInt8Array) (h : 4 ≤ a.size) : Unit × UInt8Array :=
+  inplace a do
+    a[0] := (List.range 3).foldl (fun s k => s + a[k.toUSize]) 0
+
+-- A bound that `inplace_bound` can't prove is reported as such.
+/--
+error: inplace: cannot prove the bound of this index from the hypotheses in context:
+  j.toNat < a.size
+Add the missing fact with a `have` before the statement, or as a hypothesis around the program.
+-/
+#guard_msgs in
+example (a : UInt8Array) (n : USize) : Unit × UInt8Array :=
+  inplace a do
+    for j in 0...n do
+      a[j] := 0
+
+/--
+Type ascriptions, `unless`, a program bound with `let x ← m`, and `return` in both branches of the
+last `if`.
+-/
+private def misc (a : UInt64Array) (h : 4 ≤ a.size) : UInt64 × UInt64Array :=
+  inplace a do
+    let mut t : UInt64 := 1
+    let u : UInt64 := 5
+    for j in 0...4 with (s : UInt64 := u) do
+      s := s + a[j]
+    unless s > 100 do
+      a[0] := s
+    let x ← UInt64Array.InPlace.read 1 (by inplace_bound)
+    if x > 3 then
+      return x + t
+    else
+      return s
+
+#guard misc (UInt64Array.mk #[1, 2, 3, 4]) (by decide) == (15, UInt64Array.mk #[15, 2, 3, 4])
+#guard misc (UInt64Array.mk #[1, 9, 3, 4]) (by decide) == (10, UInt64Array.mk #[22, 9, 3, 4])
