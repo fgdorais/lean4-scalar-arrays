@@ -87,9 +87,10 @@ The bound of each index is proved by the tactic `inplace_bound`, from the hypoth
 * for an index `off + j` in a loop over `j < len`, from a window hypothesis
   `off.toNat + len.toNat ≤ a.size`;
 * otherwise by `lia`;
-* otherwise, for indices with `USize` arithmetic such as `j - 17` or `2 * j + 1`, by `omega` after
+* otherwise, for indices with `USize` arithmetic such as `j - 17` or `2 * j + 1`, by `lia` after
   unfolding `+`, `-`, `*` and literals of `USize`, with the bound `x.toNat < USize.size` of each
-  `USize` in the goal, on both platform widths.
+  `USize` in the goal and the wrap-around facts of each `x % USize.size`. The modulus stays
+  symbolic, so the proof holds on both platform widths.
 
 It looks inside conjunctions. A loop body has both bounds of its index, `lo.toNat ≤ j.toNat` and
 `j.toNat < hi.toNat`, in context, and the program has `a.usize.toNat ≤ a.size`, so `a.usize`
@@ -126,6 +127,15 @@ public theorem toNat_add_lt_of_window {n : Nat} {off len j : USize}
     (hw : off.toNat + len.toNat ≤ n) (hj : j.toNat < len.toNat) : (off + j).toNat < n := by
   rw [USize.toNat_add]
   exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) (by lia)
+
+/-- `x % m = x - m` for `m ≤ x < 2 * m`: the wrap-around of a `USize` subtraction or addition. -/
+public theorem mod_eq_sub_of_le_of_lt {x m : Nat} (h₁ : m ≤ x) (h₂ : x < 2 * m) :
+    x % m = x - m := by
+  rw [Nat.mod_eq_sub_mod h₁, Nat.mod_eq_of_lt (by lia)]
+
+/-- The platform word has at least 32 bits. -/
+public theorem two_pow_32_le_size : 2 ^ 32 ≤ 2 ^ System.Platform.numBits := by
+  rcases System.Platform.numBits_eq with h | h <;> rw [h] <;> decide
 
 end ScalarArray.InPlaceSyntax
 
@@ -173,12 +183,47 @@ open Lean Elab Tactic in
 @[tactic inplaceUSizeBounds] def evalInplaceUSizeBounds : Tactic := fun _ =>
   liftMetaTactic fun g => return [← addUSizeBounds g]
 
+open Lean Meta in
+/--
+Adds, for each `x % m` on `Nat` in the goal or context of `g`, the facts `x % m ≤ x`,
+`x < m → x % m = x` and `m ≤ x → x < 2 * m → x % m = x - m`, which let `lia` reason about
+the wrap-around of `USize` arithmetic without dividing by the modulus.
+-/
+def addModFacts (g : MVarId) : MetaM MVarId := g.withContext do
+  let mods ← IO.mkRef (#[] : Array (Expr × Expr))
+  let mut types := #[← instantiateMVars (← g.getType)]
+  for d in ← getLCtx do
+    if !d.isImplementationDetail then types := types.push (← instantiateMVars d.type)
+  let nat := mkConst ``Nat
+  for t in types do
+    t.forEachWhere (fun e => e.isAppOfArity ``HMod.hMod 6 && e.getArg! 0 == nat &&
+        !e.hasLooseBVars) fun e =>
+      mods.modify fun xs =>
+        let p := (e.getArg! 4, e.getArg! 5)
+        if xs.contains p then xs else xs.push p
+  let mut g := g
+  for (x, m) in ← mods.get do
+    for h in [← mkAppM ``Nat.mod_le #[x, m], ← mkAppOptM ``Nat.mod_eq_of_lt #[x, m],
+        ← mkAppOptM ``ScalarArray.InPlaceSyntax.mod_eq_sub_of_le_of_lt #[x, m]] do
+      let (_, g') ← (← g.assert `hmod (← inferType h) h).intro1P
+      g := g'
+  return g
+
+/-- Adds the facts of `addModFacts` for each `x % m` on `Nat` in the goal or context. -/
+syntax (name := inplaceModFacts) "inplace_mod_facts" : tactic
+
+open Lean Elab Tactic in
+/-- Elaborates `inplace_mod_facts`. -/
+@[tactic inplaceModFacts] def evalInplaceModFacts : Tactic := fun _ =>
+  liftMetaTactic fun g => return [← addModFacts g]
+
 /--
 Proves the bound `i.toNat < n` of an index in an `inplace` program: for `i = off + j`, from a
 window hypothesis `off.toNat + len.toNat ≤ n` and the loop bound `j.toNat < len.toNat`, or else by
-`lia` from the hypotheses in context, or else by `omega` after unfolding the `USize` arithmetic of
-the index and of the hypotheses (`+`, `-`, `*` and literals), with the bound of each `USize`, on
-both platform widths. Conjunctions in context are split first.
+`lia` from the hypotheses in context, or else by `lia` after unfolding the `USize` arithmetic of
+the index and of the hypotheses (`+`, `-`, `*` and literals), with the bound of each `USize` and
+the wrap-around facts of each `x % USize.size` (see `inplace_mod_facts`). Conjunctions in context
+are split first.
 -/
 syntax (name := inplaceBound) "inplace_bound" : tactic
 
@@ -192,11 +237,11 @@ macro_rules
         | assumption
         | lia
         | (inplace_usize_bounds
-           have := System.Platform.numBits_eq
+           have := ScalarArray.InPlaceSyntax.two_pow_32_le_size
            simp only [USize.toNat_add, USize.toNat_sub, USize.toNat_mul, USize.reduceToNat,
              USize.size] at *
-           -- `lia` runs out of memory on these large moduli, where `omega` is instant.
-           rcases this with h | h <;> simp only [h] at * <;> omega)))
+           inplace_mod_facts
+           lia)))
 
 /-- A statement of an `inplace` program. -/
 declare_syntax_cat inplaceStmt
