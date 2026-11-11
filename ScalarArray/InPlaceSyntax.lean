@@ -137,6 +137,9 @@ else UInt64Array.mk (Array.replicate a.size 0)
 * Reads in terms are written `a[i]`, not `(← a[i])`.
 * A loop has at most four variables, and its range is `lo...hi`, `lo...<hi`, `*...hi` or `*...<hi`.
 * `have` takes a name: `have h : t := p`.
+* A program makes the array exclusive before it runs, even when it only reads, so a shared array
+  is copied. For a computation that only reads, use plain reads `a[i]`, `foldl` or the folds of
+  slices, which don't copy.
 -/
 
 namespace ScalarArray.InPlaceSyntax
