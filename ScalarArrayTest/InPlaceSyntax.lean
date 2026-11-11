@@ -442,3 +442,128 @@ private def misc (a : UInt64Array) (h : 4 ≤ a.size) : UInt64 × UInt64Array :=
 
 #guard misc (UInt64Array.mk #[1, 2, 3, 4]) (by decide) == (15, UInt64Array.mk #[15, 2, 3, 4])
 #guard misc (UInt64Array.mk #[1, 9, 3, 4]) (by decide) == (10, UInt64Array.mk #[22, 9, 3, 4])
+
+/-!
+Loops with three and four variables, which stay unboxed, and nested loops, whose inner loop ends by
+calling the next step of the outer one.
+-/
+
+/-- `u - x - b` and its borrow, for a borrow `b ≤ 1`. -/
+private def subB (u x b : UInt64) : UInt64 × UInt64 :=
+  (u - x - b, (if u < x then 1 else 0) + (if u - x < b then 1 else 0))
+
+/--
+With windows `w₁ = a[0, len)`, `w₂ = a[len, 2 len + 1)` and `w₃ = a[2 len + 1, 3 len + 1)`:
+`w₂[1 + j] -= w₁[j]` and `w₃ := (w₃ - w₁) <<< 1`, in one pass with two borrows and the carry of
+the shift, and returns them.
+-/
+private def fused (a : UInt64Array) (len : USize) :
+    Option ((UInt64 × UInt64 × UInt64) × UInt64Array) :=
+  if h : 3 * len.toNat + 1 ≤ a.size ∧ 3 * len.toNat + 1 < USize.size then
+    some <| inplace a do
+      for j in 0...len with (b₂ : UInt64 := 0) (b₃ : UInt64 := 0) (s : UInt64 := 0) do
+        have h₂ : (len + 1 + j).toNat < a.size := by inplace_bound
+        have h₃ : (2 * len + 1 + j).toNat < a.size := by inplace_bound
+        let x ← a[j]
+        let (u, b₂') := subB a[len + 1 + j] x b₂
+        let (t, b₃') := subB a[2 * len + 1 + j] x b₃
+        a[len + 1 + j] := u
+        a[2 * len + 1 + j] := (t <<< 1) ||| s
+        b₂ := b₂'
+        b₃ := b₃'
+        s := t >>> 63
+      return (b₂, b₃, s)
+  else none
+
+/-- `fused` in two passes, with one and two variables. -/
+private def twoPasses (a : UInt64Array) (len : USize) :
+    Option ((UInt64 × UInt64 × UInt64) × UInt64Array) :=
+  if h : 3 * len.toNat + 1 ≤ a.size ∧ 3 * len.toNat + 1 < USize.size then
+    some <| inplace a do
+      for j in 0...len with (b₂ : UInt64 := 0) do
+        have h₂ : (len + 1 + j).toNat < a.size := by inplace_bound
+        let (u, b₂') := subB a[len + 1 + j] a[j] b₂
+        a[len + 1 + j] := u
+        b₂ := b₂'
+      for j in 0...len with (b₃ : UInt64 := 0) (s : UInt64 := 0) do
+        have h₃ : (2 * len + 1 + j).toNat < a.size := by inplace_bound
+        let (t, b₃') := subB a[2 * len + 1 + j] a[j] b₃
+        a[2 * len + 1 + j] := (t <<< 1) ||| s
+        b₃ := b₃'
+        s := t >>> 63
+      return (b₂, b₃, s)
+  else none
+
+#guard
+  let a := UInt64Array.mk #[5, 0, 7, 1, 9, 2, 3, 0xFFFFFFFFFFFFFFFF, 4, 0, 0x8000000000000000, 6, 1]
+  fused a 4 == twoPasses a 4 && (fused a 4).isSome
+#guard
+  let a := UInt64Array.mk ((Array.range 31).map fun i => (i * 0x9E3779B97F4A7C15 : Nat).toUInt64)
+  fused a 10 == twoPasses a 10 && (fused a 10).isSome
+
+/-- The sum, minimum, maximum and number of odd elements of `a[lo, hi)`, in both directions. -/
+private def stats (a : UInt8Array) (lo hi : USize) : Option ((Nat × UInt8 × UInt8 × Nat) × Bool) :=
+  if h : hi.toNat ≤ a.size then
+    let up := inplace a do
+      for j in lo...hi with (s := 0) (m := 255) (M := 0) (o := 0) do
+        let x ← a[j]
+        s := s + x.toNat
+        m := min m x
+        M := max M x
+        o := o + x.toNat % 2
+      return (s, m, M, o)
+    let down := inplace a do
+      for j in reverse lo...hi with (s := 0) (m := 255) (M := 0) (o := 0) do
+        let x ← a[j]
+        s := s + x.toNat
+        m := min m x
+        M := max M x
+        o := o + x.toNat % 2
+      return (s, m, M, o)
+    some (up.1, up.1 == down.1)
+  else none
+
+#guard stats (UInt8Array.mk #[9, 4, 7, 200, 1, 6]) 1 5 == some ((212, 1, 200, 2), true)
+#guard stats (UInt8Array.mk #[9, 4]) 1 1 == some ((0, 255, 0, 0), true)
+
+/-- The reverse of `stats`' order of visits, with three variables: the indices and a running sum. -/
+private def visits (a : UInt8Array) (lo hi : USize) : Option (List Nat × Nat × Nat) :=
+  if h : hi.toNat ≤ a.size then
+    some (inplace a do
+      for j in reverse lo...hi with (l := ([] : List Nat)) (s := 0) (k := 0) do
+        l := j.toNat :: l
+        s := s + a[j].toNat
+        k := k + 1
+      return (l, s, k)).1
+  else none
+
+#guard visits (UInt8Array.mk #[1, 2, 3, 4, 5]) 1 4 == some ([1, 2, 3], 9, 3)
+
+/--
+Running sums of the rows of `rows` by 4, offset by the total of the rows before, in place, and the
+total: the inner loop has two variables, one carried from the outer loop.
+-/
+private def offsetRows (a : UInt32Array) (rows : USize) : Option (UInt32 × UInt32Array) :=
+  if h : 4 * rows.toNat ≤ a.size ∧ 4 * rows.toNat < USize.size then
+    some <| inplace a do
+      for r in 0...rows with (tot := 0) do
+        for c in 0...4 with (acc := 0) (t := tot) do
+          have hc : (4 * r + c).toNat < a.size := by inplace_bound
+          let x ← a[4 * r + c]
+          acc := acc + x
+          a[4 * r + c] := acc + tot
+          t := t + x
+        tot := t
+      return tot
+  else none
+
+#guard offsetRows (UInt32Array.mk #[1, 2, 3, 4, 10, 20, 30, 40, 7]) 2 ==
+  some (110, UInt32Array.mk #[1, 3, 6, 10, 20, 40, 70, 110, 7])
+
+-- A loop has at most four variables.
+/-- error: a loop has at most four variables -/
+#guard_msgs in
+example (a : UInt8Array) : Unit × UInt8Array :=
+  inplace a do
+    for j in 0...0 with (x := 0) (y := 0) (z := 0) (u := 0) (v := 0) do
+      x := y + z + u + v

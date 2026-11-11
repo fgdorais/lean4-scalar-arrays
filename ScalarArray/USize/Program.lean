@@ -36,6 +36,13 @@ The continuation runs inside the program's last loop, so its last accumulators r
 and no result pair is built. A tail program runs with `a.runInPlaceThen t`,
 `a.runInPlaceThenOf n h t` or `t.run a h`.
 
+Tail programs also have loops in continuation-passing style, `Tail.forIn lo hi init body k` and
+`Tail.forInRev`, with up to four variables in `Tail.forIn2`, `Tail.forIn3`, `Tail.forIn4`, and so
+on. Their body is itself a tail program, which ends by calling a continuation `next` on the next
+variables, and the loop ends with `k`. Each variable is an argument of the loop, so scalars stay
+unboxed, and a nested loop, whose `k` calls the outer `next`, compiles to mutually recursive loops
+with no allocation. They are specified by their one-step equations (`Tail.forInFrom_eq`, …).
+
 The array is never visible to a program: `InPlace` and its state have private constructors, so the
 only code that touches the state is the code in this module, which passes it on linearly. That is
 what lets `write` store without checking that the array is exclusive. The in-place folds of
@@ -966,6 +973,320 @@ public def forInRev2Bind {β₁ : Type v} {β₂ : Type w'} (lo hi : USize) (ini
   ⟨fun s => forDown2.loopThen lo hi body hi (Nat.le_refl _) init₁ init₂ s fun b₁ b₂ s =>
     (k b₁ b₂).fn s⟩
 
+/-! ### Loops in continuation-passing style -/
+
+/-- The loop of `Tail.forInFrom`: `next` runs the step at `j + 1`, and the loop ends with `k`. -/
+@[specialize]
+private def forUpK.loop {β : Type v}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → Tail n γ) → β → Tail n γ)
+    (k : β → Tail n γ) (j : USize) (hlo : lo.toNat ≤ j.toNat)
+    (b : β) (s : State n) : γ :=
+  if hj : j < hi then
+    (body j hlo hj
+      (fun b => ⟨fun s =>
+        forUpK.loop lo hi body k (j + 1) (forIn_le_succ hlo hj) b s⟩)
+      b).fn s
+  else
+    (k b).fn s
+termination_by hi.toNat - j.toNat
+decreasing_by exact lt_succ_of_lt hj
+
+/-- `Tail.forIn` from `j₀` instead of `lo`. It is specified by `Tail.forInFrom_eq`. -/
+@[inline]
+public def forInFrom {β : Type v}
+    (lo hi j₀ : USize) (h : lo.toNat ≤ j₀.toNat) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → Tail n γ) → β → Tail n γ)
+    (k : β → Tail n γ) : Tail n γ :=
+  ⟨forUpK.loop lo hi body k j₀ h init⟩
+
+/--
+A loop in continuation-passing style, for each `j` from `lo` up to `hi - 1`, followed by the rest
+`k` of the program. The body gets `j`, both its bounds, the continuation `next` and the current
+variables, and ends by calling `next` on the next variables, which runs the next step, or `k` after
+the last one. So the variables are arguments of the loop, and a scalar stays unboxed, and a nested
+loop, whose `k` calls the outer `next`, allocates nothing either. A body that doesn't call `next`
+leaves the loop early. `Tail.forIn2`, `Tail.forIn3` and `Tail.forIn4` take two, three and four
+variables, each its own argument.
+-/
+@[inline, expose]
+public def forIn {β : Type v}
+    (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → Tail n γ) → β → Tail n γ)
+    (k : β → Tail n γ) : Tail n γ :=
+  forInFrom lo hi lo (Nat.le_refl _) init body k
+
+/-- The loop of `Tail.forInRevFrom`: `next` runs the step at `j - 2`, for the index `j - 1`. -/
+@[specialize]
+private def forDownK.loop {β : Type v}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → Tail n γ) → β → Tail n γ)
+    (k : β → Tail n γ) (j : USize) (hj : j.toNat ≤ hi.toNat)
+    (b : β) (s : State n) : γ :=
+  if h : lo < j then
+    have hj' : (j - 1).toNat < hi.toNat := forInRev_pred_lt hj h
+    (body (j - 1) (forInRev_le_pred h) hj'
+      (fun b => ⟨fun s =>
+        forDownK.loop lo hi body k (j - 1) (Nat.le_of_lt hj') b s⟩)
+      b).fn s
+  else
+    (k b).fn s
+termination_by j.toNat
+decreasing_by exact forInRev_pred_lt_self h
+
+/--
+`Tail.forInRev` from `j₀ - 1` down to `lo` instead of from `hi - 1`. It is specified by
+`Tail.forInRevFrom_eq`.
+-/
+@[inline]
+public def forInRevFrom {β : Type v}
+    (lo hi j₀ : USize) (h : j₀.toNat ≤ hi.toNat) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → Tail n γ) → β → Tail n γ)
+    (k : β → Tail n γ) : Tail n γ :=
+  ⟨forDownK.loop lo hi body k j₀ h init⟩
+
+/-- `Tail.forIn` from `hi - 1` down to `lo`. -/
+@[inline, expose]
+public def forInRev {β : Type v}
+    (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → Tail n γ) → β → Tail n γ)
+    (k : β → Tail n γ) : Tail n γ :=
+  forInRevFrom lo hi hi (Nat.le_refl _) init body k
+
+/-- The loop of `Tail.forIn2From`: `next` runs the step at `j + 1`, and the loop ends with `k`. -/
+@[specialize]
+private def forUpK2.loop {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → Tail n γ) → β₁ → β₂ → Tail n γ)
+    (k : β₁ → β₂ → Tail n γ) (j : USize) (hlo : lo.toNat ≤ j.toNat)
+    (b₁ : β₁) (b₂ : β₂) (s : State n) : γ :=
+  if hj : j < hi then
+    (body j hlo hj
+      (fun b₁ b₂ => ⟨fun s =>
+        forUpK2.loop lo hi body k (j + 1) (forIn_le_succ hlo hj) b₁ b₂ s⟩)
+      b₁ b₂).fn s
+  else
+    (k b₁ b₂).fn s
+termination_by hi.toNat - j.toNat
+decreasing_by exact lt_succ_of_lt hj
+
+/-- `Tail.forIn2` from `j₀` instead of `lo`. It is specified by `Tail.forIn2From_eq`. -/
+@[inline]
+public def forIn2From {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi j₀ : USize) (h : lo.toNat ≤ j₀.toNat) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → Tail n γ) → β₁ → β₂ → Tail n γ)
+    (k : β₁ → β₂ → Tail n γ) : Tail n γ :=
+  ⟨forUpK2.loop lo hi body k j₀ h init₁ init₂⟩
+
+/-- `Tail.forIn` with two variables, which the loop keeps as 2 arguments. -/
+@[inline, expose]
+public def forIn2 {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → Tail n γ) → β₁ → β₂ → Tail n γ)
+    (k : β₁ → β₂ → Tail n γ) : Tail n γ :=
+  forIn2From lo hi lo (Nat.le_refl _) init₁ init₂ body k
+
+/-- The loop of `Tail.forInRev2From`: `next` runs the step at `j - 2`, for the index `j - 1`. -/
+@[specialize]
+private def forDownK2.loop {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → Tail n γ) → β₁ → β₂ → Tail n γ)
+    (k : β₁ → β₂ → Tail n γ) (j : USize) (hj : j.toNat ≤ hi.toNat)
+    (b₁ : β₁) (b₂ : β₂) (s : State n) : γ :=
+  if h : lo < j then
+    have hj' : (j - 1).toNat < hi.toNat := forInRev_pred_lt hj h
+    (body (j - 1) (forInRev_le_pred h) hj'
+      (fun b₁ b₂ => ⟨fun s =>
+        forDownK2.loop lo hi body k (j - 1) (Nat.le_of_lt hj') b₁ b₂ s⟩)
+      b₁ b₂).fn s
+  else
+    (k b₁ b₂).fn s
+termination_by j.toNat
+decreasing_by exact forInRev_pred_lt_self h
+
+/--
+`Tail.forInRev2` from `j₀ - 1` down to `lo` instead of from `hi - 1`. It is specified by
+`Tail.forInRev2From_eq`.
+-/
+@[inline]
+public def forInRev2From {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi j₀ : USize) (h : j₀.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → Tail n γ) → β₁ → β₂ → Tail n γ)
+    (k : β₁ → β₂ → Tail n γ) : Tail n γ :=
+  ⟨forDownK2.loop lo hi body k j₀ h init₁ init₂⟩
+
+/-- `Tail.forIn2` from `hi - 1` down to `lo`. -/
+@[inline, expose]
+public def forInRev2 {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → Tail n γ) → β₁ → β₂ → Tail n γ)
+    (k : β₁ → β₂ → Tail n γ) : Tail n γ :=
+  forInRev2From lo hi hi (Nat.le_refl _) init₁ init₂ body k
+
+/-- The loop of `Tail.forIn3From`: `next` runs the step at `j + 1`, and the loop ends with `k`. -/
+@[specialize]
+private def forUpK3.loop {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → Tail n γ) → β₁ → β₂ → β₃ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → Tail n γ) (j : USize) (hlo : lo.toNat ≤ j.toNat)
+    (b₁ : β₁) (b₂ : β₂) (b₃ : β₃) (s : State n) : γ :=
+  if hj : j < hi then
+    (body j hlo hj
+      (fun b₁ b₂ b₃ => ⟨fun s =>
+        forUpK3.loop lo hi body k (j + 1) (forIn_le_succ hlo hj) b₁ b₂ b₃ s⟩)
+      b₁ b₂ b₃).fn s
+  else
+    (k b₁ b₂ b₃).fn s
+termination_by hi.toNat - j.toNat
+decreasing_by exact lt_succ_of_lt hj
+
+/-- `Tail.forIn3` from `j₀` instead of `lo`. It is specified by `Tail.forIn3From_eq`. -/
+@[inline]
+public def forIn3From {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi j₀ : USize) (h : lo.toNat ≤ j₀.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → Tail n γ) → β₁ → β₂ → β₃ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → Tail n γ) : Tail n γ :=
+  ⟨forUpK3.loop lo hi body k j₀ h init₁ init₂ init₃⟩
+
+/-- `Tail.forIn` with three variables, which the loop keeps as 3 arguments. -/
+@[inline, expose]
+public def forIn3 {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → Tail n γ) → β₁ → β₂ → β₃ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → Tail n γ) : Tail n γ :=
+  forIn3From lo hi lo (Nat.le_refl _) init₁ init₂ init₃ body k
+
+/-- The loop of `Tail.forInRev3From`: `next` runs the step at `j - 2`, for the index `j - 1`. -/
+@[specialize]
+private def forDownK3.loop {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → Tail n γ) → β₁ → β₂ → β₃ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → Tail n γ) (j : USize) (hj : j.toNat ≤ hi.toNat)
+    (b₁ : β₁) (b₂ : β₂) (b₃ : β₃) (s : State n) : γ :=
+  if h : lo < j then
+    have hj' : (j - 1).toNat < hi.toNat := forInRev_pred_lt hj h
+    (body (j - 1) (forInRev_le_pred h) hj'
+      (fun b₁ b₂ b₃ => ⟨fun s =>
+        forDownK3.loop lo hi body k (j - 1) (Nat.le_of_lt hj') b₁ b₂ b₃ s⟩)
+      b₁ b₂ b₃).fn s
+  else
+    (k b₁ b₂ b₃).fn s
+termination_by j.toNat
+decreasing_by exact forInRev_pred_lt_self h
+
+/--
+`Tail.forInRev3` from `j₀ - 1` down to `lo` instead of from `hi - 1`. It is specified by
+`Tail.forInRev3From_eq`.
+-/
+@[inline]
+public def forInRev3From {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi j₀ : USize) (h : j₀.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → Tail n γ) → β₁ → β₂ → β₃ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → Tail n γ) : Tail n γ :=
+  ⟨forDownK3.loop lo hi body k j₀ h init₁ init₂ init₃⟩
+
+/-- `Tail.forIn3` from `hi - 1` down to `lo`. -/
+@[inline, expose]
+public def forInRev3 {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → Tail n γ) → β₁ → β₂ → β₃ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → Tail n γ) : Tail n γ :=
+  forInRev3From lo hi hi (Nat.le_refl _) init₁ init₂ init₃ body k
+
+/-- The loop of `Tail.forIn4From`: `next` runs the step at `j + 1`, and the loop ends with `k`. -/
+@[specialize]
+private def forUpK4.loop {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → Tail n γ) → β₁ → β₂ → β₃ → β₄ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → Tail n γ) (j : USize) (hlo : lo.toNat ≤ j.toNat)
+    (b₁ : β₁) (b₂ : β₂) (b₃ : β₃) (b₄ : β₄) (s : State n) : γ :=
+  if hj : j < hi then
+    (body j hlo hj
+      (fun b₁ b₂ b₃ b₄ => ⟨fun s =>
+        forUpK4.loop lo hi body k (j + 1) (forIn_le_succ hlo hj) b₁ b₂ b₃ b₄ s⟩)
+      b₁ b₂ b₃ b₄).fn s
+  else
+    (k b₁ b₂ b₃ b₄).fn s
+termination_by hi.toNat - j.toNat
+decreasing_by exact lt_succ_of_lt hj
+
+/-- `Tail.forIn4` from `j₀` instead of `lo`. It is specified by `Tail.forIn4From_eq`. -/
+@[inline]
+public def forIn4From {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi j₀ : USize) (h : lo.toNat ≤ j₀.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → Tail n γ) → β₁ → β₂ → β₃ → β₄ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → Tail n γ) : Tail n γ :=
+  ⟨forUpK4.loop lo hi body k j₀ h init₁ init₂ init₃ init₄⟩
+
+/-- `Tail.forIn` with four variables, which the loop keeps as 4 arguments. -/
+@[inline, expose]
+public def forIn4 {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → Tail n γ) → β₁ → β₂ → β₃ → β₄ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → Tail n γ) : Tail n γ :=
+  forIn4From lo hi lo (Nat.le_refl _) init₁ init₂ init₃ init₄ body k
+
+/-- The loop of `Tail.forInRev4From`: `next` runs the step at `j - 2`, for the index `j - 1`. -/
+@[specialize]
+private def forDownK4.loop {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → Tail n γ) → β₁ → β₂ → β₃ → β₄ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → Tail n γ) (j : USize) (hj : j.toNat ≤ hi.toNat)
+    (b₁ : β₁) (b₂ : β₂) (b₃ : β₃) (b₄ : β₄) (s : State n) : γ :=
+  if h : lo < j then
+    have hj' : (j - 1).toNat < hi.toNat := forInRev_pred_lt hj h
+    (body (j - 1) (forInRev_le_pred h) hj'
+      (fun b₁ b₂ b₃ b₄ => ⟨fun s =>
+        forDownK4.loop lo hi body k (j - 1) (Nat.le_of_lt hj') b₁ b₂ b₃ b₄ s⟩)
+      b₁ b₂ b₃ b₄).fn s
+  else
+    (k b₁ b₂ b₃ b₄).fn s
+termination_by j.toNat
+decreasing_by exact forInRev_pred_lt_self h
+
+/--
+`Tail.forInRev4` from `j₀ - 1` down to `lo` instead of from `hi - 1`. It is specified by
+`Tail.forInRev4From_eq`.
+-/
+@[inline]
+public def forInRev4From {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi j₀ : USize) (h : j₀.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → Tail n γ) → β₁ → β₂ → β₃ → β₄ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → Tail n γ) : Tail n γ :=
+  ⟨forDownK4.loop lo hi body k j₀ h init₁ init₂ init₃ init₄⟩
+
+/-- `Tail.forIn4` from `hi - 1` down to `lo`. -/
+@[inline, expose]
+public def forInRev4 {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → Tail n γ) → β₁ → β₂ → β₃ → β₄ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → Tail n γ) : Tail n γ :=
+  forInRev4From lo hi hi (Nat.le_refl _) init₁ init₂ init₃ init₄ body k
+
 /--
 Runs the tail program `t` on the array `a`, and returns what its continuation returns. The array
 is made exclusive first, so it is copied once if it is shared, and updated in place otherwise.
@@ -1022,7 +1343,7 @@ private theorem fn_inj {t t' : Tail n γ} (h : t.fn = t'.fn) : t = t' := by
 @[simp] public theorem forInBind_eq (lo hi : USize) (init : β)
     (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β)
     (k : β → Tail n γ) :
-    forInBind lo hi init body k = Tail.bind (forIn lo hi init body) k := by
+    forInBind lo hi init body k = Tail.bind (InPlace.forIn lo hi init body) k := by
   apply fn_inj; funext s
   show forUp.loopThen lo hi body lo _ init s _ = _
   rw [forUp_loopThen_eq]; rfl
@@ -1033,7 +1354,7 @@ private theorem fn_inj {t t' : Tail n γ} (h : t.fn = t'.fn) : t = t' := by
       InPlace n (β₁ × β₂))
     (k : β₁ → β₂ → Tail n γ) :
     forIn2Bind lo hi init₁ init₂ body k =
-      Tail.bind (forIn2 lo hi init₁ init₂ body) fun b => k b.1 b.2 := by
+      Tail.bind (InPlace.forIn2 lo hi init₁ init₂ body) fun b => k b.1 b.2 := by
   apply fn_inj; funext s
   show forUp2.loopThen lo hi body lo _ init₁ init₂ s _ = _
   rw [forUp2_loopThen_eq]; rfl
@@ -1041,7 +1362,7 @@ private theorem fn_inj {t t' : Tail n γ} (h : t.fn = t'.fn) : t = t' := by
 @[simp] public theorem forInRevBind_eq (lo hi : USize) (init : β)
     (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β)
     (k : β → Tail n γ) :
-    forInRevBind lo hi init body k = Tail.bind (forInRev lo hi init body) k := by
+    forInRevBind lo hi init body k = Tail.bind (InPlace.forInRev lo hi init body) k := by
   apply fn_inj; funext s
   show forDown.loopThen lo hi body hi _ init s _ = _
   rw [forDown_loopThen_eq]; rfl
@@ -1052,10 +1373,244 @@ private theorem fn_inj {t t' : Tail n γ} (h : t.fn = t'.fn) : t = t' := by
       InPlace n (β₁ × β₂))
     (k : β₁ → β₂ → Tail n γ) :
     forInRev2Bind lo hi init₁ init₂ body k =
-      Tail.bind (forInRev2 lo hi init₁ init₂ body) fun b => k b.1 b.2 := by
+      Tail.bind (InPlace.forInRev2 lo hi init₁ init₂ body) fun b => k b.1 b.2 := by
   apply fn_inj; funext s
   show forDown2.loopThen lo hi body hi _ init₁ init₂ s _ = _
   rw [forDown2_loopThen_eq]; rfl
+
+/-! ### Loops in continuation-passing style -/
+
+/-- One step of `Tail.forInFrom`. -/
+public theorem forInFrom_eq {β : Type v}
+    (lo hi j : USize) (hlo : lo.toNat ≤ j.toNat) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → Tail n γ) → β → Tail n γ)
+    (k : β → Tail n γ) :
+    forInFrom lo hi j hlo init body k =
+      if hj : j < hi then
+        body j hlo hj
+          (fun b =>
+            forInFrom lo hi (j + 1) (forIn_le_succ hlo hj) b body k)
+          init
+      else k init := by
+  apply fn_inj; funext s
+  show forUpK.loop lo hi body k j hlo init s = _
+  rw [forUpK.loop]
+  by_cases hj : j < hi
+  · simp only [hj, ↓reduceDIte]; rfl
+  · simp only [hj, ↓reduceDIte]
+
+@[simp] public theorem forIn_eq {β : Type v}
+    (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → Tail n γ) → β → Tail n γ)
+    (k : β → Tail n γ) :
+    forIn lo hi init body k =
+      forInFrom lo hi lo (Nat.le_refl _) init body k := by
+  rfl
+
+/-- One step of `Tail.forInRevFrom`. -/
+public theorem forInRevFrom_eq {β : Type v}
+    (lo hi j : USize) (hj : j.toNat ≤ hi.toNat) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → Tail n γ) → β → Tail n γ)
+    (k : β → Tail n γ) :
+    forInRevFrom lo hi j hj init body k =
+      if h : lo < j then
+        body (j - 1) (forInRev_le_pred h) (forInRev_pred_lt hj h)
+          (fun b =>
+            forInRevFrom lo hi (j - 1) (Nat.le_of_lt (forInRev_pred_lt hj h)) b body k)
+          init
+      else k init := by
+  apply fn_inj; funext s
+  show forDownK.loop lo hi body k j hj init s = _
+  rw [forDownK.loop]
+  by_cases h : lo < j
+  · simp only [h, ↓reduceDIte]; rfl
+  · simp only [h, ↓reduceDIte]
+
+@[simp] public theorem forInRev_eq {β : Type v}
+    (lo hi : USize) (init : β)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β → Tail n γ) → β → Tail n γ)
+    (k : β → Tail n γ) :
+    forInRev lo hi init body k =
+      forInRevFrom lo hi hi (Nat.le_refl _) init body k := by
+  rfl
+
+/-- One step of `Tail.forIn2From`. -/
+public theorem forIn2From_eq {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi j : USize) (hlo : lo.toNat ≤ j.toNat) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → Tail n γ) → β₁ → β₂ → Tail n γ)
+    (k : β₁ → β₂ → Tail n γ) :
+    forIn2From lo hi j hlo init₁ init₂ body k =
+      if hj : j < hi then
+        body j hlo hj
+          (fun b₁ b₂ =>
+            forIn2From lo hi (j + 1) (forIn_le_succ hlo hj) b₁ b₂ body k)
+          init₁ init₂
+      else k init₁ init₂ := by
+  apply fn_inj; funext s
+  show forUpK2.loop lo hi body k j hlo init₁ init₂ s = _
+  rw [forUpK2.loop]
+  by_cases hj : j < hi
+  · simp only [hj, ↓reduceDIte]; rfl
+  · simp only [hj, ↓reduceDIte]
+
+@[simp] public theorem forIn2_eq {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → Tail n γ) → β₁ → β₂ → Tail n γ)
+    (k : β₁ → β₂ → Tail n γ) :
+    forIn2 lo hi init₁ init₂ body k =
+      forIn2From lo hi lo (Nat.le_refl _) init₁ init₂ body k := by
+  rfl
+
+/-- One step of `Tail.forInRev2From`. -/
+public theorem forInRev2From_eq {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi j : USize) (hj : j.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → Tail n γ) → β₁ → β₂ → Tail n γ)
+    (k : β₁ → β₂ → Tail n γ) :
+    forInRev2From lo hi j hj init₁ init₂ body k =
+      if h : lo < j then
+        body (j - 1) (forInRev_le_pred h) (forInRev_pred_lt hj h)
+          (fun b₁ b₂ =>
+            forInRev2From lo hi (j - 1) (Nat.le_of_lt (forInRev_pred_lt hj h)) b₁ b₂ body k)
+          init₁ init₂
+      else k init₁ init₂ := by
+  apply fn_inj; funext s
+  show forDownK2.loop lo hi body k j hj init₁ init₂ s = _
+  rw [forDownK2.loop]
+  by_cases h : lo < j
+  · simp only [h, ↓reduceDIte]; rfl
+  · simp only [h, ↓reduceDIte]
+
+@[simp] public theorem forInRev2_eq {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → Tail n γ) → β₁ → β₂ → Tail n γ)
+    (k : β₁ → β₂ → Tail n γ) :
+    forInRev2 lo hi init₁ init₂ body k =
+      forInRev2From lo hi hi (Nat.le_refl _) init₁ init₂ body k := by
+  rfl
+
+/-- One step of `Tail.forIn3From`. -/
+public theorem forIn3From_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi j : USize) (hlo : lo.toNat ≤ j.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → Tail n γ) → β₁ → β₂ → β₃ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → Tail n γ) :
+    forIn3From lo hi j hlo init₁ init₂ init₃ body k =
+      if hj : j < hi then
+        body j hlo hj
+          (fun b₁ b₂ b₃ =>
+            forIn3From lo hi (j + 1) (forIn_le_succ hlo hj) b₁ b₂ b₃ body k)
+          init₁ init₂ init₃
+      else k init₁ init₂ init₃ := by
+  apply fn_inj; funext s
+  show forUpK3.loop lo hi body k j hlo init₁ init₂ init₃ s = _
+  rw [forUpK3.loop]
+  by_cases hj : j < hi
+  · simp only [hj, ↓reduceDIte]; rfl
+  · simp only [hj, ↓reduceDIte]
+
+@[simp] public theorem forIn3_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → Tail n γ) → β₁ → β₂ → β₃ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → Tail n γ) :
+    forIn3 lo hi init₁ init₂ init₃ body k =
+      forIn3From lo hi lo (Nat.le_refl _) init₁ init₂ init₃ body k := by
+  rfl
+
+/-- One step of `Tail.forInRev3From`. -/
+public theorem forInRev3From_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi j : USize) (hj : j.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → Tail n γ) → β₁ → β₂ → β₃ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → Tail n γ) :
+    forInRev3From lo hi j hj init₁ init₂ init₃ body k =
+      if h : lo < j then
+        body (j - 1) (forInRev_le_pred h) (forInRev_pred_lt hj h)
+          (fun b₁ b₂ b₃ =>
+            forInRev3From lo hi (j - 1) (Nat.le_of_lt (forInRev_pred_lt hj h)) b₁ b₂ b₃ body k)
+          init₁ init₂ init₃
+      else k init₁ init₂ init₃ := by
+  apply fn_inj; funext s
+  show forDownK3.loop lo hi body k j hj init₁ init₂ init₃ s = _
+  rw [forDownK3.loop]
+  by_cases h : lo < j
+  · simp only [h, ↓reduceDIte]; rfl
+  · simp only [h, ↓reduceDIte]
+
+@[simp] public theorem forInRev3_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → Tail n γ) → β₁ → β₂ → β₃ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → Tail n γ) :
+    forInRev3 lo hi init₁ init₂ init₃ body k =
+      forInRev3From lo hi hi (Nat.le_refl _) init₁ init₂ init₃ body k := by
+  rfl
+
+/-- One step of `Tail.forIn4From`. -/
+public theorem forIn4From_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi j : USize) (hlo : lo.toNat ≤ j.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → Tail n γ) → β₁ → β₂ → β₃ → β₄ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → Tail n γ) :
+    forIn4From lo hi j hlo init₁ init₂ init₃ init₄ body k =
+      if hj : j < hi then
+        body j hlo hj
+          (fun b₁ b₂ b₃ b₄ =>
+            forIn4From lo hi (j + 1) (forIn_le_succ hlo hj) b₁ b₂ b₃ b₄ body k)
+          init₁ init₂ init₃ init₄
+      else k init₁ init₂ init₃ init₄ := by
+  apply fn_inj; funext s
+  show forUpK4.loop lo hi body k j hlo init₁ init₂ init₃ init₄ s = _
+  rw [forUpK4.loop]
+  by_cases hj : j < hi
+  · simp only [hj, ↓reduceDIte]; rfl
+  · simp only [hj, ↓reduceDIte]
+
+@[simp] public theorem forIn4_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → Tail n γ) → β₁ → β₂ → β₃ → β₄ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → Tail n γ) :
+    forIn4 lo hi init₁ init₂ init₃ init₄ body k =
+      forIn4From lo hi lo (Nat.le_refl _) init₁ init₂ init₃ init₄ body k := by
+  rfl
+
+/-- One step of `Tail.forInRev4From`. -/
+public theorem forInRev4From_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi j : USize) (hj : j.toNat ≤ hi.toNat) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → Tail n γ) → β₁ → β₂ → β₃ → β₄ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → Tail n γ) :
+    forInRev4From lo hi j hj init₁ init₂ init₃ init₄ body k =
+      if h : lo < j then
+        body (j - 1) (forInRev_le_pred h) (forInRev_pred_lt hj h)
+          (fun b₁ b₂ b₃ b₄ =>
+            forInRev4From lo hi (j - 1) (Nat.le_of_lt (forInRev_pred_lt hj h)) b₁ b₂ b₃ b₄ body k)
+          init₁ init₂ init₃ init₄
+      else k init₁ init₂ init₃ init₄ := by
+  apply fn_inj; funext s
+  show forDownK4.loop lo hi body k j hj init₁ init₂ init₃ init₄ s = _
+  rw [forDownK4.loop]
+  by_cases h : lo < j
+  · simp only [h, ↓reduceDIte]; rfl
+  · simp only [h, ↓reduceDIte]
+
+@[simp] public theorem forInRev4_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃} {β₄ : Type v₄}
+    (lo hi : USize) (init₁ : β₁) (init₂ : β₂) (init₃ : β₃) (init₄ : β₄)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → Tail n γ) → β₁ → β₂ → β₃ → β₄ → Tail n γ)
+    (k : β₁ → β₂ → β₃ → β₄ → Tail n γ) :
+    forInRev4 lo hi init₁ init₂ init₃ init₄ body k =
+      forInRev4From lo hi hi (Nat.le_refl _) init₁ init₂ init₃ init₄ body k := by
+  rfl
 
 end Tail
 

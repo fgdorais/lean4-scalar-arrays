@@ -51,9 +51,9 @@ inplace a do
   over the same range downward, from `hi - 1` to `lo`. The bounds are `USize`s; `lo...<hi` and
   `*...hi` (from `0`) work too, and `lo.toNat ≤ j.toNat` and `j.toNat < hi.toNat` are in context
   in the body. An optional `with (x := init) …` clause names the loop's variables, as
-  `(x : t := init)` with their types: up to two,
-  which the loop keeps as separate unboxed arguments. They are mutable in the body, and they hold
-  their last values after the loop. Loops nest.
+  `(x : t := init)` with their types: up to four, which the loop keeps as separate unboxed
+  arguments. They are mutable in the body, and they hold their last values after the loop. Loops
+  nest, and a nested loop allocates nothing either.
 * `return e`, last, gives the program's result, and so may `return` in both branches of the
   program's last `if`. Without it, the result is `()`.
 
@@ -85,11 +85,13 @@ The program expands to a tail program (`XArray.InPlace.Tail`) on arrays of size 
 and the program uses them in place of `a.size` and `a.usize`. So nothing in the compiled program
 refers to `a`, which the compiler would otherwise keep alive past the point where the program makes
 the array exclusive, and the array would be copied. The program ends with `Tail.done x k`, where `k`
-is the `then` continuation or makes the pair. Its statements expand to `readThen`, `writeThen`,
-`ite`, `dite` and the `forInBind`, `forIn2Bind`, `forInRevBind` and `forInRev2Bind` loops, of `Tail`
-at the top level and of `InPlace` in loop bodies, so it compiles to the same loop as a hand-written
-program, with the loop variables unboxed, and the loop calls the rest of the program itself, so its
-variables reach it unboxed too. The rest of the program after an `if` becomes a local function of
+is the `then` continuation or makes the pair. Its statements expand to the tail programs
+`readThen`, `writeThen`, `ite`, `dite` and the loops `Tail.forIn`, `Tail.forIn2`, … and
+`Tail.forInRev`, …, in continuation-passing style: a loop body ends by calling `next` on the loop's
+variables, which runs the next step, and the loop ends by calling the rest of the program, so the
+variables are arguments of both and stay unboxed. A nested loop ends by calling the outer loop's
+`next`, so the two compile to mutually recursive loops with no allocation, and the program compiles
+to the same loops as a hand-written one. The rest of the program after an `if` becomes a local function of
 the mutable variables, which the compiler turns into a join point: an `if` in a loop allocates
 nothing.
 
@@ -132,7 +134,7 @@ else UInt64Array.mk (Array.replicate a.size 0)
   may use `a`, and so may `then k`, which runs after the program, but `k` keeps the old array alive
   if it uses more than its size.
 * Reads in terms are written `a[i]`, not `(← a[i])`.
-* A loop has at most two variables, and its range is `lo...hi`, `lo...<hi`, `*...hi` or `*...<hi`.
+* A loop has at most four variables, and its range is `lo...hi`, `lo...<hi`, `*...hi` or `*...<hi`.
 * `have` takes a name: `have h : t := p`.
 -/
 
@@ -413,13 +415,6 @@ private def lifting (p : Arr) (s : TSyntax `inplaceStmt)
   let (s, reads) ← (liftReads p.arr false (← replaceStmt p s)).run #[]
   withReads p reads (← f ⟨s⟩)
 
-/-- The tuple of the variables `xs`, or `()`. -/
-private def tuple (xs : Array Ident) : MacroM Term :=
-  match xs with
-  | #[] => `(())
-  | #[x] => pure x
-  | _ => `(($(xs[0]!), $(xs[1:].toArray),*))
-
 mutual
 
 /--
@@ -481,23 +476,33 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
       | `($lo...$hi) | `($lo...<$hi) => pure (lo, hi)
       | `(*...$hi) | `(*...<$hi) => pure (← `((0 : USize)), hi)
       | _ => Macro.throwErrorAt range "expected a range `lo...hi` or `*...hi`"
-    let xs := xs.getD #[]
+    let xs : Array Ident := xs.getD #[]
     let inits ← (is.getD #[]).zip (ts.getD #[]) |>.mapM fun
       | (init, some ty) => `(($init : $ty))
       | (init, none) => pure init
-    let b ← expandSeq p ending xs (← `(.pure $(← tuple xs))) false b.getElems.toList
-    -- The loop calls the rest of the program itself, so its variables reach it unboxed.
+    if xs.size > 4 then Macro.throwError "a loop has at most four variables"
+    -- The body ends by calling `next` on the loop's variables, which runs the next step, and the
+    -- loop ends by calling the rest of the program itself: the variables are arguments of both,
+    -- so they stay unboxed, and a nested loop ends by calling the outer `next`.
+    let next ← withFreshMacroScope `(next)
+    let args : Array Term := xs.map fun x => x
+    let call ← if xs.isEmpty then `($next ()) else `($next $args*)
+    let b ← expandSeq p ending xs call false b.getElems.toList
     let rest ← k (mvars ++ xs)
-    match rev.isSome, xs, inits with
-    | true, #[], #[] => `(.forInRevBind $lo $hi () (fun $j hlo hj _ => $b) fun _ => $rest)
-    | true, #[x], #[init] => `(.forInRevBind $lo $hi $init (fun $j hlo hj $x => $b) fun $x => $rest)
-    | true, #[x, y], #[initx, inity] =>
-      `(.forInRev2Bind $lo $hi $initx $inity (fun $j hlo hj $x $y => $b) fun $x $y => $rest)
-    | false, #[], #[] => `(.forInBind $lo $hi () (fun $j hlo hj _ => $b) fun _ => $rest)
-    | false, #[x], #[init] => `(.forInBind $lo $hi $init (fun $j hlo hj $x => $b) fun $x => $rest)
-    | false, #[x, y], #[initx, inity] =>
-      `(.forIn2Bind $lo $hi $initx $inity (fun $j hlo hj $x $y => $b) fun $x $y => $rest)
-    | _, _, _ => Macro.throwError "a loop has at most two variables"
+    let body ← if xs.isEmpty then `(fun $j hlo hj $next _ => $b) else
+      `(fun $j hlo hj $next $xs* => $b)
+    let rest ← if xs.isEmpty then `(fun _ => $rest) else `(fun $xs* => $rest)
+    match rev.isSome, inits.size with
+    | false, 0 => `(.forIn $lo $hi () $body $rest)
+    | false, 1 => `(.forIn $lo $hi $inits* $body $rest)
+    | false, 2 => `(.forIn2 $lo $hi $inits* $body $rest)
+    | false, 3 => `(.forIn3 $lo $hi $inits* $body $rest)
+    | false, _ => `(.forIn4 $lo $hi $inits* $body $rest)
+    | true, 0 => `(.forInRev $lo $hi () $body $rest)
+    | true, 1 => `(.forInRev $lo $hi $inits* $body $rest)
+    | true, 2 => `(.forInRev2 $lo $hi $inits* $body $rest)
+    | true, 3 => `(.forInRev3 $lo $hi $inits* $body $rest)
+    | true, _ => `(.forInRev4 $lo $hi $inits* $body $rest)
   | _ => Macro.throwUnsupported
 
 /--
