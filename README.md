@@ -90,8 +90,8 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Slices       | `XArray.Slice` with core's slice notation (`a[i...j]`, `a[i...=j]`, `a[i...*]`, `a[*...j]`, …), `toSlice`, `Slice.empty`, `{}`, `array`, `start`, `stop`, `size`, `get`, `getD`, `get!`, `s[i]`, `popFront`, `slice`, `copy`, `for x in s`, `foldl`, `foldlM`, `forM`, `foldr`, `foldrM`, `forRevM`, `any`, `all`, `contains`, `count`, `find?`, `findRev?`, `findRevM?`, `findSomeRevM?`, `iter`, `toArray`, `toList`, `s == t` |
 | Slice writes | `Slice.set`, `set!`, `modify`, `swap`, `reverse`, `foldlInPlace`, `foldrInPlace`, `foldlInPlaceThen`, `foldrInPlaceThen`, which write into the slice's array; `s.array` gives the whole array back |
 | In-place folds | `Slice.foldlInPlace`, `Slice.foldrInPlace` and their `Then` forms; `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
-| In-place programs | `XArray.InPlace n α`, a monad of programs that read and write an array of size `n` in place: `InPlace.read`, `readThen`, `write`, `InPlace.ite`, `InPlace.dite`; the loops `forIn lo hi` and `forInRev lo hi` (from `hi - 1` down to `lo`), whose bodies get both `lo ≤ j` and `j < hi`, `forIn2` and `forInRev2` with two unboxed accumulators, and their `Bind` forms (`forInBind`, …), which run straight into the rest of the program; run with `a.runInPlace m` or `m.run a h`, or a single loop with `runForInThen`, `runForInRevThen` and `runForIn2Then`. For kernels that no fold shape covers, such as a butterfly that writes two windows with two carries |
-| `inplace` notation | In the experimental `ScalarArray.InPlaceSyntax`: `inplace a do …`, an in-place program on `a` written with reads `let x ← a[i]` (or `a[i]` in any term), writes `a[i] := e`, `let`, `let mut` and `x := e`, `have`, `if … then … else …`, loops `for j in lo...hi with (x := init) … do …` and `for j in reverse lo...hi …`, and `return e`; it compiles to the same loops as hand-written programs, and the tactic `inplace_bound` proves the index bounds, including `USize` arithmetic such as `j - 17` |
+| In-place programs | `XArray.InPlace n α`, a monad of programs that read and write an array of size `n` in place: `InPlace.read`, `readThen`, `write`, `InPlace.ite`, `InPlace.dite`; the loops `forIn lo hi` and `forInRev lo hi` (from `hi - 1` down to `lo`), whose bodies get both `lo ≤ j` and `j < hi`, `forIn2` and `forInRev2` with two unboxed accumulators, and their `Bind` forms (`forInBind`, …), which run straight into the rest of the program; run with `a.runInPlace m` or `m.run a h`, or a single loop with `runForInThen`, `runForInRevThen` and `runForIn2Then`. Tail programs `InPlace.Tail n γ` end by handing their result and the new array to a continuation, without a result pair: `Tail.bind`, `readThen`, `writeThen`, `Tail.ite`, `Tail.dite`, the `Bind` loops and `Tail.done x k`, run with `a.runInPlaceThen t`. For kernels that no fold shape covers, such as a butterfly that writes two windows with two carries |
+| `inplace` notation | In the experimental `ScalarArray.InPlaceSyntax`: `inplace a do …`, an in-place program on `a` written with reads `let x ← a[i]` (or `a[i]` in any term), writes `a[i] := e`, `let`, `let mut` and `x := e`, `have`, `if … then … else …`, loops `for j in lo...hi with (x := init) … do …` and `for j in reverse lo...hi …`, and `return e`, and an optional `then k` that hands the result and the new array to `k` with no result pair; it compiles to the same loops as hand-written programs, and the tactic `inplace_bound` proves the index bounds, including `USize` arithmetic such as `j - 17` |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array, and `Std.Iter.toXSlice` for the rest of a slice iterator as a slice, whose `start` is its position |
 | Equality     | `a == b` and `s == t`; for integer types also `DecidableEq` (`decEq`), `Hashable` (`hash`), and for slices `Hashable` (`Slice.hash`), `EquivBEq` and `LawfulHashable` |
 | Linearity    | `markLinear`, `propagateMark`                                               |
@@ -179,6 +179,11 @@ def addSub (a : UInt64Array) (x y t len : USize) (hx : x.toNat + len.toNat ≤ a
 
 The index bounds are proved by the tactic `inplace_bound`, here from the window hypotheses.
 
+The result is a pair of the program's result and the new array. A program can instead end with
+`then k`, which hands them to `k`, with the new array's size, where the loop ends: no pair is
+built, and the carries reach `k` unboxed. With `return (c, b)` above,
+`then fun (c, b) a' h => g c b a' h` calls `g` with `h : a'.size = a.size`.
+
 Equality on the integer types compares the arrays' memory with `memcmp`, and their hash agrees
 with the hash of `toArray`. `Float32Array` and `Float64Array` compare elements with floating-point
 `==`, like `Array Float`, so they have no `DecidableEq` or `Hashable` instance: `NaN` is not equal
@@ -243,7 +248,7 @@ Each type `X` has a module `ScalarArray.X`, which imports its parts:
 | `ScalarArray.X.Array` | removing elements, search, building arrays, iteration, equality, hashing, printing |
 | `ScalarArray.X.Slice` | slices: the type, reads, slice notation, iterators, folds and searches, membership, equality; collecting iterators into arrays |
 | `ScalarArray.X.Lemmas` | lemmas about arrays and slices |
-| `ScalarArray.X.Program` | in-place programs: `InPlace`, `read`, `write`, the loops and `runInPlace` |
+| `ScalarArray.X.Program` | in-place programs: `InPlace`, `read`, `write`, the loops and `runInPlace`; tail programs `InPlace.Tail` and `runInPlaceThen` |
 | `ScalarArray.X.InPlace` | writes through slices and in-place folds, which are in-place programs |
 | `ScalarArray.X.Decidable` | decidable membership, slice hashing; not for `Float32` and `Float64` |
 

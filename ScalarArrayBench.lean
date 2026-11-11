@@ -241,6 +241,25 @@ passes, one `foldlInPlace2Then` for each result.
     (r.2, r.1.1 + r.1.2)
   else (a, 0)
 
+/-- The same one-pass butterfly in the notation, with the carries handed to `then`. -/
+@[noinline] def butterflySyntaxThen (a : UInt64Array) (len : USize) : UInt64Array × UInt64 :=
+  if h : 3 * len.toNat ≤ a.size ∧ (2 * len).toNat = 2 * len.toNat ∧ len.toNat ≤ a.size then
+    have hx : (0 : USize).toNat + len.toNat ≤ a.size := by simp; lia
+    have hy : len.toNat + len.toNat ≤ a.size := by lia
+    have ht : (2 * len).toNat + len.toNat ≤ a.size := by lia
+    inplace a do
+      for j in 0...len with (c := 0) (b := 0) do
+        let x ← a[0 + j]
+        let y ← a[len + j]
+        let s := x + y + c
+        a[0 + j] := s
+        a[2 * len + j] := x - y - b
+        let c := carry x s c
+        let b := borrow x y b
+      return (c, b)
+    then fun (c, b) a _ => (a, c + b)
+  else (a, 0)
+
 /-- `t := x + y` with a carry, on the same windows as the butterflies, with `foldlInPlace2`. -/
 @[noinline] def addFold2 (a : UInt64Array) (len : USize) : UInt64Array × UInt64 :=
   if h : 3 * len.toNat ≤ a.size ∧ (2 * len).toNat = 2 * len.toNat ∧ len.toNat ≤ a.size then
@@ -320,6 +339,14 @@ def extras (rounds n : Nat) : IO (List Row) := do
       butterflies butterflyInPlace a 137 (n / 137),
     ← one "UInt64 butterfly 137, inplace notation" (w.extract 0 411) fun a n =>
       butterflies butterflySyntax a 137 (n / 137),
+    ← one "UInt64 butterfly 137, inplace then" (w.extract 0 411) fun a n =>
+      butterflies butterflySyntaxThen a 137 (n / 137),
+    ← one "UInt64 butterfly 16, InPlace.forIn2" (w.extract 0 48) fun a n =>
+      butterflies butterflyInPlace a 16 (n / 16),
+    ← one "UInt64 butterfly 16, inplace notation" (w.extract 0 48) fun a n =>
+      butterflies butterflySyntax a 16 (n / 16),
+    ← one "UInt64 butterfly 16, inplace then" (w.extract 0 48) fun a n =>
+      butterflies butterflySyntaxThen a 16 (n / 16),
     ← one "UInt64 butterfly n/3, 2× foldlInPlace2Then" w fun a n =>
       butterflies butterflyTwoPass a (n / 3).toUSize 3,
     ← one "UInt64 butterfly n/3, InPlace.forIn2" w fun a n =>

@@ -13,8 +13,8 @@ public meta import Lean.Elab.Tactic
 Experimental: the root module `ScalarArray` doesn't import this one.
 
 `inplace a do …` writes an in-place program (`XArray.InPlace`) on the array `a` in a small
-imperative language, and runs it with `a.runInPlace`, which returns the program's result and the
-new array. It works for all 13 array types:
+imperative language, and runs it, which returns the program's result and the new array, or hands
+them to a continuation `then k`. It works for all 13 array types:
 
 ```
 inplace a do
@@ -51,14 +51,34 @@ inplace a do
 A loop body can assign only its own variables: to update a variable across a loop, carry it, as
 `with (c := c)`.
 
+## Results
+
+`inplace a do …` returns the pair of the program's result and the new array. With `then k` after
+the statements, it is `k x a' h` instead, for the result `x`, the new array `a'` and
+`h : a'.size = a.size`:
+
+```
+inplace a do
+  for j in 0...len with (c := 0) (b := 0) do
+    …
+  return (c, b)
+then fun (c, b) a' h => g c b a' h
+```
+
+The program calls `k` where it ends, inside its last loop if it ends with one, so the result goes
+into no pair, and scalars such as the carries above reach `k` unboxed. `h` lets `k` run another
+program on `a'` with the bounds proved for `a`.
+
 ## Compilation
 
-The program expands to `readThen`, `write`, `bind`, `InPlace.ite`, `InPlace.dite` and the
-`forInBind`, `forIn2Bind`, `forInRevBind` and `forInRev2Bind` loops, so it compiles to the same
-loop as a hand-written program, with the loop variables unboxed, and the loop calls the rest of
-the program itself, so its variables reach it unboxed too. The rest of the program after an `if`
-becomes a local function of the mutable variables, which the compiler turns into a join point: an
-`if` in a loop allocates nothing.
+The program expands to a tail program (`XArray.InPlace.Tail`), run with `a.runInPlaceThen`, which
+ends with `Tail.done x k`, where `k` is the `then` continuation or makes the pair. Its statements
+expand to `readThen`, `writeThen`, `ite`, `dite` and the `forInBind`, `forIn2Bind`, `forInRevBind`
+and `forInRev2Bind` loops, of `Tail` at the top level and of `InPlace` in loop bodies, so it
+compiles to the same loop as a hand-written program, with the loop variables unboxed, and the loop
+calls the rest of the program itself, so its variables reach it unboxed too. The rest of the
+program after an `if` becomes a local function of the mutable variables, which the compiler turns
+into a join point: an `if` in a loop allocates nothing.
 
 ## Bounds
 
@@ -205,10 +225,12 @@ syntax "for " ident " in " (&"reverse ")? termBeforeDo
 syntax "return " term : inplaceStmt
 
 /--
-`inplace a do …` is the in-place program on `a` that the statements describe, run with
-`a.runInPlace`. See the module documentation of `ScalarArray.InPlaceSyntax`.
+`inplace a do …` is the in-place program on `a` that the statements describe, run on `a`: it
+returns the program's result and the new array, or, with `then k`, `k` on them and the new array's
+size. See the module documentation of `ScalarArray.InPlaceSyntax`.
 -/
-syntax (name := inplaceTerm) "inplace " ident " do" inplaceSeq : term
+syntax (name := inplaceTerm) "inplace " ident " do" inplaceSeq (ppDedent(ppLine) "then " term)? :
+  term
 
 open Lean
 
@@ -259,10 +281,10 @@ mutual
 /--
 The program of the statements `stmts` on the array `arr`, ending with `ret`, where `mvars` are the
 mutable variables in scope and `top` says whether the statements end the whole program, where a
-`return` can end them.
+`return e` can end them with `ending e`.
 -/
-private partial def expandSeq (arr : Ident) (mvars : Array Ident) (ret : Term) (top : Bool) :
-    List (TSyntax `inplaceStmt) → MacroM Term
+private partial def expandSeq (arr : Ident) (ending : Term → MacroM Term) (mvars : Array Ident)
+    (ret : Term) (top : Bool) : List (TSyntax `inplaceStmt) → MacroM Term
   | [] => pure ret
   | s :: rest => withRef s do
     if let `(inplaceStmt| return $_) := s then
@@ -270,20 +292,21 @@ private partial def expandSeq (arr : Ident) (mvars : Array Ident) (ret : Term) (
         Macro.throwError "`return` must be the last statement of the program"
       return ← lifting arr s fun s => do
         let `(inplaceStmt| return $e) := s | Macro.throwUnsupported
-        `(.pure $e)
-    lifting arr s fun s => expandStmt arr mvars ret top s rest
+        ending e
+    lifting arr s fun s => expandStmt arr ending mvars ret top s rest
 
 /-- The program of the statement `s` followed by `rest`. -/
-private partial def expandStmt (arr : Ident) (mvars : Array Ident) (ret : Term) (top : Bool)
-    (s : TSyntax `inplaceStmt) (rest : List (TSyntax `inplaceStmt)) : MacroM Term := do
-  let k (mvars : Array Ident) := expandSeq arr mvars ret top rest
+private partial def expandStmt (arr : Ident) (ending : Term → MacroM Term) (mvars : Array Ident)
+    (ret : Term) (top : Bool) (s : TSyntax `inplaceStmt) (rest : List (TSyntax `inplaceStmt)) :
+    MacroM Term := do
+  let k (mvars : Array Ident) := expandSeq arr ending mvars ret top rest
   match s with
   | `(inplaceStmt| let $x:ident ← $a:ident[$i]) =>
     checkArray arr a
     `(.readThen $i (by inplace_bound) fun $x => $(← k mvars))
   | `(inplaceStmt| $a:ident[$i] := $v) =>
     checkArray arr a
-    `(.bind (.write $i (by inplace_bound) $v) fun _ => $(← k mvars))
+    `(.writeThen $i (by inplace_bound) $v $(← k mvars))
   | `(inplaceStmt| let mut $x:ident := $e) =>
     `(let $x:ident := $e; $(← k (mvars.push x)))
   | `(inplaceStmt| let $p := $e) =>
@@ -299,9 +322,9 @@ private partial def expandStmt (arr : Ident) (mvars : Array Ident) (ret : Term) 
     -- The rest of the program, as a function of the mutable variables.
     let kont ← withFreshMacroScope `(kont)
     let call ← if mvars.isEmpty then `($kont ()) else `($kont $mvars*)
-    let t ← expandSeq arr mvars call false t.getElems.toList
+    let t ← expandSeq arr ending mvars call false t.getElems.toList
     let e ← match e with
-      | some e => expandSeq arr mvars call false e.getElems.toList
+      | some e => expandSeq arr ending mvars call false e.getElems.toList
       | none => pure call
     let branch ← match h with
       | some h => `(.dite $c (fun $h => $t) (fun $h => $e))
@@ -316,7 +339,7 @@ private partial def expandStmt (arr : Ident) (mvars : Array Ident) (ret : Term) 
       | _ => Macro.throwErrorAt range "expected a range `lo...hi` or `*...hi`"
     let xs := xs.getD #[]
     let inits := inits.getD #[]
-    let b ← expandSeq arr xs (← `(.pure $(← tuple xs))) false body.getElems.toList
+    let b ← expandSeq arr ending xs (← `(.pure $(← tuple xs))) false body.getElems.toList
     -- The loop calls the rest of the program itself, so its variables reach it unboxed.
     let rest ← k (mvars ++ xs)
     match rev.isSome, xs, inits with
@@ -336,7 +359,12 @@ end
 end
 
 macro_rules
-  | `(inplace $a:ident do $stmts;*) => do
-    let prog ← expandSeq a #[] (← `(.pure ())) true stmts.getElems.toList
+  | `(inplace $a:ident do $stmts;* $[then $k]?) => do
+    -- The program is a tail program, which ends by handing its result and the new array to `k`,
+    -- or by returning them as a pair.
+    let ending (e : Lean.Term) : Lean.MacroM Lean.Term := match k with
+      | some k => `(.done $e $k)
+      | none => `(.done $e fun x a' _ => (x, a'))
+    let prog ← expandSeq a ending #[] (← ending (← `(()))) true stmts.getElems.toList
     `(have : ($a).usize.toNat ≤ ($a).size := ($a).toNat_usize_le
-      ($a).runInPlace $prog)
+      ($a).runInPlaceThen $prog)
