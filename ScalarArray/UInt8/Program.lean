@@ -33,7 +33,8 @@ a continuation `k`, which returns a `γ`, where `run` would return the pair of t
 ends it, `Tail.bind m t` runs an in-place program `m` before it, and `Tail.readThen`,
 `Tail.writeThen`, `Tail.ite`, `Tail.dite` and the loops `Tail.forInBind`, … are those of `InPlace`.
 The continuation runs inside the program's last loop, so its last accumulators reach `k` unboxed,
-and no result pair is built. A tail program runs with `a.runInPlaceThen t` or `t.run a h`.
+and no result pair is built. A tail program runs with `a.runInPlaceThen t`,
+`a.runInPlaceThenOf n h t` or `t.run a h`.
 
 The array is never visible to a program: `InPlace` and its state have private constructors, so the
 only code that touches the state is the code in this module, which passes it on linearly. That is
@@ -1083,6 +1084,22 @@ public def runInPlaceThen {γ : Type u} (a : UInt8Array) (t : InPlace.Tail a.siz
 @[simp] public theorem runInPlaceThen_eq {γ : Type u} (a : UInt8Array)
     (t : InPlace.Tail a.size γ) :
     a.runInPlaceThen t = t.run a rfl := by
+  rfl
+
+/--
+Runs the tail program `t` on `a`, for a size `n` of `a`: `t.run a h`. When `n` is a variable bound
+to `a.size` before the program, the program's types don't mention `a`, so that the compiler doesn't
+keep `a` alive through the program: if it did, the array would no longer be exclusive when the
+program makes it so, and it would be copied. `inplace a do …` runs its programs this way.
+-/
+@[inline, expose]
+public def runInPlaceThenOf {γ : Type u} (a : UInt8Array) (n : Nat) (h : a.size = n)
+    (t : InPlace.Tail n γ) : γ :=
+  t.run a h
+
+@[simp] public theorem runInPlaceThenOf_eq {γ : Type u} (a : UInt8Array) (n : Nat)
+    (h : a.size = n) (t : InPlace.Tail n γ) :
+    a.runInPlaceThenOf n h t = t.run a h := by
   rfl
 
 end UInt8Array

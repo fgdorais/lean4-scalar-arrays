@@ -71,8 +71,11 @@ program on `a'` with the bounds proved for `a`.
 
 ## Compilation
 
-The program expands to a tail program (`XArray.InPlace.Tail`), run with `a.runInPlaceThen`, which
-ends with `Tail.done x k`, where `k` is the `then` continuation or makes the pair. Its statements
+The program expands to a tail program (`XArray.InPlace.Tail`) on arrays of size `n`, run with
+`a.runInPlaceThenOf n h`, where `n` and `a.usize` are bound to variables before the program runs,
+and the program uses them in place of `a.size` and `a.usize`. So nothing in the compiled program
+refers to `a`, which the compiler would otherwise keep alive past the point where the program makes
+the array exclusive, and the array would be copied. The program ends with `Tail.done x k`, where `k` is the `then` continuation or makes the pair. Its statements
 expand to `readThen`, `writeThen`, `ite`, `dite` and the `forInBind`, `forIn2Bind`, `forInRevBind`
 and `forInRev2Bind` loops, of `Tail` at the top level and of `InPlace` in loop bodies, so it
 compiles to the same loop as a hand-written program, with the loop variables unboxed, and the loop
@@ -112,8 +115,11 @@ else UInt64Array.mk (Array.replicate a.size 0)
 
 * `a` is a local variable: the program's array. `let x ← b[i]` and `b[i] := e` on another array
   `b` are errors, while `b[i]` in a term is ordinary indexing of `b`, with its own bound.
-* Inside the program, `a` outside of `a[i]` (as in `a.usize`) is the array before the program runs,
-  which is fine for its size.
+* Inside the program, `a` is the array before the program runs, so it is an error outside of the
+  reads `a[i]` and its size `a.size` or `a.usize`: `a[i]!`, `a[i]'h` or `a.toArray` would read old
+  elements, and keep the old array alive, which copies it. A `have` and the proofs in `by` blocks
+  may use `a`, and so may `then k`, which runs after the program, but `k` keeps the old array alive
+  if it uses more than its size.
 * Reads in terms are written `a[i]`, not `(← a[i])`.
 * A loop has at most two variables, and its range is `lo...hi`, `lo...<hi`, `*...hi` or `*...<hi`.
 * `have` takes a name: `have h : t := p`.
@@ -132,12 +138,31 @@ end ScalarArray.InPlaceSyntax
 public meta section
 
 open Lean Meta in
-/-- Splits the conjunctions in the context of `g`, recursively. -/
-partial def splitAnds (g : MVarId) : MetaM MVarId := g.withContext do
-  for d in ← getLCtx do
-    if !d.isImplementationDetail && (← instantiateMVars d.type).isAppOfArity ``And 2 then
-      let #[s] ← g.cases d.fvarId | return g
-      return ← splitAnds s.mvarId
+/--
+Adds the conjuncts of the conjunctions in the context of `g` to its context, recursively. It adds
+them as new hypotheses, rather than with `cases`, which would revert and reintroduce the
+hypotheses after them, and fails on the `let` variables of an `inplace` program.
+-/
+def splitAnds (g : MVarId) : MetaM MVarId := do
+  let mut g := g
+  let mut todo : Array FVarId := #[]
+  for d in ← g.withContext getLCtx do
+    if !d.isImplementationDetail then todo := todo.push d.fvarId
+  while !todo.isEmpty do
+    let h := todo.back!
+    todo := todo.pop
+    let (g', xs) ← g.withContext do
+      let t ← whnfR (← instantiateMVars (← h.getType))
+      if !t.isAppOfArity ``And 2 then return (g, #[])
+      let mut g := g
+      let mut xs := #[]
+      for (i, ty) in [(0, t.appFn!.appArg!), (1, t.appArg!)] do
+        let (x, g') ← (← g.assert `hand ty (mkProj ``And i (.fvar h))).intro1P
+        g := g'
+        xs := xs.push x
+      return (g, xs)
+    g := g'
+    todo := todo ++ xs
   return g
 
 /-- Splits the conjunctions in context, recursively. -/
@@ -234,11 +259,51 @@ syntax (name := inplaceTerm) "inplace " ident " do" inplaceSeq (ppDedent(ppLine)
 
 open Lean
 
+/--
+The program's array `arr`, and the variables bound to its size `arr.size` and `arr.usize` before
+the program runs, which the program uses in their place, with the proof `hsize : arr.size = size`.
+-/
+private structure Arr where
+  /-- The program's array. -/
+  arr : Ident
+  /-- The variable bound to `arr.size`. -/
+  size : Ident
+  /-- The variable bound to `arr.usize`. -/
+  usize : Ident
+  /-- The proof of `arr.size = size`. -/
+  hsize : Ident
+
 /-- Checks that a read or a write is on the program's array. -/
 private def checkArray (arr a : Ident) : MacroM Unit :=
   unless arr.getId == a.getId do
     Macro.throwErrorAt a
       s!"an `inplace` program on `{arr.getId}` reads and writes only `{arr.getId}`"
+
+/--
+Replaces `a.size` and `a.usize` in the terms of `stx` by the variables bound to them before the
+program, for the program's array `a`, so that the program doesn't keep `a` alive, and, if `strict`,
+rejects every other use of `a` outside of a read `a[i]`: inside the program, `a` is the array before
+the program runs.
+-/
+private partial def replaceArray (p : Arr) (strict : Bool) (stx : Syntax) : MacroM Syntax := do
+  let a := p.arr.getId
+  if let `($b:ident[$i]) := stx then
+    if b.getId == a then
+      return ← `($b:ident[$(⟨← replaceArray p strict i⟩)])
+  match stx with
+  | .ident _ _ id _ =>
+    if id == a ++ `size then return p.size
+    if id == a ++ `usize then return p.usize
+    if strict && (id == a || id.getRoot == a && a.isAtomic) then
+      Macro.throwErrorAt stx s!"inside `inplace {a} do`, `{a}` is the array before the program \
+        runs: read its current elements with `{a}[i]`, at a `USize` index `i`, and its size with \
+        `{a}.size` or `{a}.usize`"
+    return stx
+  | .node info kind args =>
+    -- Nested blocks are statements of their own, and proofs run nothing.
+    if kind == ``inplaceSeq || kind == ``Lean.Parser.Term.byTactic then return stx
+    return .node info kind (← args.mapM (replaceArray p strict))
+  | _ => return stx
 
 /--
 Replaces the reads `a[i]` of the program's array `a` in the terms of `stx` by fresh variables, from
@@ -259,15 +324,36 @@ private partial def liftReads (arr : Ident) (stx : Syntax) :
     return .node info kind (← args.mapM (liftReads arr))
   | _ => return stx
 
+/-- The proof of the bound of an index, `i.toNat < size`, from `i.toNat < arr.size`. -/
+private def bound (p : Arr) : MacroM Term :=
+  `(Nat.lt_of_lt_of_eq (by inplace_bound) $p.hsize)
+
 /-- `k` after the reads `reads`. -/
-private def withReads (reads : Array (Ident × Term)) (k : Term) : MacroM Term :=
-  reads.foldrM (init := k) fun (x, i) k => `(.readThen $i (by inplace_bound) fun $x => $k)
+private def withReads (p : Arr) (reads : Array (Ident × Term)) (k : Term) : MacroM Term :=
+  reads.foldrM (init := k) fun (x, i) k => do `(.readThen $i $(← bound p) fun $x => $k)
+
+/--
+The terms of the statement `s` with `a.size` and `a.usize` replaced and other uses of `a` rejected,
+for the program's array `a`. The array of a read or a write statement, and `have`, whose proof and
+statement are about the array before the program, are left alone.
+-/
+private def replaceStmt (p : Arr) (s : TSyntax `inplaceStmt) : MacroM (TSyntax `inplaceStmt) := do
+  match s with
+  | `(inplaceStmt| let $x:ident ← $b:ident[$i]) =>
+    let i : Term := ⟨← replaceArray p true i⟩
+    `(inplaceStmt| let $x:ident ← $b:ident[$i])
+  | `(inplaceStmt| $b:ident[$i] := $v) =>
+    let i : Term := ⟨← replaceArray p true i⟩
+    let v : Term := ⟨← replaceArray p true v⟩
+    `(inplaceStmt| $b:ident[$i] := $v)
+  | `(inplaceStmt| have $_:ident : $_ := $_) => return s
+  | _ => return ⟨← replaceArray p true s⟩
 
 /-- Runs `f` on the statement `s` with its nested reads lifted, and puts the reads before it. -/
-private def lifting (arr : Ident) (s : TSyntax `inplaceStmt)
+private def lifting (p : Arr) (s : TSyntax `inplaceStmt)
     (f : TSyntax `inplaceStmt → MacroM Term) : MacroM Term := do
-  let (s, reads) ← (liftReads arr s).run #[]
-  withReads reads (← f ⟨s⟩)
+  let (s, reads) ← (liftReads p.arr (← replaceStmt p s)).run #[]
+  withReads p reads (← f ⟨s⟩)
 
 /-- The tuple of the variables `xs`, or `()`. -/
 private def tuple (xs : Array Ident) : MacroM Term :=
@@ -279,34 +365,35 @@ private def tuple (xs : Array Ident) : MacroM Term :=
 mutual
 
 /--
-The program of the statements `stmts` on the array `arr`, ending with `ret`, where `mvars` are the
+The program of the statements `stmts` on the array `p.arr`, ending with `ret`, where `mvars` are the
 mutable variables in scope and `top` says whether the statements end the whole program, where a
 `return e` can end them with `ending e`.
 -/
-private partial def expandSeq (arr : Ident) (ending : Term → MacroM Term) (mvars : Array Ident)
+private partial def expandSeq (p : Arr) (ending : Term → MacroM Term) (mvars : Array Ident)
     (ret : Term) (top : Bool) : List (TSyntax `inplaceStmt) → MacroM Term
   | [] => pure ret
   | s :: rest => withRef s do
     if let `(inplaceStmt| return $_) := s then
       unless rest.isEmpty && top do
         Macro.throwError "`return` must be the last statement of the program"
-      return ← lifting arr s fun s => do
+      return ← lifting p s fun s => do
         let `(inplaceStmt| return $e) := s | Macro.throwUnsupported
         ending e
-    lifting arr s fun s => expandStmt arr ending mvars ret top s rest
+    lifting p s fun s => expandStmt p ending mvars ret top s rest
 
 /-- The program of the statement `s` followed by `rest`. -/
-private partial def expandStmt (arr : Ident) (ending : Term → MacroM Term) (mvars : Array Ident)
+private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars : Array Ident)
     (ret : Term) (top : Bool) (s : TSyntax `inplaceStmt) (rest : List (TSyntax `inplaceStmt)) :
     MacroM Term := do
-  let k (mvars : Array Ident) := expandSeq arr ending mvars ret top rest
+  let arr := p.arr
+  let k (mvars : Array Ident) := expandSeq p ending mvars ret top rest
   match s with
   | `(inplaceStmt| let $x:ident ← $a:ident[$i]) =>
     checkArray arr a
-    `(.readThen $i (by inplace_bound) fun $x => $(← k mvars))
+    `(.readThen $i $(← bound p) fun $x => $(← k mvars))
   | `(inplaceStmt| $a:ident[$i] := $v) =>
     checkArray arr a
-    `(.writeThen $i (by inplace_bound) $v $(← k mvars))
+    `(.writeThen $i $(← bound p) $v $(← k mvars))
   | `(inplaceStmt| let mut $x:ident := $e) =>
     `(let $x:ident := $e; $(← k (mvars.push x)))
   | `(inplaceStmt| let $p := $e) =>
@@ -322,9 +409,9 @@ private partial def expandStmt (arr : Ident) (ending : Term → MacroM Term) (mv
     -- The rest of the program, as a function of the mutable variables.
     let kont ← withFreshMacroScope `(kont)
     let call ← if mvars.isEmpty then `($kont ()) else `($kont $mvars*)
-    let t ← expandSeq arr ending mvars call false t.getElems.toList
+    let t ← expandSeq p ending mvars call false t.getElems.toList
     let e ← match e with
-      | some e => expandSeq arr ending mvars call false e.getElems.toList
+      | some e => expandSeq p ending mvars call false e.getElems.toList
       | none => pure call
     let branch ← match h with
       | some h => `(.dite $c (fun $h => $t) (fun $h => $e))
@@ -339,7 +426,7 @@ private partial def expandStmt (arr : Ident) (ending : Term → MacroM Term) (mv
       | _ => Macro.throwErrorAt range "expected a range `lo...hi` or `*...hi`"
     let xs := xs.getD #[]
     let inits := inits.getD #[]
-    let b ← expandSeq arr ending xs (← `(.pure $(← tuple xs))) false body.getElems.toList
+    let b ← expandSeq p ending xs (← `(.pure $(← tuple xs))) false body.getElems.toList
     -- The loop calls the rest of the program itself, so its variables reach it unboxed.
     let rest ← k (mvars ++ xs)
     match rev.isSome, xs, inits with
@@ -360,11 +447,25 @@ end
 
 macro_rules
   | `(inplace $a:ident do $stmts;* $[then $k]?) => do
+    -- The program's size `n` is a variable bound before it runs, and so are `a.size` and
+    -- `a.usize` in it: then nothing in the program refers to `a`, which the compiler would
+    -- otherwise keep alive past `ensureExclusive`, and copy.
+    let p : Arr :=
+      { arr := a, size := Lean.mkIdent (← Lean.Macro.addMacroScope `n),
+        usize := Lean.mkIdent (← Lean.Macro.addMacroScope `usize),
+        hsize := Lean.mkIdent (← Lean.Macro.addMacroScope `hsize) }
+    let size := p.size
     -- The program is a tail program, which ends by handing its result and the new array to `k`,
     -- or by returning them as a pair.
     let ending (e : Lean.Term) : Lean.MacroM Lean.Term := match k with
-      | some k => `(.done $e $k)
+      | some k => do
+        let k : Lean.Term := ⟨← replaceArray p false k⟩
+        `(.done $e fun x a' h =>
+          ($k : _ → (a'' : type_of% $a) → a''.size = ($a).size → _) x a' (h.trans (Eq.symm $p.hsize)))
       | none => `(.done $e fun x a' _ => (x, a'))
-    let prog ← expandSeq a ending #[] (← ending (← `(()))) true stmts.getElems.toList
-    `(have : ($a).usize.toNat ≤ ($a).size := ($a).toNat_usize_le
-      ($a).runInPlaceThen $prog)
+    let prog ← expandSeq p ending #[] (← ending (← `(()))) true stmts.getElems.toList
+    -- They are bound by a function application, not by `let`, which fails to elaborate when the
+    -- program has metavariables left for later, such as the types of loop variables.
+    `((fun ($size : Nat) ($p.hsize : ($a).size = $size) ($p.usize : USize)
+          (_ : ($p.usize).toNat ≤ ($a).size) => ($a).runInPlaceThenOf $size $p.hsize $prog)
+        ($a).size rfl ($a).usize ($a).toNat_usize_le)
