@@ -10,6 +10,7 @@ public import ScalarArray.USize.Slice
 public import ScalarArray.USize.Lemmas
 public import ScalarArray.USize.Program
 public import ScalarArray.USize.InPlace
+public import ScalarArray.USize.Stride
 public import ScalarArray.USize.Decidable
 
 /-!

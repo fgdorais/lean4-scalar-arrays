@@ -109,10 +109,38 @@ private theorem toNat_add_one_of_lt {i stop : USize} (h : i < stop) :
   have := stop.toNat_lt_size
   rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]
 
+/-- `i + 1` doesn't wrap around when `i.toNat < stop.toNat`. -/
+private theorem toNat_add_one_of_toNat_lt {i stop : USize} (h : i.toNat < stop.toNat) :
+    (i + 1).toNat = i.toNat + 1 :=
+  toNat_add_one_of_lt (USize.lt_iff_toNat_lt.2 h)
+
+/-- The index `off + j` of a window of `len` elements at `off`, within `n < USize.size`, doesn't wrap
+around for `j < len`. -/
+private theorem toNat_add_of_window {off len j : USize} {n : Nat} (hn : n < USize.size)
+    (hw : off.toNat + len.toNat ≤ n) (hj : j.toNat < len.toNat) :
+    (off + j).toNat = off.toNat + j.toNat := by
+  rw [USize.toNat_add, Nat.mod_eq_of_lt (by lia)]
+
+/-- `m.toUSize` is `m` for `m < USize.size`. -/
+private theorem toNat_toUSize_of_lt {m : Nat} (h : m < USize.size) : m.toUSize.toNat = m := by
+  rw [Nat.toUSize_eq, USize.toNat_ofNat', Nat.mod_eq_of_lt h]
+
+/-- `x + y * z` doesn't wrap around when its value is less than `USize.size`. -/
+private theorem toNat_add_mul_of_lt {x y z : USize}
+    (h : x.toNat + y.toNat * z.toNat < USize.size) :
+    (x + y * z).toNat = x.toNat + y.toNat * z.toNat := by
+  rw [USize.toNat_add, USize.toNat_mul, Nat.mod_eq_of_lt (a := y.toNat * z.toNat) (by lia),
+    Nat.mod_eq_of_lt h]
+
 /-- `i - 1` doesn't wrap around when `j < i`. -/
 private theorem toNat_sub_one_of_lt {i j : USize} (h : j < i) : (i - 1).toNat = i.toNat - 1 := by
   have := USize.lt_iff_toNat_lt.1 h
   rw [USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 (by simp; lia)), USize.toNat_one]
+
+/-- `i - 1 < i` when `j < i`. -/
+private theorem toNat_sub_one_lt_of_lt {i j : USize} (h : j < i) : (i - 1).toNat < i.toNat := by
+  have := USize.lt_iff_toNat_lt.1 h
+  rw [toNat_sub_one_of_lt h]; lia
 
 /-- `j + 1` is at most one more than `j`, even when it wraps around. -/
 private theorem toNat_add_one_le (j : USize) : (j + 1).toNat ≤ j.toNat + 1 := by

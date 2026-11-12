@@ -32,4 +32,9 @@ All of them live in the `ScalarArray` namespace and share the same API.
 `ScalarArray.Conversions`, which this module imports, converts `UInt8Array` and `Float64Array` to
 and from core's `ByteArray` and `FloatArray` without copying. The experimental `ScalarArray.Bytes`
 converts the arrays to and from bytes in a chosen byte order; import it on its own.
+
+`ScalarArray.Stride` holds the parts of loop specifications that name no element type: strides
+`off + inc * i`, and `iterRange` and `iterRangeRev`, the models of loops up and down. Each array's
+`modifyAt` updates the elements at a map of indices, and the whole-loop lemmas of its
+`InPlace.Tail` run a loop to these models.
 -/
