@@ -10,6 +10,7 @@ public import ScalarArray.Int64.Slice
 public import ScalarArray.Int64.Lemmas
 public import ScalarArray.Int64.Program
 public import ScalarArray.Int64.InPlace
+public import ScalarArray.Int64.Stride
 public import ScalarArray.Int64.Decidable
 
 /-!

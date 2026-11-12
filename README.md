@@ -92,6 +92,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | In-place folds | `Slice.foldlInPlace`, `Slice.foldrInPlace` and their `Then` forms; `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
 | In-place programs | `XArray.InPlace n α`, a monad of programs that read and write an array of size `n` in place: `InPlace.read`, `readThen`, `write`, `InPlace.ite`, `InPlace.dite`; the loops `forIn lo hi` and `forInRev lo hi` (from `hi - 1` down to `lo`), whose bodies get both `lo ≤ j` and `j < hi`, `forIn2` and `forInRev2` with two unboxed accumulators, and their `Bind` forms (`forInBind`, …), which run straight into the rest of the program; run with `a.runInPlace m` or `m.run a h`, or a single loop with `runForInThen`, `runForInRevThen` and `runForIn2Then`. Tail programs `InPlace.Tail n γ` end by handing their result and the new array to a continuation, without a result pair: `Tail.bind`, `readThen`, `writeThen`, `Tail.ite`, `Tail.dite`, the `Bind` loops and `Tail.done x k`, and loops in continuation-passing style `Tail.forIn`, `Tail.forInRev` and their forms with two to four variables (`Tail.forIn2`, …), whose body ends by calling `next`, so that nested loops allocate nothing; run with `a.runInPlaceThen t`. For kernels that no fold shape covers, such as a butterfly that writes two windows with two carries |
 | `inplace` notation | In the experimental `ScalarArray.InPlaceSyntax`: `inplace a do …`, an in-place program on `a` written with reads `let x ← a[i]` (or `a[i]` in any term), writes `a[i] := e`, `let`, `let mut` and `x := e`, `have`, `if … then … else …`, loops `for j in lo...hi with (x := init) … do …` with up to four unboxed variables and `for j in reverse lo...hi …`, and `return e`, and an optional `then k` that hands the result and the new array to `k` with no result pair; it compiles to the same loops as hand-written programs, and the tactic `inplace_bound` proves the index bounds, including `USize` arithmetic such as `j - 17` |
+| Loop specifications | `modifyAt idx lo hi g`, which writes `g i a[idx i]` at the index `idx i` for each step `i` of a range, the model of a loop over a map of indices, with `getElem_modifyAt_idx` and `getElem_modifyAt_of_forall_ne`; `ScalarArray.Stride`, the strides `off + inc * i`, with `Stride.Fits` and `toNat_idx_toUSize` for their `USize` indices; `ScalarArray.iterRange` and `iterRangeRev`, the models of loops up and down; whole-loop lemmas for tail programs, `Tail.run_forInFrom` and `Tail.run_forInRevFrom` for a loop whose step maps its variable and the array, `_unit` for a loop with no variable, such as a loop of loops, and `_modify` and `_write` for the loops `for j in lo...hi do a[e j] := …` of the `inplace` notation |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array, and `Std.Iter.toXSlice` for the rest of a slice iterator as a slice, whose `start` is its position |
 | Equality     | `a == b` and `s == t`; for integer types also `DecidableEq` (`decEq`), `Hashable` (`hash`), and for slices `Hashable` (`Slice.hash`), `EquivBEq` and `LawfulHashable` |
 | Linearity    | `markLinear`, `propagateMark`                                               |
@@ -184,6 +185,32 @@ The result is a pair of the program's result and the new array. A program can in
 built, and the carries reach `k` unboxed. With `return (c, b)` above,
 `then fun (c, b) a' h => g c b a' h` calls `g` with `h : a'.size = a.size`.
 
+The whole-loop lemmas of `InPlace.Tail` prove what such a loop does. Here a loop doubles the
+elements at the first `n` steps of a stride `s`, such as a column of a matrix, and
+`run_forInFrom_modify` turns it into `modifyAt`, whose lemmas give each element:
+
+```lean
+def double (a : Float64Array) (s : Stride) (n : USize) (h : s.Fits n.toNat a.size)
+    (hs : a.size < USize.size) : Float64Array :=
+  let o := s.off.toUSize
+  let c := s.inc.toUSize
+  (inplace a do
+    for k in 0...n do
+      have hk : (o + c * k).toNat < a.size := s.toNat_idx_toUSize_lt h hs (by assumption)
+      a[o + c * k] := 2 * a[o + c * k]).2
+
+theorem double_eq (a : Float64Array) (s : Stride) (n : USize) (h : s.Fits n.toNat a.size)
+    (hs : a.size < USize.size) :
+    double a s n h hs = a.modifyAt s.idx 0 n.toNat fun _ v => 2 * v := by
+  simp only [double, Float64Array.runInPlaceThenOf_eq, Float64Array.InPlace.Tail.forIn_eq]
+  rw [Float64Array.InPlace.Tail.run_forInFrom_modify (idx := s.idx) (G := fun _ v => 2 * v)
+    (he := fun _ _ hk => s.toNat_idx_toUSize h hs hk) (hg := fun _ _ _ _ => rfl)]
+  simp
+```
+
+The loop computes `o` and `c` once, before it starts, and runs as fast as the contiguous loop
+`a[k] := 2 * a[k]` at stride `1`.
+
 Equality on the integer types compares the arrays' memory with `memcmp`, and their hash agrees
 with the hash of `toArray`. `Float32Array` and `Float64Array` compare elements with floating-point
 `==`, like `Array Float`, so they have no `DecidableEq` or `Hashable` instance: `NaN` is not equal
@@ -250,9 +277,12 @@ Each type `X` has a module `ScalarArray.X`, which imports its parts:
 | `ScalarArray.X.Lemmas` | lemmas about arrays and slices |
 | `ScalarArray.X.Program` | in-place programs: `InPlace`, `read`, `write`, the loops and `runInPlace`; tail programs `InPlace.Tail` and `runInPlaceThen` |
 | `ScalarArray.X.InPlace` | writes through slices and in-place folds, which are in-place programs |
+| `ScalarArray.X.Stride` | updates at index maps (`modifyAt`) and whole-loop lemmas for tail programs |
 | `ScalarArray.X.Decidable` | decidable membership, slice hashing; not for `Float32` and `Float64` |
 
-The tests in `ScalarArrayTest.X` are split the same way.
+The tests in `ScalarArrayTest.X` are split the same way. `ScalarArray.Stride` holds the parts of
+loop specifications that name no element type: strides and the models `iterRange` and
+`iterRangeRev`.
 
 `lake exe bench` times the main operations of `UInt8Array`, `UInt32Array`, `UInt64Array` and
 `Float64Array`, and compares each with the same operation on core's `ByteArray`, `Array` or

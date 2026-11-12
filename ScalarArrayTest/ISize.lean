@@ -10,4 +10,5 @@ import ScalarArrayTest.ISize.Slice
 import ScalarArrayTest.ISize.Lemmas
 import ScalarArrayTest.ISize.Program
 import ScalarArrayTest.ISize.InPlace
+import ScalarArrayTest.ISize.Stride
 import ScalarArrayTest.ISize.Decidable

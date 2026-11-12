@@ -5,6 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import ScalarArray.Float32.Lemmas
+import all ScalarArray.Internal
 import all ScalarArray.Float32.Basic
 import all ScalarArray.Float32.Lemmas
 
@@ -170,21 +171,10 @@ public def run (m : InPlace n α) (a : Float32Array) (h : a.size = n) : α × Fl
 
 /-! ## Loops -/
 
-private theorem toNat_succ_of_lt {j len : USize} (h : j < len) : (j + 1).toNat = j.toNat + 1 := by
-  have h1 := USize.lt_iff_toNat_lt.1 h
-  have h2 := USize.toNat_lt_size len
-  rw [USize.toNat_add, USize.toNat_one]
-  exact Nat.mod_eq_of_lt (by have : USize.size = 2 ^ System.Platform.numBits := rfl; lia)
-
-private theorem lt_succ_of_lt {j len : USize} (h : j < len) :
-    len.toNat - (j + 1).toNat < len.toNat - j.toNat := by
-  have := USize.lt_iff_toNat_lt.1 h
-  rw [toNat_succ_of_lt h]; lia
-
 /-- The index of a step of `forIn`: `lo ≤ j + 1` when `lo ≤ j < hi`. -/
 public theorem forIn_le_succ {lo j hi : USize} (h : lo.toNat ≤ j.toNat) (hj : j < hi) :
     lo.toNat ≤ (j + 1).toNat := by
-  rw [toNat_succ_of_lt hj]; lia
+  rw [toNat_add_one_of_lt hj]; lia
 
 /-- The loop of `forInFrom`: the next step is at `j + 1`, while `j < hi`. -/
 @[specialize]
@@ -197,7 +187,7 @@ private def forUp.loop (lo hi : USize)
   else
     (b, s)
 termination_by hi.toNat - j.toNat
-decreasing_by exact lt_succ_of_lt hj
+decreasing_by exact sub_toNat_add_one_lt hj
 
 /--
 Runs `body j hlo hj b` for each `j` from `j₀` up to `hi - 1`, threading the accumulator `b` from
@@ -233,7 +223,7 @@ private def forUp2.loop {β₁ : Type v} {β₂ : Type w} (lo hi : USize)
   else
     ((b₁, b₂), s)
 termination_by hi.toNat - j.toNat
-decreasing_by exact lt_succ_of_lt hj
+decreasing_by exact sub_toNat_add_one_lt hj
 
 /-- `forInFrom` with two accumulators. It is specified by `forIn2From_eq`. -/
 @[inline]
@@ -271,12 +261,6 @@ public theorem forInRev_le_pred {lo j : USize} (h : lo < j) : lo.toNat ≤ (j - 
     USize.toNat_one]
   lia
 
-private theorem forInRev_pred_lt_self {lo j : USize} (h : lo < j) : (j - 1).toNat < j.toNat := by
-  have := USize.lt_iff_toNat_lt.1 h
-  rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le, USize.toNat_one]; lia),
-    USize.toNat_one]
-  lia
-
 /-- The loop of `forInRevFrom`: the next step is at `j - 1`, while `lo < j`. -/
 @[specialize]
 private def forDown.loop (lo hi : USize)
@@ -289,7 +273,7 @@ private def forDown.loop (lo hi : USize)
   else
     (b, s)
 termination_by j.toNat
-decreasing_by exact forInRev_pred_lt_self h
+decreasing_by exact toNat_sub_one_lt_of_lt h
 
 /--
 Runs `body j hlo hj b` for each `j` from `j₀ - 1` down to `lo`, threading the accumulator `b`
@@ -326,7 +310,7 @@ private def forDown2.loop {β₁ : Type v} {β₂ : Type w} (lo hi : USize)
   else
     ((b₁, b₂), s)
 termination_by j.toNat
-decreasing_by exact forInRev_pred_lt_self h
+decreasing_by exact toNat_sub_one_lt_of_lt h
 
 /-- `forInRevFrom` with two accumulators. It is specified by `forInRev2From_eq`. -/
 @[inline]
@@ -522,7 +506,7 @@ public theorem forIn2From_eq_forInFrom {β₁ : Type v} {β₂ : Type w} (lo hi 
   · congr 1; funext b; exact forIn2From_eq_forInFrom lo hi (j + 1) _ b.1 b.2 body
   · rfl
 termination_by hi.toNat - j.toNat
-decreasing_by exact lt_succ_of_lt ‹j < hi›
+decreasing_by exact sub_toNat_add_one_lt ‹j < hi›
 
 /-- `forIn2` is `forIn` on the pair of accumulators. -/
 public theorem forIn2_eq_forIn {β₁ : Type v} {β₂ : Type w} (lo hi : USize) (init₁ : β₁)
@@ -619,7 +603,7 @@ public theorem forInRev2From_eq_forInRevFrom {β₁ : Type v} {β₂ : Type w} (
   · congr 1; funext b; exact forInRev2From_eq_forInRevFrom lo hi (j - 1) _ b.1 b.2 body
   · rfl
 termination_by j.toNat
-decreasing_by exact forInRev_pred_lt_self ‹_›
+decreasing_by exact toNat_sub_one_lt_of_lt ‹_›
 
 /-- `forInRev2` is `forInRev` on the pair of accumulators. -/
 public theorem forInRev2_eq_forInRev {β₁ : Type v} {β₂ : Type w} (lo hi : USize) (init₁ : β₁)
@@ -643,7 +627,7 @@ private def forUp.loopThen {γ : Type w} (lo hi : USize)
   else
     k b s
 termination_by hi.toNat - j.toNat
-decreasing_by exact lt_succ_of_lt hj
+decreasing_by exact sub_toNat_add_one_lt hj
 
 private theorem forUp_loopThen_eq {γ : Type w} (lo hi : USize)
     (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β)
@@ -655,7 +639,7 @@ private theorem forUp_loopThen_eq {γ : Type w} (lo hi : USize)
   · exact forUp_loopThen_eq lo hi body (j + 1) _ _ _ k
   · rfl
 termination_by hi.toNat - j.toNat
-decreasing_by exact lt_succ_of_lt ‹_›
+decreasing_by exact sub_toNat_add_one_lt ‹_›
 
 /--
 Runs `forIn lo hi init body` on `a`, then `g` on the last accumulator and the new array, which the
@@ -691,7 +675,7 @@ private def forDown.loopThen {γ : Type w} (lo hi : USize)
   else
     k b s
 termination_by j.toNat
-decreasing_by exact forInRev_pred_lt_self h
+decreasing_by exact toNat_sub_one_lt_of_lt h
 
 private theorem forDown_loopThen_eq {γ : Type w} (lo hi : USize)
     (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β → InPlace n β)
@@ -703,7 +687,7 @@ private theorem forDown_loopThen_eq {γ : Type w} (lo hi : USize)
   · exact forDown_loopThen_eq lo hi body (j - 1) _ _ _ k
   · rfl
 termination_by j.toNat
-decreasing_by exact forInRev_pred_lt_self ‹_›
+decreasing_by exact toNat_sub_one_lt_of_lt ‹_›
 
 /-- `runForInThen` for `forInRev`. -/
 @[inline]
@@ -738,7 +722,7 @@ private def forUp2.loopThen {β₁ : Type v} {β₂ : Type w} {γ : Type u} (lo 
   else
     k b₁ b₂ s
 termination_by hi.toNat - j.toNat
-decreasing_by exact lt_succ_of_lt hj
+decreasing_by exact sub_toNat_add_one_lt hj
 
 private theorem forUp2_loopThen_eq {β₁ : Type v} {β₂ : Type w} {γ : Type u} (lo hi : USize)
     (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β₁ → β₂ →
@@ -753,7 +737,7 @@ private theorem forUp2_loopThen_eq {β₁ : Type v} {β₂ : Type w} {γ : Type 
   · exact forUp2_loopThen_eq lo hi body (j + 1) _ _ _ _ k
   · rfl
 termination_by hi.toNat - j.toNat
-decreasing_by exact lt_succ_of_lt ‹_›
+decreasing_by exact sub_toNat_add_one_lt ‹_›
 
 /-- `runForInThen` for `forIn2`, with the two accumulators handed to `g` apart. -/
 @[inline]
@@ -849,7 +833,7 @@ private def forDown2.loopThen {β₁ : Type v} {β₂ : Type w} {γ : Type u} (l
   else
     k b₁ b₂ s
 termination_by j.toNat
-decreasing_by exact forInRev_pred_lt_self h
+decreasing_by exact toNat_sub_one_lt_of_lt h
 
 private theorem forDown2_loopThen_eq {β₁ : Type v} {β₂ : Type w} {γ : Type u} (lo hi : USize)
     (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat → β₁ → β₂ →
@@ -864,7 +848,7 @@ private theorem forDown2_loopThen_eq {β₁ : Type v} {β₂ : Type w} {γ : Typ
   · exact forDown2_loopThen_eq lo hi body (j - 1) _ _ _ _ k
   · rfl
 termination_by j.toNat
-decreasing_by exact forInRev_pred_lt_self ‹_›
+decreasing_by exact toNat_sub_one_lt_of_lt ‹_›
 
 /-- `forIn2Bind` for `forInRev2`. -/
 @[inline]
@@ -991,7 +975,7 @@ private def forUpK.loop {β : Type v}
   else
     (k b).fn s
 termination_by hi.toNat - j.toNat
-decreasing_by exact lt_succ_of_lt hj
+decreasing_by exact sub_toNat_add_one_lt hj
 
 /-- `Tail.forIn` from `j₀` instead of `lo`. It is specified by `Tail.forInFrom_eq`. -/
 @[inline]
@@ -1036,7 +1020,7 @@ private def forDownK.loop {β : Type v}
   else
     (k b).fn s
 termination_by j.toNat
-decreasing_by exact forInRev_pred_lt_self h
+decreasing_by exact toNat_sub_one_lt_of_lt h
 
 /--
 `Tail.forInRev` from `j₀ - 1` down to `lo` instead of from `hi - 1`. It is specified by
@@ -1075,7 +1059,7 @@ private def forUpK2.loop {β₁ : Type v₁} {β₂ : Type v₂}
   else
     (k b₁ b₂).fn s
 termination_by hi.toNat - j.toNat
-decreasing_by exact lt_succ_of_lt hj
+decreasing_by exact sub_toNat_add_one_lt hj
 
 /-- `Tail.forIn2` from `j₀` instead of `lo`. It is specified by `Tail.forIn2From_eq`. -/
 @[inline]
@@ -1112,7 +1096,7 @@ private def forDownK2.loop {β₁ : Type v₁} {β₂ : Type v₂}
   else
     (k b₁ b₂).fn s
 termination_by j.toNat
-decreasing_by exact forInRev_pred_lt_self h
+decreasing_by exact toNat_sub_one_lt_of_lt h
 
 /--
 `Tail.forInRev2` from `j₀ - 1` down to `lo` instead of from `hi - 1`. It is specified by
@@ -1151,7 +1135,7 @@ private def forUpK3.loop {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v
   else
     (k b₁ b₂ b₃).fn s
 termination_by hi.toNat - j.toNat
-decreasing_by exact lt_succ_of_lt hj
+decreasing_by exact sub_toNat_add_one_lt hj
 
 /-- `Tail.forIn3` from `j₀` instead of `lo`. It is specified by `Tail.forIn3From_eq`. -/
 @[inline]
@@ -1188,7 +1172,7 @@ private def forDownK3.loop {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type
   else
     (k b₁ b₂ b₃).fn s
 termination_by j.toNat
-decreasing_by exact forInRev_pred_lt_self h
+decreasing_by exact toNat_sub_one_lt_of_lt h
 
 /--
 `Tail.forInRev3` from `j₀ - 1` down to `lo` instead of from `hi - 1`. It is specified by
@@ -1227,7 +1211,7 @@ private def forUpK4.loop {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v
   else
     (k b₁ b₂ b₃ b₄).fn s
 termination_by hi.toNat - j.toNat
-decreasing_by exact lt_succ_of_lt hj
+decreasing_by exact sub_toNat_add_one_lt hj
 
 /-- `Tail.forIn4` from `j₀` instead of `lo`. It is specified by `Tail.forIn4From_eq`. -/
 @[inline]
@@ -1264,7 +1248,7 @@ private def forDownK4.loop {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type
   else
     (k b₁ b₂ b₃ b₄).fn s
 termination_by j.toNat
-decreasing_by exact forInRev_pred_lt_self h
+decreasing_by exact toNat_sub_one_lt_of_lt h
 
 /--
 `Tail.forInRev4` from `j₀ - 1` down to `lo` instead of from `hi - 1`. It is specified by

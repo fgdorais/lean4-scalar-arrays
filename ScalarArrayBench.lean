@@ -270,6 +270,24 @@ passes, one `foldlInPlace2Then` for each result.
       fun _ _ x y c => let s := x + y + c; (s, carry x s c)
   else (a, 0)
 
+/-- Doubles the elements at the first `m` steps of the stride `s`, with the `inplace` notation. -/
+@[noinline] def doubleStride (a : Float64Array) (s : Stride) (m : USize) : Float64Array :=
+  if h : s.Fits m.toNat a.size ∧ a.size < USize.size then
+    let o := s.off.toUSize
+    let c := s.inc.toUSize
+    (inplace a do
+      for k in 0...m do
+        have hk : (o + c * k).toNat < a.size := s.toNat_idx_toUSize_lt h.1 h.2 (by assumption)
+        a[o + c * k] := 2 * a[o + c * k]).2
+  else a
+
+/-- `doubleStride` on all the elements, as a contiguous loop. -/
+@[noinline] def doubleAll (a : Float64Array) : Float64Array :=
+  have := a.toNat_usize_le
+  (inplace a do
+    for k in 0...a.usize do
+      a[k] := 2 * a[k]).2
+
 /-- Runs a butterfly on windows of `len` limbs `reps` times, and returns a checksum. -/
 @[inline] def butterflies (k : UInt64Array → USize → UInt64Array × UInt64) (a : UInt64Array)
     (len : USize) (reps : Nat) : UInt64 := Id.run do
@@ -289,6 +307,7 @@ def extras (rounds n : Nat) : IO (List Row) := do
   let a : UInt32Array := build n
   let bytes := a.toBytesLE
   let w : UInt64Array := build n
+  let f : Float64Array := build n
   let one {α : Type} (name : String) (x : α) (f : α → Nat → UInt64) : IO Row := do
     return { name, time := ← time rounds n (f x), core := none }
   return [
@@ -346,6 +365,15 @@ def extras (rounds n : Nat) : IO (List Row) := do
           tot := t
         return tot
       r.1,
+    -- Ten passes over one array, so that only the first copies it.
+    ← one "Float64 double ×10, contiguous inplace loop" f fun a _ =>
+      (Nat.fold 10 (fun _ _ a => doubleAll a) a).size.toUInt64,
+    ← one "Float64 double ×10, stride 1" f fun a n =>
+      (Nat.fold 10 (fun _ _ a => doubleStride a ⟨0, 1⟩ n.toUSize) a).size.toUInt64,
+    ← one "Float64 double ×10, stride 2" f fun a n =>
+      (Nat.fold 10 (fun _ _ a => doubleStride a ⟨0, 2⟩ (n / 2).toUSize) a).size.toUInt64,
+    ← one "Float64 double ×10, stride 8" f fun a n =>
+      (Nat.fold 10 (fun _ _ a => doubleStride a ⟨0, 8⟩ (n / 8).toUSize) a).size.toUInt64,
     -- lean4-mpn's FFT residues are windows of about 137 limbs.
     ← one "UInt64 add 137, foldlInPlace2" (w.extract 0 411) fun a n =>
       butterflies addFold2 a 137 (n / 137),

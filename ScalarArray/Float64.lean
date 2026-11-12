@@ -10,6 +10,7 @@ public import ScalarArray.Float64.Slice
 public import ScalarArray.Float64.Lemmas
 public import ScalarArray.Float64.Program
 public import ScalarArray.Float64.InPlace
+public import ScalarArray.Float64.Stride
 
 /-!
 # Arrays of `Float`
