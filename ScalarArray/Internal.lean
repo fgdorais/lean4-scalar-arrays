@@ -99,8 +99,8 @@ end Raw
 -- Lets `grind` reason about `USize` arithmetic, which is modulo `2 ^ System.Platform.numBits`: the
 -- case split `numBits = 32 ∨ numBits = 64` gives the modulus its two possible values. Index bounds
 -- and steps such as `(i + 1).toNat = i.toNat + 1` for `i < stop` are then proved by `grind` where
--- they are needed.
-scoped grind_pattern System.Platform.numBits_eq => System.Platform.numBits
+-- they are needed. The pattern is global, so it also applies to code that imports `ScalarArray`.
+grind_pattern System.Platform.numBits_eq => System.Platform.numBits
 
 -- The measures of the loops stay lemmas, for build time: `decreasing_by grind` costs about 0.25 s
 -- per loop, half of it in the kernel, and more than doubled the time of each `Program` module.
