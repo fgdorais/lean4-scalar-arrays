@@ -120,8 +120,7 @@ the bound that `read` and `write` need in a loop over a window.
 -/
 public theorem toNat_add_lt_of_window {off len j : USize} (hw : off.toNat + len.toNat ≤ n)
     (hj : j.toNat < len.toNat) : (off + j).toNat < n := by
-  rw [USize.toNat_add]
-  exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) (by lia)
+  grind
 
 @[inline]
 private unsafe def writeImpl (i : USize) (_h : i.toNat < n) (v : UInt64) :
@@ -174,7 +173,7 @@ public def run (m : InPlace n α) (a : UInt64Array) (h : a.size = n) : α × UIn
 /-- The index of a step of `forIn`: `lo ≤ j + 1` when `lo ≤ j < hi`. -/
 public theorem forIn_le_succ {lo j hi : USize} (h : lo.toNat ≤ j.toNat) (hj : j < hi) :
     lo.toNat ≤ (j + 1).toNat := by
-  rw [toNat_add_one_of_lt hj]; lia
+  grind
 
 /-- The loop of `forInFrom`: the next step is at `j + 1`, while `j < hi`. -/
 @[specialize]
@@ -249,17 +248,11 @@ public def forIn2 {β₁ : Type v} {β₂ : Type w} (lo hi : USize) (init₁ : �
 /-- The index of a step of `forInRev`: `j - 1 < hi` when `lo < j ≤ hi`. -/
 public theorem forInRev_pred_lt {lo hi j : USize} (hj : j.toNat ≤ hi.toNat) (h : lo < j) :
     (j - 1).toNat < hi.toNat := by
-  have := USize.lt_iff_toNat_lt.1 h
-  rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le, USize.toNat_one]; lia),
-    USize.toNat_one]
-  lia
+  grind
 
 /-- The index of a step of `forInRev`: `lo ≤ j - 1` when `lo < j`. -/
 public theorem forInRev_le_pred {lo j : USize} (h : lo < j) : lo.toNat ≤ (j - 1).toNat := by
-  have := USize.lt_iff_toNat_lt.1 h
-  rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le, USize.toNat_one]; lia),
-    USize.toNat_one]
-  lia
+  grind
 
 /-- The loop of `forInRevFrom`: the next step is at `j - 1`, while `lo < j`. -/
 @[specialize]

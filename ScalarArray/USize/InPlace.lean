@@ -295,9 +295,10 @@ private theorem run_foldlInPlaceProg {β : Type v} (start len : USize) (N m : Na
     have hjm : j.toNat < m := hm ▸ hjl'
     rw [dite_eq_left_of_eq_true (eq_true hjl), dite_eq_left_of_eq_true (eq_true hjm)]
     simp only [InPlace.run_bind, InPlace.run_readThen, InPlace.run_write, InPlace.run_pure]
-    have ex := toNat_add_of_window hN hw hjl'
+    have ex : (start + j).toNat = start.toNat + j.toNat := by grind
     have ej : j.toNat.toUSize = j := by simp
-    have h1 : (j + 1).toNat ≤ len.toNat := by rw [toNat_add_one_of_toNat_lt hjl']; lia
+    have hsucc : (j + 1).toNat = j.toNat + 1 := by grind
+    have h1 : (j + 1).toNat ≤ len.toNat := by lia
     have ih := fun s hs hstart hc b =>
       run_foldlInPlaceProg start len N m hN hw hm f s hs hstart _ rfl hc (j + 1) h1 b
     unfold foldlInPlaceProg foldInPlaceBody at ih
@@ -305,13 +306,13 @@ private theorem run_foldlInPlaceProg {β : Type v} (start len : USize) (N m : Na
       intro v h; simp only [array_set, ex, hstart]
     simp only [hset]
     rw [ih _ (by simpa using hs) (by simpa using hstart) (by simpa using hc)]
-    simp only [toNat_add_one_of_toNat_lt hjl']
+    simp only [hsucc]
     congr 3 <;> simp only [Slice.getElem_eq, ex, hstart, ej]
   · have hjm : ¬j.toNat < m := hm ▸ hjl
     rw [dite_eq_right_of_eq_false (eq_false hjl), dite_eq_right_of_eq_false (eq_false hjm)]
     simp only [InPlace.run_pure]
 termination_by len.toNat - j.toNat
-decreasing_by rw [toNat_add_one_of_toNat_lt hjl']; lia
+decreasing_by exact sub_toNat_add_one_lt hjl'
 
 
 /--
@@ -412,11 +413,11 @@ private def withArray (s : USizeArray.Slice) (a : USizeArray) (h : a.size = s.ar
 
 private theorem toNat_size_toUSize (s : USizeArray.Slice) (hN : s.array.size < USize.size) :
     s.size.toUSize.toNat = s.size :=
-  toNat_toUSize_of_lt (by have := s.stop_le_array_size; rw [size_eq]; lia)
+  have := s.stop_le_array_size; by rw [size_eq]; grind
 
 private theorem toNat_start_toUSize (s : USizeArray.Slice) (hN : s.array.size < USize.size) :
     s.start.toUSize.toNat = s.start :=
-  toNat_toUSize_of_lt (by have h₁ := s.start_le_stop; have h₂ := s.stop_le_array_size; lia)
+  have h₁ := s.start_le_stop; have h₂ := s.stop_le_array_size; by grind
 
 private theorem window_slice (s : USizeArray.Slice) (hN : s.array.size < USize.size) :
     s.start.toUSize.toNat + s.size.toUSize.toNat ≤ s.array.size := by
@@ -472,9 +473,10 @@ private theorem run_reverseProg (lo m : USize) (N : Nat) (hN : N < USize.size)
     simp only [InPlace.run_bind, InPlace.run_readThen, InPlace.run_writeThen, InPlace.run_write]
     have hr := reverse_toNat_right hkl'
     have hl := reverse_lt_left hkl'
-    have ex := toNat_add_of_window hN hw hl
-    have ey := toNat_add_of_window hN hw (reverse_lt_right hkl')
-    have h1 : (k + 1).toNat ≤ (m / 2).toNat := by rw [toNat_add_one_of_toNat_lt hkl']; lia
+    have ex : (lo + k).toNat = lo.toNat + k.toNat := by grind
+    have ey : (lo + (m - 1 - k)).toNat = lo.toNat + (m - 1 - k).toNat := by grind
+    have hsucc : (k + 1).toNat = k.toNat + 1 := by grind
+    have h1 : (k + 1).toNat ≤ (m / 2).toNat := by lia
     have ih := run_reverseProg lo m N hN hw
       (s.swap k.toNat (s.size - 1 - k.toNat) (by lia) (by lia)) (by simpa using hs)
       (by simpa using hpos) (by simpa using hstart) _ rfl
@@ -486,7 +488,7 @@ private theorem run_reverseProg (lo m : USize) (N : Nat) (hN : N < USize.size)
           (s.swap k.toNat (s.size - 1 - k.toNat) (by lia) (by lia)).array := by
       intro h₁ h₂
       simp only [swap_eq, array_set, start_set, Slice.getElem_eq, ex, ey, hstart, hr, hs]
-    simp only [size_swap, toNat_add_one_of_toNat_lt hkl'] at ih
+    simp only [size_swap, hsucc] at ih
     simp only [hset]
     exact ih
   · have hkl' : ¬k.toNat < (m / 2).toNat := hkl
@@ -494,7 +496,7 @@ private theorem run_reverseProg (lo m : USize) (N : Nat) (hN : N < USize.size)
     rw [dite_eq_right_of_eq_false (eq_false hkl), dite_eq_right_of_eq_false (eq_false hij)]
     simp only [InPlace.run_pure]
 termination_by (m / 2).toNat - k.toNat
-decreasing_by rw [toNat_add_one_of_toNat_lt hkl']; lia
+decreasing_by exact sub_toNat_add_one_lt hkl'
 
 /-- For internal use only. -/
 @[inline]
@@ -503,7 +505,7 @@ public def reverseImpl (s : USizeArray.Slice) : USizeArray.Slice :=
   | ⟨⟨a, start, stop, h₁, h₂⟩⟩ =>
     if h : a.size < USize.size ∧ start < stop then
       have hw : start.toUSize.toNat + (stop - start).toUSize.toNat ≤ a.size := by
-        rw [toNat_toUSize_of_lt (by lia), toNat_toUSize_of_lt (by lia)]; lia
+        grind
       let r := a.runInPlace (reverseProg start.toUSize (stop - start).toUSize hw 0)
       ⟨⟨r.2, start, stop, h₁, by rw [show r.2.size = a.size from InPlace.size_run ..]; exact h₂⟩⟩
     else
@@ -515,14 +517,14 @@ public def reverseImpl (s : USizeArray.Slice) : USizeArray.Slice :=
   rw [reverseImpl]
   by_cases h : a.size < USize.size ∧ start < stop
   · rw [dite_eq_left_of_eq_true (eq_true h)]
-    have hw : start.toUSize.toNat + (stop - start).toUSize.toNat ≤ a.size := by
-      rw [toNat_toUSize_of_lt (by lia), toNat_toUSize_of_lt (by lia)]; lia
+    have hst : start.toUSize.toNat = start := by grind
+    have hsz : (stop - start).toUSize.toNat = stop - start := by grind
+    have hw : start.toUSize.toNat + (stop - start).toUSize.toNat ≤ a.size := by lia
     let s : USizeArray.Slice := ⟨⟨a, start, stop, h₁, h₂⟩⟩
-    have hs : s.size = (stop - start).toUSize.toNat := by
-      rw [toNat_toUSize_of_lt (by lia)]; rfl
-    have hpos : 0 < s.size := by rw [hs, toNat_toUSize_of_lt (by lia)]; lia
+    have hs : s.size = (stop - start).toUSize.toNat := by rw [hsz]; rfl
+    have hpos : 0 < s.size := by rw [hs]; lia
     have key := run_reverseProg start.toUSize (stop - start).toUSize a.size h.1 hw s hs hpos
-      (toNat_toUSize_of_lt (m := start) (by lia)).symm a rfl rfl 0 (by simp)
+      hst.symm a rfl rfl 0 (by simp)
     apply slice_ext
     · show (reverse s).array = _
       rw [reverse, dite_eq_left_of_eq_true (eq_true hpos)]
@@ -727,7 +729,7 @@ private theorem run_foldrInPlaceProg {β : Type v} (start len : USize) (N m : Na
     rw [InPlace.forInRevFrom_eq, dite_eq_left_of_eq_true (eq_true h0), foldrInPlace.loop]
     unfold foldInPlaceBody
     simp only [InPlace.run_bind, InPlace.run_readThen, InPlace.run_write, InPlace.run_pure]
-    have ex := toNat_add_of_window hN hw hjl'
+    have ex : (start + (j - 1)).toNat = start.toNat + (j - 1).toNat := by grind
     have ej : k.toUSize = j - 1 := by rw [← hj1]; simp
     have ih := fun s hs hstart hc b =>
       run_foldrInPlaceProg start len N m hN hw hm f k s hs hstart _ rfl hc (j - 1) (by lia) hj1 b
@@ -1027,21 +1029,22 @@ private theorem run_foldlInPlace2Prog {β : Type v} (xs ys rs len : USize) (n : 
   · have hjl' : j.toNat < len.toNat := hjl
     rw [dite_eq_left_of_eq_true (eq_true hjl), dite_eq_left_of_eq_true (eq_true hjl')]
     simp only [InPlace.run_bind, InPlace.run_readThen, InPlace.run_write, InPlace.run_pure]
-    have ex := toNat_add_of_window hn hx hjl'
-    have ey := toNat_add_of_window hn hy hjl'
-    have er := toNat_add_of_window hn hr hjl'
+    have ex : (xs + j).toNat = xs.toNat + j.toNat := by grind
+    have ey : (ys + j).toNat = ys.toNat + j.toNat := by grind
+    have er : (rs + j).toNat = rs.toNat + j.toNat := by grind
     have ej : j.toNat.toUSize = j := by simp
-    have h1 : (j + 1).toNat ≤ len.toNat := by rw [toNat_add_one_of_toNat_lt hjl']; lia
+    have hsucc : (j + 1).toNat = j.toNat + 1 := by grind
+    have h1 : (j + 1).toNat ≤ len.toNat := by lia
     have ih := fun c hc b => run_foldlInPlace2Prog xs ys rs len n hn hx hy hr f c hc (j + 1) h1 b
     unfold foldlInPlace2Prog foldlInPlace2Body at ih
     rw [ih]
-    simp only [toNat_add_one_of_toNat_lt hjl']
+    simp only [hsucc]
     congr 3 <;> simp only [ex, ey, er, ej]
   · have hjl' : ¬j.toNat < len.toNat := hjl
     rw [dite_eq_right_of_eq_false (eq_false hjl), dite_eq_right_of_eq_false (eq_false hjl')]
     simp only [InPlace.run_pure]
 termination_by len.toNat - j.toNat
-decreasing_by rw [toNat_add_one_of_toNat_lt hjl']; lia
+decreasing_by exact sub_toNat_add_one_lt hjl'
 
 /-- For internal use only. -/
 @[inline]

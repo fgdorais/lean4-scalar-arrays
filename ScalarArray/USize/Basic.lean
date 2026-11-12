@@ -215,7 +215,7 @@ where
   loop (sz : USize) (hsz : sz.toNat ≤ a.size) (i : USize) (r : Array USize)
       (hr : r.size = a.size) : Array USize :=
     if h : i < sz then
-      have := toNat_lt_of_lt h hsz
+      have : i.toNat < a.size := by grind
       loop sz hsz (i + 1) (r.uset i (a.uget i) (hr ▸ this)) (by simp [hr])
     else r
   termination_by sz.toNat - i.toNat
@@ -228,10 +228,10 @@ private theorem toArrayImpl_loop (a : USizeArray) (sz : USize) (hsz : sz.toNat �
     toArrayImpl.loop a sz hsz i r hr = a.toArray := by
   fun_induction toArrayImpl.loop a sz hsz i r hr with
   | case1 i r hr hi' _ ih =>
-    have := USize.lt_iff_toNat_lt.1 hi'
-    apply ih (by rw [toNat_add_one_of_lt hi']; lia)
+    have : (i + 1).toNat = i.toNat + 1 := by grind
+    apply ih (by lia)
     intro k hk
-    rw [toNat_add_one_of_lt hi'] at hk
+    rw [this] at hk
     simp only [Array.uset, uget, Array.uget, Array.getElem_set]
     split
     · subst k; rfl

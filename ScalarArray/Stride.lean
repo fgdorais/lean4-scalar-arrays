@@ -295,16 +295,14 @@ public theorem toNat_idx_toUSize (h : s.Fits n size) (hs : size < USize.size) {i
     (hi : i.toNat < n) : (s.off.toUSize + s.inc.toUSize * i).toNat = s.idx i.toNat := by
   have h₁ := h.idx_lt hi
   simp only [idx] at h₁ ⊢
-  have ho : s.off.toUSize.toNat = s.off := by
-    exact toNat_toUSize_of_lt (by lia)
+  have ho : s.off.toUSize.toNat = s.off := by grind
   rcases Nat.eq_zero_or_pos i.toNat with h₀ | h₀
   · have : i = 0 := USize.toNat_inj.mp (by simpa using h₀)
     subst this
     simp [ho]
   · have hinc : s.inc ≤ s.inc * i.toNat := Nat.le_mul_of_pos_right _ h₀
-    have hc : s.inc.toUSize.toNat = s.inc := by
-      exact toNat_toUSize_of_lt (by lia)
-    rw [toNat_add_mul_of_lt (by rw [ho, hc]; lia), ho, hc]
+    have hc : s.inc.toUSize.toNat = s.inc := by grind
+    grind
 
 /-- The `USize` index of a step `i < n` is less than `size`. -/
 public theorem toNat_idx_toUSize_lt (h : s.Fits n size) (hs : size < USize.size) {i : USize}

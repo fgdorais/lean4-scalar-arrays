@@ -6,6 +6,7 @@ module
 
 public meta import Lean.Elab.Term
 public meta import Lean.Elab.Tactic
+import ScalarArray.Internal
 
 /-!
 # Notation for in-place programs
@@ -118,10 +119,9 @@ The bound of each index is proved by the tactic `inplace_bound`, from the hypoth
 * for an index `off + j` in a loop over `j < len`, from a window hypothesis
   `off.toNat + len.toNat ≤ a.size`;
 * otherwise by `lia`;
-* otherwise, for indices with `USize` arithmetic such as `j - 17` or `2 * j + 1`, by `lia` after
-  unfolding `+`, `-`, `*` and literals of `USize`, with the bound `x.toNat < USize.size` of each
-  `USize` in the goal and the wrap-around facts of each `x % USize.size`. The modulus stays
-  symbolic, so the proof holds on both platform widths.
+* otherwise, for indices with `USize` arithmetic such as `j - 17` or `2 * j + 1`, by `grind`, which
+  splits on the platform width `System.Platform.numBits` (see the `grind_pattern` in
+  `ScalarArray.Internal`), so the proof holds on both widths.
 
 It looks inside conjunctions. A loop body has both bounds of its index, `lo.toNat ≤ j.toNat` and
 `j.toNat < hi.toNat`, in context, and the program has `a.usize.toNat ≤ a.size`, so `a.usize`
@@ -164,19 +164,7 @@ namespace ScalarArray.InPlaceSyntax
 /-- The index `off + j` of a window of `len` elements at `off` is in bounds, for `j < len`. -/
 public theorem toNat_add_lt_of_window {n : Nat} {off len j : USize}
     (hw : off.toNat + len.toNat ≤ n) (hj : j.toNat < len.toNat) : (off + j).toNat < n := by
-  rw [USize.toNat_add]
-  exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) (by lia)
-
-/-- `x % m = x - m` for `m ≤ x < 2 * m`: the wrap-around of a `USize` subtraction or addition. -/
-public theorem mod_eq_sub_of_le_of_lt {x m : Nat} (h₁ : m ≤ x) (h₂ : x < 2 * m) :
-    x % m = x - m := by
-  rw [Nat.mod_eq_sub_mod h₁, Nat.mod_eq_of_lt (by lia)]
-
-/-- The platform word has at least 32 bits. -/
-public theorem two_pow_32_le_size : 2 ^ 32 ≤ 2 ^ System.Platform.numBits := by
-  rcases System.Platform.numBits_eq with h | h <;> rw [h] <;> decide
-
-private theorem toNat_one' : (1 : USize).toNat = 1 := by simp
+  grind
 
 /--
 The number of steps of the range `lo...hi` by `s`, for `s > 0`: of the indices `lo + s * k` below
@@ -193,27 +181,18 @@ private theorem step_toNat {lo hi s k : USize} (hk : k.toNat < (stepCount lo hi 
   split at hk
   · rename_i h
     have hlt : lo.toNat < hi.toNat := h
-    have hd : (hi - lo - 1).toNat = hi.toNat - lo.toNat - 1 := by
-      have h1 : (hi - lo).toNat = hi.toNat - lo.toNat :=
-        USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 (by lia))
-      rw [USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 (by rw [h1, toNat_one']; lia)),
-        h1, toNat_one']
+    have hd : (hi - lo - 1).toNat = hi.toNat - lo.toNat - 1 := by grind
     have hq : ((hi - lo - 1) / s).toNat = (hi.toNat - lo.toNat - 1) / s.toNat := by
       rw [USize.toNat_div, hd]
+    have := Nat.div_le_self (hi.toNat - lo.toNat - 1) s.toNat
     have hq1 : ((hi - lo - 1) / s + 1).toNat = (hi.toNat - lo.toNat - 1) / s.toNat + 1 := by
-      rw [USize.toNat_add, hq, toNat_one']
-      apply Nat.mod_eq_of_lt
-      have := Nat.div_le_self (hi.toNat - lo.toNat - 1) s.toNat
-      have := hi.toNat_lt_size
-      lia
+      grind
     rw [hq1] at hk
     have hk' : k.toNat ≤ (hi.toNat - lo.toNat - 1) / s.toNat := by lia
     have hsk : s.toNat * k.toNat ≤ hi.toNat - lo.toNat - 1 :=
       Nat.le_trans (Nat.mul_le_mul_left _ hk') (Nat.mul_div_le _ _)
-    have hsz := hi.toNat_lt_size
     refine ⟨?_, by lia⟩
-    rw [USize.toNat_add, USize.toNat_mul, Nat.mod_eq_of_lt (a := s.toNat * k.toNat) (by lia),
-      Nat.mod_eq_of_lt (by lia)]
+    grind
   · simp at hk
 
 /--
@@ -234,19 +213,18 @@ public theorem step_lt {lo hi s k : USize} (hk : k.toNat < (stepCount lo hi s).t
     (lo + s * k).toNat < hi.toNat := by
   rw [(step_toNat hk).1]; exact (step_toNat hk).2
 
-private theorem toNat_succ {x : USize} (h : x.toNat + 1 < USize.size) :
-    (x + 1).toNat = x.toNat + 1 := by
-  rw [USize.toNat_add, toNat_one', Nat.mod_eq_of_lt h]
-
-/-- The index of a loop over `lo...hi + 1`, which is `lo...=hi`, is at most `hi`. -/
-public theorem le_of_lt_succ {hi j : USize} (h : hi.toNat + 1 < USize.size)
+/--
+The index of a loop over `lo...hi + 1`, which is `lo...=hi`, is at most `hi`. The proof doesn't need
+`hi + 1` not to wrap around, but the loop does, so the notation passes that fact here too.
+-/
+public theorem le_of_lt_succ {hi j : USize} (_h : hi.toNat + 1 < USize.size)
     (hj : j.toNat < (hi + 1).toNat) : j.toNat ≤ hi.toNat := by
-  rw [toNat_succ h] at hj; lia
+  grind
 
 /-- The index of a loop over `lo + 1...hi`, which is `lo<...hi`, is above `lo`. -/
 public theorem lt_of_succ_le {lo j : USize} (h : lo.toNat + 1 < USize.size)
     (hj : (lo + 1).toNat ≤ j.toNat) : lo.toNat < j.toNat := by
-  rw [toNat_succ h] at hj; lia
+  grind
 
 end ScalarArray.InPlaceSyntax
 
@@ -288,72 +266,11 @@ open Lean Elab Tactic in
 @[tactic inplaceSplit] def evalInplaceSplit : Tactic := fun _ =>
   liftMetaTactic fun g => return [← splitAnds g]
 
-open Lean Meta in
-/-- Adds `x.toNat < USize.size` to the context of `g` for each `x.toNat` in its goal or context. -/
-def addUSizeBounds (g : MVarId) : MetaM MVarId := g.withContext do
-  let atoms ← IO.mkRef (#[] : Array Expr)
-  let mut types := #[← instantiateMVars (← g.getType)]
-  for d in ← getLCtx do
-    if !d.isImplementationDetail then types := types.push (← instantiateMVars d.type)
-  for t in types do
-    t.forEachWhere (fun e => e.isAppOfArity ``USize.toNat 1 && !e.hasLooseBVars) fun e =>
-      atoms.modify fun xs => if xs.contains e.appArg! then xs else xs.push e.appArg!
-  let mut g := g
-  for x in ← atoms.get do
-    let h ← mkAppM ``USize.toNat_lt_size #[x]
-    let (_, g') ← (← g.assert `hsize (← inferType h) h).intro1P
-    g := g'
-  return g
-
-/-- Adds `x.toNat < USize.size` to the context for each `x.toNat` in the goal or context. -/
-syntax (name := inplaceUSizeBounds) "inplace_usize_bounds" : tactic
-
-open Lean Elab Tactic in
-/-- Elaborates `inplace_usize_bounds`. -/
-@[tactic inplaceUSizeBounds] def evalInplaceUSizeBounds : Tactic := fun _ =>
-  liftMetaTactic fun g => return [← addUSizeBounds g]
-
-open Lean Meta in
-/--
-Adds, for each `x % m` on `Nat` in the goal or context of `g`, the facts `x % m ≤ x`,
-`x < m → x % m = x` and `m ≤ x → x < 2 * m → x % m = x - m`, which let `lia` reason about
-the wrap-around of `USize` arithmetic without dividing by the modulus.
--/
-def addModFacts (g : MVarId) : MetaM MVarId := g.withContext do
-  let mods ← IO.mkRef (#[] : Array (Expr × Expr))
-  let mut types := #[← instantiateMVars (← g.getType)]
-  for d in ← getLCtx do
-    if !d.isImplementationDetail then types := types.push (← instantiateMVars d.type)
-  let nat := mkConst ``Nat
-  for t in types do
-    t.forEachWhere (fun e => e.isAppOfArity ``HMod.hMod 6 && e.getArg! 0 == nat &&
-        !e.hasLooseBVars) fun e =>
-      mods.modify fun xs =>
-        let p := (e.getArg! 4, e.getArg! 5)
-        if xs.contains p then xs else xs.push p
-  let mut g := g
-  for (x, m) in ← mods.get do
-    for h in [← mkAppM ``Nat.mod_le #[x, m], ← mkAppOptM ``Nat.mod_eq_of_lt #[x, m],
-        ← mkAppOptM ``ScalarArray.InPlaceSyntax.mod_eq_sub_of_le_of_lt #[x, m]] do
-      let (_, g') ← (← g.assert `hmod (← inferType h) h).intro1P
-      g := g'
-  return g
-
-/-- Adds the facts of `addModFacts` for each `x % m` on `Nat` in the goal or context. -/
-syntax (name := inplaceModFacts) "inplace_mod_facts" : tactic
-
-open Lean Elab Tactic in
-/-- Elaborates `inplace_mod_facts`. -/
-@[tactic inplaceModFacts] def evalInplaceModFacts : Tactic := fun _ =>
-  liftMetaTactic fun g => return [← addModFacts g]
-
 /--
 Proves the bound `i.toNat < n` of an index in an `inplace` program: for `i = off + j`, from a
 window hypothesis `off.toNat + len.toNat ≤ n` and the loop bound `j.toNat < len.toNat`, or else by
-`lia` from the hypotheses in context, or else by `lia` after unfolding the `USize` arithmetic of
-the index and of the hypotheses (`+`, `-`, `*` and literals), with the bound of each `USize` and
-the wrap-around facts of each `x % USize.size` (see `inplace_mod_facts`). Conjunctions in context
-are split first.
+`lia` from the hypotheses in context, or else by `grind`, for `USize` arithmetic that may wrap
+around. Conjunctions in context are split first.
 -/
 syntax (name := inplaceBound) "inplace_bound" : tactic
 
@@ -369,12 +286,7 @@ macro_rules
            case hw => assumption)
         | assumption
         | lia
-        | (inplace_usize_bounds
-           have := ScalarArray.InPlaceSyntax.two_pow_32_le_size
-           simp only [USize.toNat_add, USize.toNat_sub, USize.toNat_mul, USize.reduceToNat,
-             USize.size] at *
-           inplace_mod_facts
-           lia)))
+        | grind))
 
 open Lean Elab Tactic Meta in
 /-- Elaborates `inplace_bound`: runs its proof search, and reports a failure with the bound. -/

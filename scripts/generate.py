@@ -90,7 +90,7 @@ public def beqImpl (a b : @& UInt16Array) : Bool :=
 where
   loop (stop : USize) (ha : stop.toNat ≤ a.size) (hb : stop.toNat ≤ b.size) (i : USize) : Bool :=
     if h : i < stop then
-      a.uget i (toNat_lt_of_lt h ha) == b.uget i (toNat_lt_of_lt h hb) && loop stop ha hb (i + 1)
+      a.uget i (by grind) == b.uget i (by grind) && loop stop ha hb (i + 1)
     else true
   termination_by stop.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
@@ -104,7 +104,7 @@ private theorem beqImpl_loop (a b : UInt16Array) (stop : USize) (ha : stop.toNat
   | case1 i hi ih =>
     have := USize.lt_iff_toNat_lt.1 hi
     rw [Bool.and_eq_true, ih]
-    simp only [uget, Array.uget, toNat_add_one_of_lt hi]
+    simp only [uget, Array.uget, show (i + 1).toNat = i.toNat + 1 by grind]
     constructor
     · rintro ⟨h0, h⟩ k hik hk
       by_cases hk' : k = i.toNat
