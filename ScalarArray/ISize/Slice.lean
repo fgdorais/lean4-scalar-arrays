@@ -78,6 +78,14 @@ public instance : Std.Slice.SliceSize ISizeArray.SliceData where
 
 public theorem size_eq (s : ISizeArray.Slice) : s.size = s.stop - s.start := rfl
 
+/-- The size of the slice as a `USize`, `s.size.toUSize`, which bounds loops over the slice. -/
+@[inline, expose]
+public def usize (s : ISizeArray.Slice) : USize := s.size.toUSize
+
+public theorem toNat_usize_le (s : ISizeArray.Slice) : s.usize.toNat ≤ s.size := by
+  simp only [usize, Nat.toUSize_eq, USize.toNat_ofNat']
+  exact Nat.mod_le _ _
+
 /-! ## Reads -/
 
 /-- The element at index `i` of the slice, counted from the start of the slice. -/

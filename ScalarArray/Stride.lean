@@ -14,7 +14,8 @@ The parts of the specification of loops that name no element type, shared by all
 * `iterRange f lo hi x` applies `f lo`, `f (lo + 1)`, …, `f (hi - 1)` to `x`, in this order, and
   `iterRangeRev f lo hi x` applies them in the opposite order. They are the models of a loop
   whose step `j` maps its state by `f j`; the `run_forInFrom` and `run_forInRevFrom` lemmas of each
-  array's `InPlace.Tail` run a loop to them.
+  array's `InPlace.Tail` run a loop to them, and `iterRange_prod_of_snd` drops the array from a
+  loop that only reads it.
 * `Stride` is the affine index map `i ↦ off + inc * i` of a strided vector, such as the `incx` of
   a BLAS routine, the diagonal of a matrix or a column of a matrix stored by columns, and
   `Stride.Fits s n size` says that its first `n` indices are distinct and less than `size`. The
@@ -190,6 +191,34 @@ public theorem apply_iterRangeRev (φ : α → β) {f : Nat → α → α} {g : 
   | succ d ih =>
     rw [iterRangeRev_of_lt f (by lia), iterRangeRev_of_lt g (by lia),
       ← h (hi - 1) (by lia) (by lia), ih (fun i h₁ h₂ => h i h₁ (by lia)) _ (by lia)]
+
+/--
+A loop whose steps `i` map its variable by `g i` and leave the array `a` alone, such as a loop that
+only reads, maps `(b, a)` to `(iterRange g lo hi b, a)`.
+-/
+public theorem iterRange_prod_of_snd {α : Type u} {β : Type v} {f : Nat → α × β → α × β}
+    {g : Nat → α → α} {lo hi : Nat} {a : β}
+    (h : ∀ i, lo ≤ i → i < hi → ∀ b, f i (b, a) = (g i b, a))
+    (b : α) : iterRange f lo hi (b, a) = (iterRange g lo hi b, a) := by
+  obtain ⟨d, hd⟩ : ∃ d, hi - lo = d := ⟨_, rfl⟩
+  induction d generalizing lo b with
+  | zero => rw [iterRange_of_le f (by lia), iterRange_of_le g (by lia)]
+  | succ d ih =>
+    rw [iterRange_of_lt f (by lia), iterRange_of_lt g (by lia), h lo (Nat.le_refl _) (by lia),
+      ih (fun i h₁ h₂ => h i (by lia) h₂) _ (by lia)]
+
+/-- `iterRange_prod_of_snd` for `iterRangeRev`. -/
+public theorem iterRangeRev_prod_of_snd {α : Type u} {β : Type v}
+    {f : Nat → α × β → α × β}
+    {g : Nat → α → α} {lo hi : Nat} {a : β}
+    (h : ∀ i, lo ≤ i → i < hi → ∀ b, f i (b, a) = (g i b, a))
+    (b : α) : iterRangeRev f lo hi (b, a) = (iterRangeRev g lo hi b, a) := by
+  obtain ⟨d, hd⟩ : ∃ d, hi - lo = d := ⟨_, rfl⟩
+  induction d generalizing hi b with
+  | zero => rw [iterRangeRev_of_le f (by lia), iterRangeRev_of_le g (by lia)]
+  | succ d ih =>
+    rw [iterRangeRev_of_lt f (by lia), iterRangeRev_of_lt g (by lia), h (hi - 1) (by lia) (by lia),
+      ih (fun i h₁ h₂ => h i h₁ (by lia)) _ (by lia)]
 
 end iterRange
 
