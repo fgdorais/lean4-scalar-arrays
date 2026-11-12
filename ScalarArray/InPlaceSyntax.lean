@@ -21,8 +21,8 @@ them to a continuation `then k`. It works for all 13 array types, and for their 
 ```
 inplace a do
   for j in 0...len with (c := 0) (b := 0) do
-    let u ← a[xs + j]
-    let v ← a[ys + j]
+    let u := a[xs + j]
+    let v := a[ys + j]
     let (s, c') := addc u v c
     let (d, b') := subb u v b
     a[xs + j] := s
@@ -34,11 +34,11 @@ inplace a do
 
 ## Statements
 
-* `let x ← a[i]` reads the element at the `USize` index `i`. In the terms of a statement, `a[i]`
-  also reads the current element, before the statement runs: `a[i] := a[i] + 1`. So a read can't
-  be under a binder, or in a branch of a term (`if`, `match`, or the right side of `&&`, `||`,
-  `∧` and `∨`), which would run later or not at all: read it first with `let x ← a[i]`, or branch
-  with an `if` statement.
+* `a[i]` in the terms of a statement reads the current element at the `USize` index `i`, before
+  the statement runs: `let x := a[i]` reads it into `x`, and `a[i] := a[i] + 1` increments it. So a
+  read can't be under a binder, or in a branch of a term (`if`, `match`, or the right side of `&&`,
+  `||`, `∧` and `∨`), which would run later or not at all: read it first with `let x := a[i]`, or
+  branch with an `if` statement.
 * `a[i] := e` writes `e` at `i`.
 * `let x ← m` runs an in-place program `m : XArray.InPlace n α`, for the program's size `n`, and
   binds its result, so that programs compose.
@@ -189,14 +189,14 @@ else UInt64Array.mk (Array.replicate a.size 0)
 
 ## Limits
 
-* `a` is a local variable: the program's array or slice. `let x ← b[i]` and `b[i] := e` on another
-  array `b` are errors, while `b[i]` in a term is ordinary indexing of `b`, with its own bound.
+* `a` is a local variable: the program's array or slice. `b[i] := e` on another array `b` is an
+  error, while `b[i]` in a term is ordinary indexing of `b`, with its own bound.
 * Inside the program, `a` is the array before the program runs, so it is an error outside of the
   reads `a[i]` and its size `a.size` or `a.usize`: `a[i]!`, `a[i]'h` or `a.toArray` would read old
   elements, and keep the old array alive, which copies it. A `have` and the proofs in `by` blocks
   may use `a`, and so may `then k`, which runs after the program, but `k` keeps the old array alive
   if it uses more than its size.
-* Reads in terms are written `a[i]`, not `(← a[i])`.
+* Reads are written `a[i]`, not `← a[i]`: `←` runs a program.
 * A loop has at most four variables.
 * A block has at least one statement.
 * A program makes the array exclusive before it runs, even when it only reads, so a shared array
@@ -382,8 +382,6 @@ declare_syntax_cat inplaceStmt
 /-- A sequence of statements of an `inplace` program. -/
 syntax inplaceSeq := sepBy1IndentSemicolon(inplaceStmt)
 
-/-- `let x ← a[i]` reads the element of `a` at `i`. -/
-syntax "let " ident " ← " ident "[" term "]" : inplaceStmt
 /-- `a[i] := e` writes `e` at `i`. -/
 syntax ident "[" term "]" " := " term : inplaceStmt
 /--
@@ -554,7 +552,7 @@ private partial def liftReads (arr : Ident) (lazy : Bool) (stx : Syntax) :
       if lazy then
         Macro.throwErrorAt stx s!"`inplace` reads `{arr.getId}[i]` before the statement runs, so \
           it can't read under a binder or in a branch of a term: read the element first, with \
-          `let x ← {arr.getId}[i]`, or branch with an `if` statement"
+          `let x := {arr.getId}[i]`, or branch with an `if` statement"
       let i ← liftReads arr lazy i
       let x ← withFreshMacroScope `(x)
       modify (·.push (⟨x⟩, ⟨i⟩))
@@ -597,9 +595,6 @@ statement are about the array before the program, are left alone.
 -/
 private def replaceStmt (p : Arr) (s : TSyntax `inplaceStmt) : MacroM (TSyntax `inplaceStmt) := do
   match s with
-  | `(inplaceStmt| let $x:ident ← $b:ident[$i]) =>
-    let i : Term := ⟨← replaceArray p true i⟩
-    `(inplaceStmt| let $x:ident ← $b:ident[$i])
   | `(inplaceStmt| $b:ident[$i] := $v) =>
     let i : Term := ⟨← replaceArray p true i⟩
     let v : Term := ⟨← replaceArray p true v⟩
@@ -806,12 +801,15 @@ private partial def expandSeq (p : Arr) (ending : Term → MacroM Term) (mvars :
     (loop : Option InplaceLoop) (ret : Term) : List (TSyntax `inplaceStmt) → MacroM Term
   | [] => pure ret
   | s :: rest => withRef s do
+    if let `(inplaceStmt| let $x:ident ← $b:ident[$_]) := s then
+      Macro.throwErrorAt s s!"a read is written `let {x.getId} := {b.getId}[i]`: `←` runs a \
+        program"
     if let `(inplaceStmt| for $[$_ :]? $_ in $[reverse%$_]? $r $[by $_]? $[$_:inplaceLoopVars]?
         do $_;*) := s then
       if let `($r':ident) := r then
         if r'.getId == p.arr.getId then
           Macro.throwErrorAt r s!"`inplace` loops over indices, not elements: write \
-            `for j in 0...{r'.getId}.usize do`, and read the element with `let x ← {r'.getId}[j]`"
+            `for j in 0...{r'.getId}.usize do`, and read the element with `let x := {r'.getId}[j]`"
     let isEnd := match s with
       | `(inplaceStmt| return $[$_]?) | `(inplaceStmt| break) | `(inplaceStmt| continue) => true
       | _ => false
@@ -847,11 +845,6 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
   let arr := p.arr
   let k (mvars : Array Ident) := expandSeq p ending mvars loop ret rest
   match s with
-  | `(inplaceStmt| let $x:ident ← $a:ident[$i]) =>
-    checkArray arr a
-    checkNoShadow mvars #[x]
-    let (i, h) ← access p i
-    `(.readThen $i $h fun $x => $(← k mvars))
   | `(inplaceStmt| $a:ident[$i] := $v) =>
     checkArray arr a
     let (i, h) ← access p i
@@ -864,7 +857,6 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
     checkNoShadow mvars #[x]
     `(let $x:ident : $ty := $e; $(← k mvars))
   | `(inplaceStmt| let $x:ident ← $m) =>
-    if let `($b:ident[$_]) := m then checkArray arr b
     checkNoShadow mvars #[x]
     `(.bind $m fun $x => $(← k mvars))
   | `(inplaceStmt| let $p := $e) =>
@@ -905,7 +897,7 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
         s!": a write is written `{f.getId}[i] := e`"
       else ""
     Macro.throwErrorAt s s!"this is not a statement of an `inplace` program{hint}. The \
-      statements are reads `let x ← a[i]`, writes `a[i] := e`, `let`, `let mut`, assignments \
+      statements are reads `let x := a[i]`, writes `a[i] := e`, `let`, `let mut`, assignments \
       `x := e`, `have`, `if`, `unless`, `match`, `for`, `while`, `break`, `continue` and `return`, \
       and a program `m` runs with `let x ← m`"
   | `(inplaceStmt| unless $c do $t;*) =>

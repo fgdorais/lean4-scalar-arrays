@@ -21,7 +21,7 @@ private def prefixSums (a : UInt32Array) (len : USize) : Option (UInt32 × UInt3
   if h : len.toNat ≤ a.size then
     some <| inplace a do
       for j in 0...len with (s := 0) do
-        let x ← a[j]
+        let x := a[j]
         s := s + x
         a[j] := s
       return s
@@ -111,7 +111,7 @@ private def shiftUp (a : UInt8Array) (off len : USize) : Option (UInt8 × UInt8A
       simp at this ⊢; lia
     some <| inplace a do
       for j in reverse 0...len with (top := 0) do
-        let x ← a[off + j]
+        let x := a[off + j]
         top := if j + 1 = len then x else top
         a[(off + 1) + j] := x
       a[off] := 0
@@ -144,8 +144,8 @@ private def butterfly (a : UInt64Array) (xs ys ts len : USize) :
     have ht := h.2.2
     some <| inplace a do
       for j in 0...len with (c := 0) (b := 0) do
-        let u ← a[xs + j]
-        let v ← a[ys + j]
+        let u := a[xs + j]
+        let v := a[ys + j]
         let (s, c') := addc u v c
         let (d, b') := subb u v b
         a[xs + j] := s
@@ -204,7 +204,7 @@ private def swapIfGreater (a : Int32Array) (i j : USize) : Option (Bool × Int32
     some <| inplace a do
       let mut swapped := false
       if h' : a[i] > a[j] then
-        let x ← a[i]
+        let x := a[i]
         a[i] := a[j]
         a[j] := x
         swapped := true
@@ -242,9 +242,15 @@ private def rowSums (a : UInt32Array) (rows cols : USize) : Option (UInt32 × UI
 -- Reads and writes go to the program's array only.
 /-- error: an `inplace` program on `a` reads and writes only `a` -/
 #guard_msgs in
-example (a b : UInt8Array) (h : 0 < a.size) : UInt8 × UInt8Array :=
+example (a b : UInt8Array) (h : 0 < a.size) : Unit × UInt8Array :=
   inplace a do
-    let x ← b[0]
+    b[0] := a[0]
+
+/-- error: a read is written `let x := a[i]`: `←` runs a program -/
+#guard_msgs in
+example (a : UInt8Array) (h : 0 < a.size) : UInt8 × UInt8Array :=
+  inplace a do
+    let x ← a[0]
     return x
 
 /--
@@ -274,8 +280,8 @@ calls where it ends, so no result pair is built.
     have ht := h.2.2
     inplace a do
       for j in 0...len with (c := 0) (b := 0) do
-        let u ← a[xs + j]
-        let v ← a[ys + j]
+        let u := a[xs + j]
+        let v := a[ys + j]
         let (s, c') := addc u v c
         let (d, b') := subb u v b
         a[xs + j] := s
@@ -310,7 +316,7 @@ calls where it ends, so no result pair is built.
   have : 1 < a.size := by simp [a]
   inplace a do
     if a[0] > a[1] then
-      let x ← a[0]
+      let x := a[0]
       a[0] := a[1]
       a[1] := x
   then fun () a' _ => a'.toArray == #[-1, 3]
@@ -386,7 +392,7 @@ example (a : UInt8Array) (h : 0 < a.size) : Nat × UInt8Array :=
 
 -- Reads run before their statement, so reads under a binder or in a branch of a term are errors.
 /--
-error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a branch of a term: read the element first, with `let x ← a[i]`, or branch with an `if` statement
+error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a branch of a term: read the element first, with `let x := a[i]`, or branch with an `if` statement
 -/
 #guard_msgs in
 example (a : UInt8Array) (j : USize) (h : 0 < a.size) : Unit × UInt8Array :=
@@ -394,7 +400,7 @@ example (a : UInt8Array) (j : USize) (h : 0 < a.size) : Unit × UInt8Array :=
     a[0] := if h : j.toNat < a.size then a[j] else 0
 
 /--
-error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a branch of a term: read the element first, with `let x ← a[i]`, or branch with an `if` statement
+error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a branch of a term: read the element first, with `let x := a[i]`, or branch with an `if` statement
 -/
 #guard_msgs in
 example (a : UInt8Array) (n : USize) (h : n.toNat ≤ a.size) : Bool × UInt8Array :=
@@ -405,7 +411,7 @@ example (a : UInt8Array) (n : USize) (h : n.toNat ≤ a.size) : Bool × UInt8Arr
     return r
 
 /--
-error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a branch of a term: read the element first, with `let x ← a[i]`, or branch with an `if` statement
+error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a branch of a term: read the element first, with `let x := a[i]`, or branch with an `if` statement
 -/
 #guard_msgs in
 example (a : UInt8Array) (h : 4 ≤ a.size) : Unit × UInt8Array :=
@@ -466,7 +472,7 @@ private def fused (a : UInt64Array) (len : USize) :
       for j in 0...len with (b₂ : UInt64 := 0) (b₃ : UInt64 := 0) (s : UInt64 := 0) do
         have h₂ : (len + 1 + j).toNat < a.size := by inplace_bound
         have h₃ : (2 * len + 1 + j).toNat < a.size := by inplace_bound
-        let x ← a[j]
+        let x := a[j]
         let (u, b₂') := subB a[len + 1 + j] x b₂
         let (t, b₃') := subB a[2 * len + 1 + j] x b₃
         a[len + 1 + j] := u
@@ -508,7 +514,7 @@ private def stats (a : UInt8Array) (lo hi : USize) : Option ((Nat × UInt8 × UI
   if h : hi.toNat ≤ a.size then
     let up := inplace a do
       for j in lo...hi with (s := 0) (m := 255) (M := 0) (o := 0) do
-        let x ← a[j]
+        let x := a[j]
         s := s + x.toNat
         m := min m x
         M := max M x
@@ -516,7 +522,7 @@ private def stats (a : UInt8Array) (lo hi : USize) : Option ((Nat × UInt8 × UI
       return (s, m, M, o)
     let down := inplace a do
       for j in reverse lo...hi with (s := 0) (m := 255) (M := 0) (o := 0) do
-        let x ← a[j]
+        let x := a[j]
         s := s + x.toNat
         m := min m x
         M := max M x
@@ -551,7 +557,7 @@ private def offsetRows (a : UInt32Array) (rows : USize) : Option (UInt32 × UInt
       for r in 0...rows with (tot := 0) do
         for c in 0...4 with (acc := 0) (t := tot) do
           have hc : (4 * r + c).toNat < a.size := by inplace_bound
-          let x ← a[4 * r + c]
+          let x := a[4 * r + c]
           acc := acc + x
           a[4 * r + c] := acc + tot
           t := t + x
@@ -578,7 +584,7 @@ error: mutable variable `k` cannot be shadowed: assign it with `k := e`, or in a
 example (a : UInt8Array) (h : 0 < a.size) : Nat × UInt8Array :=
   inplace a do
     for j in 0...1 with (k := 0) do
-      let k ← a[j]
+      let k := a[j]
     return k
 
 /-! Tests of `break`, `continue`, `return` in loops, `while`, `match` and the other ranges. -/
@@ -613,7 +619,7 @@ private def oddSum (a : UInt8Array) : Nat × UInt8Array :=
   have := a.toNat_usize_le
   inplace a do
     for j in 0...a.usize with (s := 0) do
-      let x ← a[j]
+      let x := a[j]
       if x = 0 then break
       if x % 2 = 0 then continue
       s := s + x.toNat
@@ -654,7 +660,7 @@ private def classify (a : UInt8Array) : Nat × UInt8Array :=
   have := a.toNat_usize_le
   inplace a do
     for j in 0...a.usize with (z := 0) do
-      let x ← a[j]
+      let x := a[j]
       match x.toNat % 3, x == 0 with
       | _, true => z := z + 1
       | 0, _ => a[j] := 30
@@ -843,7 +849,7 @@ private def doubleSlice (s : UInt32Array.Slice) : UInt32Array.Slice :=
 /-- Increments the first element of a slice, and returns its old value. -/
 private def bumpFirst (s : UInt8Array.Slice) (h : 0 < s.size) : UInt8 × UInt8Array.Slice :=
   inplace s do
-    let x ← s[0]
+    let x := s[0]
     s[0] := x + 1
     return x
 
@@ -963,7 +969,7 @@ example (a : UInt8Array) (h : 0 < a.size) : Unit × UInt8Array :=
     a[0] += 1
 
 /--
-error: this is not a statement of an `inplace` program: to end the program with a result, write `return ()`. The statements are reads `let x ← a[i]`, writes `a[i] := e`, `let`, `let mut`, assignments `x := e`, `have`, `if`, `unless`, `match`, `for`, `while`, `break`, `continue` and `return`, and a program `m` runs with `let x ← m`
+error: this is not a statement of an `inplace` program: to end the program with a result, write `return ()`. The statements are reads `let x := a[i]`, writes `a[i] := e`, `let`, `let mut`, assignments `x := e`, `have`, `if`, `unless`, `match`, `for`, `while`, `break`, `continue` and `return`, and a program `m` runs with `let x ← m`
 -/
 #guard_msgs in
 example (a : UInt8Array) : Unit × UInt8Array :=
@@ -971,7 +977,7 @@ example (a : UInt8Array) : Unit × UInt8Array :=
     pure ()
 
 /--
-error: this is not a statement of an `inplace` program: a write is written `a[i] := e`. The statements are reads `let x ← a[i]`, writes `a[i] := e`, `let`, `let mut`, assignments `x := e`, `have`, `if`, `unless`, `match`, `for`, `while`, `break`, `continue` and `return`, and a program `m` runs with `let x ← m`
+error: this is not a statement of an `inplace` program: a write is written `a[i] := e`. The statements are reads `let x := a[i]`, writes `a[i] := e`, `let`, `let mut`, assignments `x := e`, `have`, `if`, `unless`, `match`, `for`, `while`, `break`, `continue` and `return`, and a program `m` runs with `let x ← m`
 -/
 #guard_msgs in
 example (a : UInt8Array) (h : 0 < a.size) : Unit × UInt8Array :=
@@ -1006,7 +1012,7 @@ example (a : UInt8Array) (h : 0 < a.size) : Unit × UInt8Array :=
     a[0] := (300 : Nat)
 
 /--
-error: `inplace` loops over indices, not elements: write `for j in 0...a.usize do`, and read the element with `let x ← a[j]`
+error: `inplace` loops over indices, not elements: write `for j in 0...a.usize do`, and read the element with `let x := a[j]`
 -/
 #guard_msgs in
 example (a : UInt8Array) : Nat × UInt8Array :=
