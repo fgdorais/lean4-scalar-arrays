@@ -96,67 +96,20 @@ end Raw
 
 /-! ## Loop indices -/
 
-/-- The guard `i < stop` of a loop over `USize` indices bounds the index by any bound on `stop`. -/
-private theorem toNat_lt_of_lt {i stop : USize} {n : Nat} (h : i < stop) (hn : stop.toNat ≤ n) :
-    i.toNat < n := by
-  have := USize.lt_iff_toNat_lt.1 h
-  lia
+-- Lets `grind` reason about `USize` arithmetic, which is modulo `2 ^ System.Platform.numBits`: the
+-- case split `numBits = 32 ∨ numBits = 64` gives the modulus its two possible values. Index bounds
+-- and steps such as `(i + 1).toNat = i.toNat + 1` for `i < stop` are then proved by `grind` where
+-- they are needed.
+scoped grind_pattern System.Platform.numBits_eq => System.Platform.numBits
 
-/-- `i + 1` doesn't wrap around when `i < stop`. -/
-private theorem toNat_add_one_of_lt {i stop : USize} (h : i < stop) :
-    (i + 1).toNat = i.toNat + 1 := by
-  have := USize.lt_iff_toNat_lt.1 h
-  have := stop.toNat_lt_size
-  rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]
-
-/-- `i + 1` doesn't wrap around when `i.toNat < stop.toNat`. -/
-private theorem toNat_add_one_of_toNat_lt {i stop : USize} (h : i.toNat < stop.toNat) :
-    (i + 1).toNat = i.toNat + 1 :=
-  toNat_add_one_of_lt (USize.lt_iff_toNat_lt.2 h)
-
-/-- The index `off + j` of a window of `len` elements at `off`, within `n < USize.size`, doesn't wrap
-around for `j < len`. -/
-private theorem toNat_add_of_window {off len j : USize} {n : Nat} (hn : n < USize.size)
-    (hw : off.toNat + len.toNat ≤ n) (hj : j.toNat < len.toNat) :
-    (off + j).toNat = off.toNat + j.toNat := by
-  rw [USize.toNat_add, Nat.mod_eq_of_lt (by lia)]
-
-/-- `m.toUSize` is `m` for `m < USize.size`. -/
-private theorem toNat_toUSize_of_lt {m : Nat} (h : m < USize.size) : m.toUSize.toNat = m := by
-  rw [Nat.toUSize_eq, USize.toNat_ofNat', Nat.mod_eq_of_lt h]
-
-/-- `x + y * z` doesn't wrap around when its value is less than `USize.size`. -/
-private theorem toNat_add_mul_of_lt {x y z : USize}
-    (h : x.toNat + y.toNat * z.toNat < USize.size) :
-    (x + y * z).toNat = x.toNat + y.toNat * z.toNat := by
-  rw [USize.toNat_add, USize.toNat_mul, Nat.mod_eq_of_lt (a := y.toNat * z.toNat) (by lia),
-    Nat.mod_eq_of_lt h]
-
-/-- `i - 1` doesn't wrap around when `j < i`. -/
-private theorem toNat_sub_one_of_lt {i j : USize} (h : j < i) : (i - 1).toNat = i.toNat - 1 := by
-  have := USize.lt_iff_toNat_lt.1 h
-  rw [USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 (by simp; lia)), USize.toNat_one]
-
-/-- `i - 1 < i` when `j < i`. -/
-private theorem toNat_sub_one_lt_of_lt {i j : USize} (h : j < i) : (i - 1).toNat < i.toNat := by
-  have := USize.lt_iff_toNat_lt.1 h
-  rw [toNat_sub_one_of_lt h]; lia
-
-/-- `j + 1` is at most one more than `j`, even when it wraps around. -/
-private theorem toNat_add_one_le (j : USize) : (j + 1).toNat ≤ j.toNat + 1 := by
-  rw [USize.toNat_add, USize.toNat_one]
-  exact Nat.mod_le _ _
-
-/-- `USize` subtraction is at least the truncated subtraction of the `Nat` values. -/
-private theorem toNat_sub_le_toNat_sub (a b : USize) : a.toNat - b.toNat ≤ (a - b).toNat := by
-  by_cases h : b ≤ a
-  · exact Nat.le_of_eq (USize.toNat_sub_of_le _ _ h).symm
-  · have := USize.lt_iff_toNat_lt.1 (USize.not_le.1 h)
-    lia
+-- The measures of the loops stay lemmas, for build time: `decreasing_by grind` costs about 0.25 s
+-- per loop, half of it in the kernel, and more than doubled the time of each `Program` module.
 
 /-- The measure `stop - i` of a loop over `USize` indices decreases at each step. -/
 private theorem sub_toNat_add_one_lt {i stop : USize} (h : i < stop) :
     stop.toNat - (i + 1).toNat < stop.toNat - i.toNat := by
-  have := USize.lt_iff_toNat_lt.1 h
-  rw [toNat_add_one_of_lt h]
-  lia
+  grind
+
+/-- `i - 1 < i` when `j < i`. -/
+private theorem toNat_sub_one_lt_of_lt {i j : USize} (h : j < i) : (i - 1).toNat < i.toNat := by
+  grind
