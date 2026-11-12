@@ -109,6 +109,13 @@ private theorem toNat_add_one_of_lt {i stop : USize} (h : i < stop) :
   have := stop.toNat_lt_size
   rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]
 
+/-- `x + y * z` doesn't wrap around when its value is less than `USize.size`. -/
+private theorem toNat_add_mul_of_lt {x y z : USize}
+    (h : x.toNat + y.toNat * z.toNat < USize.size) :
+    (x + y * z).toNat = x.toNat + y.toNat * z.toNat := by
+  rw [USize.toNat_add, USize.toNat_mul, Nat.mod_eq_of_lt (a := y.toNat * z.toNat) (by lia),
+    Nat.mod_eq_of_lt h]
+
 /-- `i - 1` doesn't wrap around when `j < i`. -/
 private theorem toNat_sub_one_of_lt {i j : USize} (h : j < i) : (i - 1).toNat = i.toNat - 1 := by
   have := USize.lt_iff_toNat_lt.1 h

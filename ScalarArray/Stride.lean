@@ -4,6 +4,8 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 module
 
+import all ScalarArray.Internal
+
 /-!
 # Strides and the models of loops
 
@@ -18,8 +20,6 @@ The parts of the specification of loops that name no element type, shared by all
   `Stride.Fits s n size` says that its first `n` indices are distinct and less than `size`. The
   arrays' `modifyAt` updates the elements at any index map, so `a.modifyAt s.idx lo hi g` is the
   model of a strided loop.
-* `ScalarArray.USize.toNat_add_mul_of_lt` and `toNat_add_one_of_lt`, the `USize` arithmetic of loop
-  indices that doesn't wrap around.
 
 A loop computes the `USize` copies of the offset and the stride once, before it starts:
 `toNat_idx_toUSize` gives the `Nat` value of `s.off.toUSize + s.inc.toUSize * j` for a step `j`
@@ -27,22 +27,6 @@ of a stride that fits in an array in memory.
 -/
 
 namespace ScalarArray
-
-/-! ## Machine-word index arithmetic -/
-
-/-- `x + y * z` doesn't wrap around when its value is less than `USize.size`. -/
-public theorem USize.toNat_add_mul_of_lt {x y z : USize}
-    (h : x.toNat + y.toNat * z.toNat < USize.size) :
-    (x + y * z).toNat = x.toNat + y.toNat * z.toNat := by
-  rw [USize.toNat_add, USize.toNat_mul, Nat.mod_eq_of_lt (a := y.toNat * z.toNat) (by lia),
-    Nat.mod_eq_of_lt h]
-
-/-- `i + 1` doesn't wrap around when `i < stop`. -/
-public theorem USize.toNat_add_one_of_lt {i stop : USize} (h : i < stop) :
-    (i + 1).toNat = i.toNat + 1 := by
-  have := USize.lt_iff_toNat_lt.1 h
-  have := stop.toNat_lt_size
-  rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]
 
 /-! ## Iteration over a range -/
 
@@ -318,7 +302,7 @@ public theorem toNat_idx_toUSize (h : s.Fits n size) (hs : size < USize.size) {i
   · have hinc : s.inc ≤ s.inc * i.toNat := Nat.le_mul_of_pos_right _ h₀
     have hc : s.inc.toUSize.toNat = s.inc := by
       simp [Nat.mod_eq_of_lt (show s.inc < USize.size by lia)]
-    rw [USize.toNat_add_mul_of_lt (by rw [ho, hc]; lia), ho, hc]
+    rw [toNat_add_mul_of_lt (by rw [ho, hc]; lia), ho, hc]
 
 /-- The `USize` index of a step `i < n` is less than `size`. -/
 public theorem toNat_idx_toUSize_lt (h : s.Fits n size) (hs : size < USize.size) {i : USize}

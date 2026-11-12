@@ -6,6 +6,7 @@ module
 
 public import ScalarArray.Stride
 public import ScalarArray.ISize.Program
+import all ScalarArray.Internal
 
 /-!
 # Updates at index maps, and whole loops, on `ISizeArray`
@@ -282,7 +283,7 @@ public theorem run_forInFrom {β : Type v} (lo hi j₀ : USize) (hlo : lo.toNat 
     exact run_congr_pair (k := k) (x := (init, a)) (iterRange_of_le f (by lia) _).symm h _
   | succ d ih =>
     have hj : j₀ < hi := by rw [USize.lt_iff_toNat_lt]; lia
-    have hsucc := USize.toNat_add_one_of_lt hj
+    have hsucc := toNat_add_one_of_lt hj
     rw [forInFrom_eq, dite_eq_left_of_eq_true (eq_true hj)]
     refine (hbody j₀ hlo hj _ init a h).trans ?_
     rw [ih _ _ _ _ _ (by rw [hsucc]; lia)]
@@ -374,10 +375,6 @@ public theorem run_forInFrom_write (lo hi j₀ : USize) (hlo : lo.toNat ≤ j₀
     rfl
 
 /-! ## Whole loops down -/
-
-private theorem toNat_sub_one_of_lt {i j : USize} (h : j < i) : (i - 1).toNat = i.toNat - 1 := by
-  have := USize.lt_iff_toNat_lt.1 h
-  rw [USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 (by simp; lia)), USize.toNat_one]
 
 /--
 Runs the loop `Tail.forInRevFrom lo hi j₀ hj₀ init body k`, from `j₀ - 1` down to `lo`, whose step
