@@ -242,6 +242,8 @@ public instance (s : Stride) (n size : Nat) : Decidable (s.Fits n size) :=
   decidable_of_iff ((0 < s.inc ∨ n ≤ 1) ∧ (n = 0 ∨ s.idx (n - 1) < size))
     ⟨fun ⟨h₁, h₂⟩ => ⟨h₁, h₂⟩, fun ⟨h₁, h₂⟩ => ⟨h₁, h₂⟩⟩
 
+section Fits
+
 variable {s : Stride} {n size : Nat}
 
 /-- The index of each of the first `n` steps is less than `size`. -/
@@ -308,6 +310,8 @@ public theorem toNat_idx_toUSize (h : s.Fits n size) (hs : size < USize.size) {i
 public theorem toNat_idx_toUSize_lt (h : s.Fits n size) (hs : size < USize.size) {i : USize}
     (hi : i.toNat < n) : (s.off.toUSize + s.inc.toUSize * i).toNat < size := by
   rw [toNat_idx_toUSize h hs hi]; exact h.idx_lt hi
+
+end Fits
 
 end Stride
 
