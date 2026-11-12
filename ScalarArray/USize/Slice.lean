@@ -368,7 +368,7 @@ public def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m]
 where
   @[specialize] loop (a : USizeArray) (start i : USize) (hi : i.toNat ≤ a.size) (b : β) : m β :=
     if h : start < i then
-      have := toNat_sub_one_of_lt h
+      have : (i - 1).toNat = i.toNat - 1 := by grind
       have := USize.lt_iff_toNat_lt.1 h
       do loop a start (i - 1) (by lia) (← f (a.uget (i - 1) (by lia)) b)
     else pure b
@@ -383,11 +383,12 @@ private theorem foldrMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
   fun_induction foldrMImpl.loop f s.array start i hi b generalizing k with
   | case1 i hi b hlt _ _ ih =>
     have := USize.lt_iff_toNat_lt.1 hlt
+    have hp : (i - 1).toNat = i.toNat - 1 := by grind
     obtain ⟨k, rfl⟩ : ∃ k', k = k' + 1 := ⟨k - 1, by lia⟩
-    simp only [foldrM.loop, uget, Array.uget, getElem_eq, toNat_sub_one_of_lt hlt]
+    simp only [foldrM.loop, uget, Array.uget, getElem_eq, hp]
     congr 1
     · simp only [hik]; rfl
-    · funext b; exact ih b k _ (by rw [toNat_sub_one_of_lt hlt]; lia)
+    · funext b; exact ih b k _ (by rw [hp]; lia)
   | case2 i hi b hlt =>
     have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hlt)
     obtain rfl : k = 0 := by lia
@@ -447,7 +448,7 @@ where
   @[specialize] loop (a : USizeArray) (start i : USize) (hi : i.toNat ≤ a.size) :
       m (Option β) :=
     if h : start < i then
-      have := toNat_sub_one_of_lt h
+      have : (i - 1).toNat = i.toNat - 1 := by grind
       have := USize.lt_iff_toNat_lt.1 h
       do
         match ← f (a.uget (i - 1) (by lia)) with
@@ -465,14 +466,15 @@ private theorem findSomeRevMImpl_loop {β : Type v} {m : Type v → Type w} [Mon
   fun_induction findSomeRevMImpl.loop f s.array start i hi generalizing k with
   | case1 i hi hlt _ _ ih =>
     have := USize.lt_iff_toNat_lt.1 hlt
+    have hp : (i - 1).toNat = i.toNat - 1 := by grind
     obtain ⟨k, rfl⟩ : ∃ k', k = k' + 1 := ⟨k - 1, by lia⟩
-    simp only [findSomeRevM?.loop, uget, Array.uget, getElem_eq, toNat_sub_one_of_lt hlt]
+    simp only [findSomeRevM?.loop, uget, Array.uget, getElem_eq, hp]
     congr 1
     · simp only [hik]; rfl
     · funext r
       split
       · rfl
-      · exact ih k _ (by rw [toNat_sub_one_of_lt hlt]; lia)
+      · exact ih k _ (by rw [hp]; lia)
   | case2 i hi hlt =>
     have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hlt)
     obtain rfl : k = 0 := by lia
@@ -561,7 +563,7 @@ public def beqImpl (s t : USizeArray.Slice) : Bool :=
         have := USize.le_iff_toNat_le.1 h.1
         have := congrArg USize.toNat h.2
         rw [USize.toNat_sub_of_le _ _ h.1] at this
-        have := toNat_sub_le_toNat_sub stop i
+        have : stop.toNat - i.toNat ≤ (stop - i).toNat := by grind
         lia)
     else false
   else beqSlow s t
@@ -570,10 +572,7 @@ where
       (hj : stop.toNat - i.toNat + j.toNat ≤ b.size) : Bool :=
     if h : i < stop then
       have := USize.lt_iff_toNat_lt.1 h
-      have := toNat_add_one_of_lt h
-      have := toNat_add_one_le j
-      a.uget i (toNat_lt_of_lt h hstop) == b.uget j (by lia) &&
-        loop a b stop hstop (i + 1) (j + 1) (by lia)
+      a.uget i (by lia) == b.uget j (by lia) && loop a b stop hstop (i + 1) (j + 1) (by grind)
     else true
   termination_by stop.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
@@ -584,12 +583,12 @@ private theorem beqImpl_loop (a b : USizeArray) (hb : b.size < USize.size) (stop
       (a.toArray[i.toNat + k]'(by rw [size_toArray']; lia) ==
         b.toArray[j.toNat + k]'(by rw [size_toArray']; lia)) = true := by
   fun_induction beqImpl.loop a b stop hstop i j hj with
-  | case1 i j hj hi _ _ _ ih =>
+  | case1 i j hj hi _ ih =>
     have := USize.lt_iff_toNat_lt.1 hi
-    have hj1 : (j + 1).toNat = j.toNat + 1 := by
-      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]
+    have hi1 : (i + 1).toNat = i.toNat + 1 := by grind
+    have hj1 : (j + 1).toNat = j.toNat + 1 := by grind
     rw [Bool.and_eq_true, ih]
-    simp only [uget, Array.uget, toNat_add_one_of_lt hi, hj1]
+    simp only [uget, Array.uget, hi1, hj1]
     constructor
     · rintro ⟨h0, h⟩ k hk
       cases k with

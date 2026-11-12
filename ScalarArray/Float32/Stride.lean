@@ -283,7 +283,7 @@ public theorem run_forInFrom {β : Type v} (lo hi j₀ : USize) (hlo : lo.toNat 
     exact run_congr_pair (k := k) (x := (init, a)) (iterRange_of_le f (by lia) _).symm h _
   | succ d ih =>
     have hj : j₀ < hi := by rw [USize.lt_iff_toNat_lt]; lia
-    have hsucc := toNat_add_one_of_lt hj
+    have hsucc : (j₀ + 1).toNat = j₀.toNat + 1 := by grind
     rw [forInFrom_eq, dite_eq_left_of_eq_true (eq_true hj)]
     refine (hbody j₀ hlo hj _ init a h).trans ?_
     rw [ih _ _ _ _ _ (by rw [hsucc]; lia)]
@@ -404,7 +404,7 @@ public theorem run_forInRevFrom {β : Type v} (lo hi j₀ : USize) (hj₀ : j₀
     exact run_congr_pair (k := k) (x := (init, a)) (iterRangeRev_of_le f (by lia) _).symm h _
   | succ d ih =>
     have hj : lo < j₀ := by rw [USize.lt_iff_toNat_lt]; lia
-    have hpred := toNat_sub_one_of_lt hj
+    have hpred : (j₀ - 1).toNat = j₀.toNat - 1 := by grind
     rw [forInRevFrom_eq, dite_eq_left_of_eq_true (eq_true hj)]
     refine (hbody (j₀ - 1) _ _ _ init a h).trans ?_
     rw [ih _ _ _ _ _ (by rw [hpred]; lia)]

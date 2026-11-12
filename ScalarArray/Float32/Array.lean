@@ -207,7 +207,7 @@ public def foldlMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : β �
   else foldlMSlow f init a start stop
 where
   @[specialize] loop (stop : USize) (hstop : stop.toNat ≤ a.size) (i : USize) (b : β) : m β :=
-    if h : i < stop then do loop stop hstop (i + 1) (← f b (a.uget i (toNat_lt_of_lt h hstop)))
+    if h : i < stop then do loop stop hstop (i + 1) (← f b (a.uget i (by grind)))
     else pure b
   termination_by stop.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
@@ -221,11 +221,12 @@ private theorem foldlMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
   fun_induction foldlMImpl.loop f a stop hstop i b generalizing k with
   | case1 i b hi ih =>
     have := USize.lt_iff_toNat_lt.1 hi
+    have hs : (i + 1).toNat = i.toNat + 1 := by grind
     obtain ⟨k, rfl⟩ : ∃ k', k = k' + 1 := ⟨k - 1, by lia⟩
     rw [Array.foldlM.loop.eq_1, dite_eq_left this]
     simp only [uget, Array.uget]
     congr 1; funext b
-    rw [ih b k (by rw [toNat_add_one_of_lt hi]; lia), toNat_add_one_of_lt hi]
+    rw [ih b k (by lia), hs]
   | case2 i b hi =>
     have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hi)
     rw [Array.foldlM.loop.eq_1, dite_eq_right (by lia)]
@@ -279,7 +280,7 @@ public def foldrMImpl {β : Type v} {m : Type v → Type w} [Monad m] (f : Float
 where
   @[specialize] loop (i : USize) (hi : i.toNat ≤ a.size) (b : β) : m β :=
     if h : 0 < i then
-      have := toNat_sub_one_of_lt h
+      have : (i - 1).toNat = i.toNat - 1 := by grind
       have := USize.lt_iff_toNat_lt.1 h
       do loop (i - 1) (by lia) (← f (a.uget (i - 1) (by simp at *; lia)) b)
     else pure b
@@ -293,12 +294,13 @@ private theorem foldrMImpl_loop {β : Type v} {m : Type v → Type w} [Monad m]
   fun_induction foldrMImpl.loop f a i hi b with
   | case1 i hi b hpos _ _ ih =>
     have := USize.lt_iff_toNat_lt.1 hpos
+    have hp : (i - 1).toNat = i.toNat - 1 := by grind
     obtain ⟨k, hk⟩ : ∃ k, i.toNat = k + 1 := ⟨i.toNat - 1, by simp at this; lia⟩
     simp only [hk, Array.foldrM.fold.eq_2, Nat.succ_eq_add_one, Nat.add_one_ne_zero, beq_iff_eq,
-      ite_false, uget, Array.uget, toNat_sub_one_of_lt hpos]
+      ite_false, uget, Array.uget, hp]
     congr 1; funext b
-    rw [ih b (by rw [toNat_sub_one_of_lt hpos]; lia)]
-    simp only [toNat_sub_one_of_lt hpos, hk, Nat.add_sub_cancel]
+    rw [ih b (by rw [hp]; lia)]
+    simp only [hp, hk, Nat.add_sub_cancel]
   | case2 i hi b hpos =>
     have : i.toNat = 0 := by simp [USize.lt_iff_toNat_lt] at hpos; lia
     simp only [this, Array.foldrM.fold.eq_1, beq_self_eq_true, ite_self]
@@ -357,7 +359,7 @@ public def forInImpl {β : Type v} {m : Type v → Type w} [Monad m] (a : @& Flo
 where
   @[specialize] loop (stop : USize) (hstop : stop.toNat ≤ a.size) (i : USize) (b : β) : m β :=
     if h : i < stop then do
-      match ← f (a.uget i (toNat_lt_of_lt h hstop)) b with
+      match ← f (a.uget i (by grind)) b with
       | .done b => pure b
       | .yield b => loop stop hstop (i + 1) b
     else pure b
@@ -373,6 +375,7 @@ private theorem forInImpl_loop {β : Type v} {m : Type v → Type w} [Monad m] (
   fun_induction forInImpl.loop a f stop hstop i b with
   | case1 i b hi' ih =>
     have := USize.lt_iff_toNat_lt.1 hi'
+    have hs : (i + 1).toNat = i.toNat + 1 := by grind
     have := size_toArray' a
     obtain ⟨k, hk⟩ : ∃ k, a.toArray.size - i.toNat = k + 1 :=
       ⟨a.toArray.size - i.toNat - 1, by lia⟩
@@ -382,8 +385,8 @@ private theorem forInImpl_loop {β : Type v} {m : Type v → Type w} [Monad m] (
     congr 1; funext r
     split
     · rfl
-    · rw [ih _ (by rw [toNat_add_one_of_lt hi']; lia) (by lia)]
-      simp only [toNat_add_one_of_lt hi']
+    · rw [ih _ (by lia) (by lia)]
+      simp only [hs]
       congr 1; lia
   | case2 i b hi' =>
     have := USize.le_iff_toNat_le.1 (USize.not_lt.1 hi')
@@ -421,7 +424,7 @@ public def anyImpl (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else anySlow a p
 where
   @[specialize] loop (stop : USize) (hstop : stop.toNat ≤ a.size) (i : USize) : Bool :=
-    if h : i < stop then p (a.uget i (toNat_lt_of_lt h hstop)) || loop stop hstop (i + 1)
+    if h : i < stop then p (a.uget i (by grind)) || loop stop hstop (i + 1)
     else false
   termination_by stop.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
@@ -433,7 +436,7 @@ private theorem anyImpl_loop (a : Float32Array) (p : Float32 → Bool) (stop : U
   fun_induction anyImpl.loop a p stop hstop i with
   | case1 i hi ih =>
     have := USize.lt_iff_toNat_lt.1 hi
-    rw [Array.anyM.loop.eq_1, dite_eq_left this, ih, toNat_add_one_of_lt hi]
+    rw [Array.anyM.loop.eq_1, dite_eq_left this, ih, show (i + 1).toNat = i.toNat + 1 by grind]
     simp only [uget, Array.uget]
     cases p a.toArray[i.toNat] <;> rfl
   | case2 i hi =>
@@ -467,7 +470,7 @@ public def allImpl (a : @& Float32Array) (p : Float32 → Bool) : Bool :=
   if a.size < USize.size then loop a.usize a.toNat_usize_le 0 else allSlow a p
 where
   @[specialize] loop (stop : USize) (hstop : stop.toNat ≤ a.size) (i : USize) : Bool :=
-    if h : i < stop then p (a.uget i (toNat_lt_of_lt h hstop)) && loop stop hstop (i + 1)
+    if h : i < stop then p (a.uget i (by grind)) && loop stop hstop (i + 1)
     else true
   termination_by stop.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
@@ -528,7 +531,7 @@ public def beqImpl (a b : @& Float32Array) : Bool :=
 where
   loop (stop : USize) (ha : stop.toNat ≤ a.size) (hb : stop.toNat ≤ b.size) (i : USize) : Bool :=
     if h : i < stop then
-      a.uget i (toNat_lt_of_lt h ha) == b.uget i (toNat_lt_of_lt h hb) && loop stop ha hb (i + 1)
+      a.uget i (by grind) == b.uget i (by grind) && loop stop ha hb (i + 1)
     else true
   termination_by stop.toNat - i.toNat
   decreasing_by exact sub_toNat_add_one_lt h
@@ -542,7 +545,7 @@ private theorem beqImpl_loop (a b : Float32Array) (stop : USize) (ha : stop.toNa
   | case1 i hi ih =>
     have := USize.lt_iff_toNat_lt.1 hi
     rw [Bool.and_eq_true, ih]
-    simp only [uget, Array.uget, toNat_add_one_of_lt hi]
+    simp only [uget, Array.uget, show (i + 1).toNat = i.toNat + 1 by grind]
     constructor
     · rintro ⟨h0, h⟩ k hik hk
       by_cases hk' : k = i.toNat
