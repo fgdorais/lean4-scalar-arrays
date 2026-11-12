@@ -15,7 +15,8 @@ Experimental: the root module `ScalarArray` doesn't import this one.
 
 `inplace a do …` writes an in-place program (`XArray.InPlace`) on the array `a` in a small
 imperative language, and runs it, which returns the program's result and the new array, or hands
-them to a continuation `then k`. It works for all 13 array types:
+them to a continuation `then k`. It works for all 13 array types, and for their slices (see
+[Slices](#slices)):
 
 ```
 inplace a do
@@ -58,9 +59,12 @@ inplace a do
   (from `lo + 1`), and `*...hi` and `*...=hi` (from `0`). `lo.toNat ≤ j.toNat` and
   `j.toNat < hi.toNat` are in context in the body, or `j.toNat ≤ hi.toNat` and
   `lo.toNat < j.toNat` for the other ranges, which need `hi.toNat + 1 < USize.size` and
-  `lo.toNat + 1 < USize.size`, proved like the bounds of indices. `for j in lo...hi by s do …` runs
-  over `lo`, `lo + s`, … below `hi`, for `s > 0`, and `reverse` runs over the same indices
-  downward.
+  `lo.toNat + 1 < USize.size`, proved like the bounds of indices. A bound that is a literal, as in
+  `0...4`, is in context as a `Nat` literal too, `j.toNat < 4`, which proofs such as
+  `get_elem_tactic` use. `for h : j in lo...hi do …` names the bounds,
+  `h : lo.toNat ≤ j.toNat ∧ j.toNat < hi.toNat`, or the bounds of the other ranges (only the upper
+  one for `*...hi`). `for j in lo...hi by s do …` runs over `lo`, `lo + s`, … below `hi`, for
+  `s > 0`, and `reverse` runs over the same indices downward.
 * An optional `with (x := init) …` clause names the loop's variables, as `(x : t := init)` with
   their types: up to four, which the loop keeps as separate unboxed arguments. They are mutable in
   the body, and they hold their last values after the loop. Loops nest, and a nested loop
@@ -94,6 +98,43 @@ The program calls `k` where it ends, inside its last loop if it ends with one, s
 into no pair, and scalars such as the carries above reach `k` unboxed. `h` lets `k` run another
 program on `a'` with the bounds proved for `a`.
 
+## Slices
+
+On a slice `s` of an array (an `XArray.Slice`), `inplace s do …` reads and writes the slice's
+elements, at indices counted from the start of the slice, with bounds `i.toNat < s.size`, and
+`s.usize` is its size as a `USize`. The program runs on the slice's array in place, with
+`XArray.Slice.runInPlaceThenOf`, and returns the new slice, on the new array; with `then k`, `k`
+gets the new slice and `h : s'.size = s.size`. `let x ← m` works on arrays only.
+
+```
+def double (s : UInt32Array.Slice) : UInt32Array.Slice :=
+  (inplace s do
+    for j in 0...s.usize do
+      s[j] := 2 * s[j]).2
+```
+
+The program reads and writes the array at `off + i`, where `off` is the slice's start as a `USize`.
+When the array's size is less than `USize.size`, as it always is at runtime, that is the element
+`i` of the slice.
+
+## Proofs
+
+A program is defined by its expansion, which `runInPlaceThenOf_eq` and the `run` lemmas of
+`XArray.InPlace.Tail` take apart (`ScalarArrayTest/InPlaceSyntax.lean` has these examples):
+
+* A program without branches or loops: `simp [XArray.runInPlaceThenOf_eq]` runs it.
+* An `if`: `simp only [XArray.runInPlaceThenOf_eq, XArray.InPlace.Tail.run_readThen,
+  XArray.InPlace.Tail.ite_eq]` lifts it out of the program, and the cases follow, for example by
+  `by_cases hc : c <;> simp [hc]`.
+* A loop: after `XArray.InPlace.Tail.forIn_eq`, `Tail.run_forInFrom` runs the loop as
+  `iterRange f lo hi` of a function `f` of the step, the loop's variables and the array, for a step
+  that `hbody` proves. `iterRange_prod_of_snd` drops the array when the loop only reads.
+  `Tail.run_forInFrom_modify` and `Tail.run_forInFrom_write` run the loops that write
+  `a[e j] := …`, as `modifyAt`, and `Tail.run_forInRevFrom` and its forms the loops down.
+
+How the notation expands may change in later versions, so proofs that take a program apart may need
+adjusting after an upgrade.
+
 ## Compilation
 
 The program expands to a tail program (`XArray.InPlace.Tail`) on arrays of size `n`, run with
@@ -117,7 +158,8 @@ allocates nothing.
 The bound of each index is proved by the tactic `inplace_bound`, from the hypotheses in context:
 
 * for an index `off + j` in a loop over `j < len`, from a window hypothesis
-  `off.toNat + len.toNat ≤ a.size`;
+  `off.toNat + len.toNat ≤ a.size` (tried only on indices that are sums, so that other indices
+  don't pay for it);
 * otherwise by `lia`;
 * otherwise, for indices with `USize` arithmetic such as `j - 17` or `2 * j + 1`, by `grind`, which
   splits on the platform width `System.Platform.numBits` (see the `grind_pattern` in
@@ -143,8 +185,8 @@ else UInt64Array.mk (Array.replicate a.size 0)
 
 ## Limits
 
-* `a` is a local variable: the program's array. `let x ← b[i]` and `b[i] := e` on another array
-  `b` are errors, while `b[i]` in a term is ordinary indexing of `b`, with its own bound.
+* `a` is a local variable: the program's array or slice. `let x ← b[i]` and `b[i] := e` on another
+  array `b` are errors, while `b[i]` in a term is ordinary indexing of `b`, with its own bound.
 * Inside the program, `a` is the array before the program runs, so it is an error outside of the
   reads `a[i]` and its size `a.size` or `a.usize`: `a[i]!`, `a[i]'h` or `a.toArray` would read old
   elements, and keep the old array alive, which copies it. A `have` and the proofs in `by` blocks
@@ -164,6 +206,14 @@ namespace ScalarArray.InPlaceSyntax
 /-- The index `off + j` of a window of `len` elements at `off` is in bounds, for `j < len`. -/
 public theorem toNat_add_lt_of_window {n : Nat} {off len j : USize}
     (hw : off.toNat + len.toNat ≤ n) (hj : j.toNat < len.toNat) : (off + j).toNat < n := by
+  grind
+
+/--
+The index `off + i` of a window of `n` elements at `off` is in bounds, for `i < n`: the bound of the
+indices of a program on a slice, in the slice's array.
+-/
+public theorem toNat_add_lt_of_window_of_lt {N n : Nat} {off i : USize}
+    (hw : off.toNat + n ≤ N) (hi : i.toNat < n) : (off + i).toNat < N := by
   grind
 
 /--
@@ -281,7 +331,10 @@ macro_rules
   | `(tactic| inplace_bound_core) => `(tactic| (
       inplace_split
       first
-        | (refine ScalarArray.InPlaceSyntax.toNat_add_lt_of_window (len := ?len) ?hw ?hj
+        -- At reducible transparency, so that an index that isn't a sum, such as a literal, fails
+        -- at once rather than unfolding to match `off + j`.
+        | (with_reducible
+             refine ScalarArray.InPlaceSyntax.toNat_add_lt_of_window (len := ?len) ?hw ?hj
            case hj => assumption
            case hw => assumption)
         | assumption
@@ -334,10 +387,10 @@ syntax "unless " termBeforeDo " do" inplaceSeq : inplaceStmt
 syntax inplaceLoopVars := " with" (ppSpace "(" ident (" : " term)? " := " term ")")+
 /--
 A loop over `j` in a range such as `lo...hi` or `reverse lo...hi`, by steps of `s` with `by s`, with
-the variables of its `with` clause.
+the variables of its `with` clause; `for h : j in …` names the bounds of `j`.
 -/
-syntax (name := inplaceFor) "for " ident " in " (&"reverse ")? termBeforeDo (" by " termBeforeDo)?
-  (inplaceLoopVars)? " do" inplaceSeq : inplaceStmt
+syntax (name := inplaceFor) "for " (atomic(ident " : "))? ident " in " (&"reverse ")? termBeforeDo
+  (" by " termBeforeDo)? (inplaceLoopVars)? " do" inplaceSeq : inplaceStmt
 /-- A loop that runs while `c` holds, with the variables of its `with` clause. -/
 syntax (name := inplaceWhile) "while " (atomic(ident " : "))? termBeforeDo (inplaceLoopVars)?
   " do" inplaceSeq : inplaceStmt
@@ -375,6 +428,12 @@ private structure Arr where
   usize : Ident
   /-- The proof of `arr.size = size`. -/
   hsize : Ident
+  /--
+  For a slice, the offset `off` of its window in its array, and the proof `hw` of
+  `off.toNat + size ≤ N`, for the array's size `N`: the program reads and writes the array at
+  `off + i`.
+  -/
+  window : Option (Ident × Ident) := none
 
 /-- Checks that a read or a write is on the program's array. -/
 private def checkArray (arr a : Ident) : MacroM Unit :=
@@ -449,13 +508,22 @@ private partial def liftReads (arr : Ident) (lazy : Bool) (stx : Syntax) :
     return .node info kind (← args.mapIdxM fun k arg => liftReads arr (lazy || lazyFrom ≤ k) arg)
   | _ => return stx
 
-/-- The proof of the bound of an index, `i.toNat < size`, from `i.toNat < arr.size`. -/
-private def bound (p : Arr) : MacroM Term :=
-  `(Nat.lt_of_lt_of_eq (by inplace_bound) $p.hsize)
+/--
+The index in the program's array of the index `i` of `arr`, and the proof of its bound from
+`i.toNat < arr.size`: `i` itself for an array, and `off + i` for a slice.
+-/
+private def access (p : Arr) (i : Term) : MacroM (Term × Term) := do
+  let h ← `((Nat.lt_of_lt_of_eq (by inplace_bound) $p.hsize : USize.toNat $i < _))
+  match p.window with
+  | none => return (i, h)
+  | some (off, hw) =>
+    return (← `($off + $i), ← `(ScalarArray.InPlaceSyntax.toNat_add_lt_of_window_of_lt $hw $h))
 
 /-- `k` after the reads `reads`. -/
 private def withReads (p : Arr) (reads : Array (Ident × Term)) (k : Term) : MacroM Term :=
-  reads.foldrM (init := k) fun (x, i) k => do `(.readThen $i $(← bound p) fun $x => $k)
+  reads.foldrM (init := k) fun (x, i) k => do
+    let (i, h) ← access p i
+    `(.readThen $i $h fun $x => $k)
 
 /--
 The terms of the statement `s` with `a.size` and `a.usize` replaced and other uses of `a` rejected,
@@ -561,40 +629,105 @@ private partial def ends (stmts : List (TSyntax `inplaceStmt)) : Bool :=
     | _ => false
 
 /--
+A fact `(t, p, known)` about the index of a loop: the proposition `t` and its proof `p`, where
+`known` holds when `p` is a hypothesis that the loop already has in context.
+-/
+private abbrev IndexFact := Term × Term × Bool
+
+/--
 The bounds `lo` and `hi` of a loop over `lo...<hi` for the range `range`, with the facts to prove
 before the loop, and a function of the loop's index `j` and of the proofs `hlo` and `hj` of
-`lo.toNat ≤ j.toNat` and `j.toNat < hi.toNat` that adds the bounds of `j` in the range's own terms
-to a body. `lo...=hi` and `lo<...hi` loop over `lo...<hi + 1` and `lo + 1...<hi`, so they need
-`hi + 1` and `lo + 1` not to wrap around.
+`lo.toNat ≤ j.toNat` and `j.toNat < hi.toNat` that gives the bounds of `j` in the range's own terms:
+the lower one, if the range has one, and the upper one. `lo...=hi` and `lo<...hi` loop over
+`lo...<hi + 1` and `lo + 1...<hi`, so they need `hi + 1` and `lo + 1` not to wrap around.
 -/
 private def rangeBounds (range : Term) :
-    MacroM (Term × Term × Array (Ident × Term) × (Term → Term → Term → Term → MacroM Term)) := do
+    MacroM (Term × Term × Array (Ident × Term) ×
+      (Term → Term → Term → MacroM (Option IndexFact × IndexFact))) := do
   let zero ← `((0 : USize))
   let hh ← fresh `hh
   let hl ← fresh `hl
-  -- The facts about `j` of the range's upper and lower bounds, after the loop's own.
-  let upper (hi : Term) (j hj b : Term) : MacroM Term :=
-    `(have _ : USize.toNat $j ≤ USize.toNat $hi :=
-        ScalarArray.InPlaceSyntax.le_of_lt_succ $hh $hj; $b)
-  let lower (lo : Term) (j hlo b : Term) : MacroM Term :=
-    `(have _ : USize.toNat $lo < USize.toNat $j :=
-        ScalarArray.InPlaceSyntax.lt_of_succ_le $hl $hlo; $b)
+  -- The bounds of `j` in the range's own terms, from the loop's own.
+  let lower (lo j hlo : Term) : MacroM IndexFact :=
+    return (← `(USize.toNat $lo ≤ USize.toNat $j), hlo, true)
+  let upper (hi j hj : Term) : MacroM IndexFact :=
+    return (← `(USize.toNat $j < USize.toNat $hi), hj, true)
+  let upperEq (hi j hj : Term) : MacroM IndexFact :=
+    return (← `(USize.toNat $j ≤ USize.toNat $hi),
+      ← `(ScalarArray.InPlaceSyntax.le_of_lt_succ $hh $hj), false)
+  let lowerLt (lo j hlo : Term) : MacroM IndexFact :=
+    return (← `(USize.toNat $lo < USize.toNat $j),
+      ← `(ScalarArray.InPlaceSyntax.lt_of_succ_le $hl $hlo), false)
   let factHi (hi : Term) : MacroM (Ident × Term) :=
     return (hh, ← `(USize.toNat $hi + 1 < USize.size))
   let factLo (lo : Term) : MacroM (Ident × Term) :=
     return (hl, ← `(USize.toNat $lo + 1 < USize.size))
   match range with
-  | `($lo...$hi) | `($lo...<$hi) => pure (lo, hi, #[], fun _ _ _ b => pure b)
-  | `(*...$hi) | `(*...<$hi) => pure (zero, hi, #[], fun _ _ _ b => pure b)
-  | `($lo...=$hi) => pure (lo, ← `($hi + 1), #[← factHi hi], fun j _ hj b => upper hi j hj b)
-  | `(*...=$hi) => pure (zero, ← `($hi + 1), #[← factHi hi], fun j _ hj b => upper hi j hj b)
+  | `($lo...$hi) | `($lo...<$hi) =>
+    pure (lo, hi, #[], fun j hlo hj => return (some (← lower lo j hlo), ← upper hi j hj))
+  | `(*...$hi) | `(*...<$hi) =>
+    pure (zero, hi, #[], fun j _ hj => return (none, ← upper hi j hj))
+  | `($lo...=$hi) =>
+    pure (lo, ← `($hi + 1), #[← factHi hi],
+      fun j hlo hj => return (some (← lower lo j hlo), ← upperEq hi j hj))
+  | `(*...=$hi) =>
+    pure (zero, ← `($hi + 1), #[← factHi hi], fun j _ hj => return (none, ← upperEq hi j hj))
   | `($lo<...$hi) | `($lo<...<$hi) =>
-    pure (← `($lo + 1), hi, #[← factLo lo], fun j hlo _ b => lower lo j hlo b)
+    pure (← `($lo + 1), hi, #[← factLo lo],
+      fun j hlo hj => return (some (← lowerLt lo j hlo), ← upper hi j hj))
   | `($lo<...=$hi) =>
-    pure (← `($lo + 1), ← `($hi + 1), #[← factLo lo, ← factHi hi], fun j hlo hj b => do
-      upper hi j hj (← lower lo j hlo b))
+    pure (← `($lo + 1), ← `($hi + 1), #[← factLo lo, ← factHi hi],
+      fun j hlo hj => return (some (← lowerLt lo j hlo), ← upperEq hi j hj))
   | _ => Macro.throwErrorAt range "expected a range such as `lo...hi`, `lo...=hi`, `lo<...hi` or \
       `*...hi`"
+
+/--
+The fact `t` with the `USize` literals below `2 ^ 32` in it reduced to `Nat` literals, such as
+`USize.toNat 4` to `4`, which ordinary bound proofs such as `get_elem_tactic` need, or `none` if it
+has none.
+-/
+private partial def reduceLits (t : Syntax) : Option Syntax :=
+  match t with
+  | .node info kind args =>
+    if kind == ``Lean.Parser.Term.app && args.size == 2 && args[0]!.isIdent &&
+        args[0]!.getId.eraseMacroScopes == ``USize.toNat then
+      match args[1]![0]?.bind (·.isNatLit?) with
+      | some n => if n < 2 ^ 32 && args[1]!.getNumArgs == 1 then some (Syntax.mkNumLit (toString n))
+          else none
+      | none => none
+    else
+      let args' := args.map fun a => (reduceLits a).getD a
+      if (args.zip args').any fun (a, b) => !(a == b) then some (.node info kind args') else none
+  | _ => none
+
+/--
+The body `b` of a loop with the facts `facts` about its index added to the context: each fact,
+unless the loop already has it, and its version with `USize` literals reduced, if it has any. With
+a name `h`, as in `for h : j in lo...hi`, `h` is the conjunction of the facts.
+-/
+private def withIndexFacts (h : Option Ident) (facts : Array IndexFact) (b : Term) :
+    MacroM Term := do
+  let mut haves : Array (Ident × Term × Term) := #[]
+  let mut named : Array (Term × Term) := #[]
+  for (t, p, known) in facts do
+    let p ← if known then pure p else do
+      let x ← fresh `hb
+      haves := haves.push (x, t, p)
+      pure (x : Term)
+    match reduceLits t with
+    | some t' =>
+      let t' : Term := ⟨t'⟩
+      let x ← fresh `hb
+      haves := haves.push (x, t', ← `(by simpa only [USize.reduceToNat] using $p))
+      named := named.push (t', x)
+    | none => named := named.push (t, p)
+  let mut b := b
+  if let some h := h then
+    if let some last := named.back? then
+      let (t, p) ← named.pop.foldrM (init := last) fun (t₁, p₁) (t, p) => do
+        pure (← `($t₁ ∧ $t), ← `(And.intro $p₁ $p))
+      b ← `(have $h : $t := $p; $b)
+  haves.foldrM (init := b) fun (x, t, p) b => `(have $x : $t := $p; $b)
 
 mutual
 
@@ -640,10 +773,12 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
   | `(inplaceStmt| let $x:ident ← $a:ident[$i]) =>
     checkArray arr a
     checkNoShadow mvars #[x]
-    `(.readThen $i $(← bound p) fun $x => $(← k mvars))
+    let (i, h) ← access p i
+    `(.readThen $i $h fun $x => $(← k mvars))
   | `(inplaceStmt| $a:ident[$i] := $v) =>
     checkArray arr a
-    `(.writeThen $i $(← bound p) $v $(← k mvars))
+    let (i, h) ← access p i
+    `(.writeThen $i $h $v $(← k mvars))
   | `(inplaceStmt| let mut $x:ident $[: $ty]? := $e) =>
     match ty with
     | some ty => `(let $x:ident : $ty := $e; $(← k (mvars.push x)))
@@ -692,8 +827,8 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
       let d ← tuple ds.getElems
       let ps ← alts.mapM fun (ps, _) => tuple ps.getElems
       `(match $d:term with $[| $ps => $bs]*)
-  | `(inplaceStmt| for $j in $[reverse%$rev]? $range $[by $step]? $[$vars:inplaceLoopVars]?
-      do $b;*) =>
+  | `(inplaceStmt| for $[$h :]? $j in $[reverse%$rev]? $range $[by $step]?
+      $[$vars:inplaceLoopVars]? do $b;*) =>
     let (lo, hi, facts, more) ← rangeBounds range
     let (xs, inits) ← loopVars vars
     let b := b.getElems.toList
@@ -703,7 +838,8 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
     let mkBody (next : Ident) (_ : Term) (body : Term) : MacroM Term := do
       let hlo ← fresh `hlo
       let hj ← fresh `hj
-      let body ← more j hlo hj body
+      let (lower, upper) ← more j hlo hj
+      let body ← withIndexFacts h (lower.toArray.push upper) body
       match step with
       | none => lam j hlo hj next xs body
       | some step =>
@@ -798,6 +934,20 @@ end
 
 end
 
+/--
+`inplace_choose% a e f` is `e` if `a` is an array and `f` if it is a slice: `inplace a do …` expands
+to both programs, and elaborates the one for the type of `a`.
+-/
+syntax (name := inplaceChoose) "inplace_choose% " ident term:max term:max : term
+
+open Lean Elab Term Meta in
+/-- Elaborates `inplace_choose%`. -/
+@[term_elab inplaceChoose]
+public meta def ScalarArray.InPlaceSyntax.elabInplaceChoose : TermElab := fun stx expected? => do
+  let a ← elabTerm stx[1] none
+  let ty ← whnfR (← instantiateMVars (← inferType a))
+  if ty.isAppOf ``Std.Slice then elabTerm stx[3] expected? else elabTerm stx[2] expected?
+
 macro_rules
   | `(inplace $a:ident do $stmts;* $[then $k]?) => do
     -- The program's size `n` is a variable bound before it runs, and so are `a.size` and
@@ -808,21 +958,40 @@ macro_rules
         usize := Lean.mkIdent (← Lean.Macro.addMacroScope `usize),
         hsize := Lean.mkIdent (← Lean.Macro.addMacroScope `hsize) }
     let size := p.size
+    -- On a slice, the program runs on the slice's array, of size `N`, at the offset `off`, and
+    -- builds the new slice with `mk`, whose size `hmk` gives.
+    let bigN := Lean.mkIdent (← Lean.Macro.addMacroScope `N)
+    let off := Lean.mkIdent (← Lean.Macro.addMacroScope `off)
+    let hw := Lean.mkIdent (← Lean.Macro.addMacroScope `hw)
+    let mk := Lean.mkIdent (← Lean.Macro.addMacroScope `mk)
+    let hmk := Lean.mkIdent (← Lean.Macro.addMacroScope `hmk)
+    let ps : Arr := { p with window := some (off, hw) }
     -- The program is a tail program, which ends by handing its result and the new array to `k`,
     -- or by returning them as a pair.
-    let ending (e : Lean.Term) : Lean.MacroM Lean.Term := match k with
-      | some k => do
+    let ending (slice : Bool) (e : Lean.Term) : Lean.MacroM Lean.Term := do
+      let (res, hres) ← if slice then
+          pure (← `($mk a' h), ← `(($hmk a' h).trans (Eq.symm $p.hsize)))
+        else pure (← `(a'), ← `(h.trans (Eq.symm $p.hsize)))
+      match k with
+      | some k =>
         let k : Lean.Term := ⟨← replaceArray p false k⟩
         `(.done $e fun x a' h =>
-          ($k : _ → (a'' : type_of% $a) → a''.size = ($a).size → _) x a'
-            (h.trans (Eq.symm $p.hsize)))
-      | none => `(.done $e fun x a' _ => (x, a'))
-    let prog ← expandSeq p ending #[] none (← ending (← `(()))) stmts.getElems.toList
+          ($k : _ → (a'' : type_of% $a) → a''.size = ($a).size → _) x $res $hres)
+      | none =>
+        if slice then `(.done $e fun x a' h => (x, $res)) else `(.done $e fun x a' _ => (x, $res))
+    let stmts := stmts.getElems.toList
+    let prog ← expandSeq p (ending false) #[] none (← ending false (← `(()))) stmts
+    let progS ← expandSeq ps (ending true) #[] none (← ending true (← `(()))) stmts
     -- They are bound by a function application, not by `let`, which fails to elaborate when the
     -- program has metavariables left for later, such as the types of loop variables.
-    `((fun ($size : Nat) ($p.hsize : ($a).size = $size) ($p.usize : USize)
+    `(inplace_choose% $a
+      ((fun ($size : Nat) ($p.hsize : ($a).size = $size) ($p.usize : USize)
           (_ : ($p.usize).toNat ≤ ($a).size) => ($a).runInPlaceThenOf $size $p.hsize $prog)
         ($a).size rfl ($a).usize ($a).toNat_usize_le)
+      ((fun ($size : Nat) ($p.hsize : ($a).size = $size) ($p.usize : USize)
+          (_ : ($p.usize).toNat ≤ ($a).size) =>
+          ($a).runInPlaceThenOf $size $p.hsize fun $bigN $off $hw $mk $hmk => $progS)
+        ($a).size rfl ($a).usize ($a).toNat_usize_le))
   | `(inplace $e do $_;* $[then $_]?) =>
     Lean.Macro.throwErrorAt e "`inplace` needs the array as a local variable: bind it first, as \
       in `let a := e; inplace a do …`"

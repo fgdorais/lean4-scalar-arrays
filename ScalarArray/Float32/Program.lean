@@ -35,7 +35,8 @@ ends it, `Tail.bind m t` runs an in-place program `m` before it, and `Tail.readT
 `Tail.writeThen`, `Tail.ite`, `Tail.dite` and the loops `Tail.forInBind`, … are those of `InPlace`.
 The continuation runs inside the program's last loop, so its last accumulators reach `k` unboxed,
 and no result pair is built. A tail program runs with `a.runInPlaceThen t`,
-`a.runInPlaceThenOf n h t` or `t.run a h`.
+`a.runInPlaceThenOf n h t` or `t.run a h`, and on the window of a slice `s` in its array with
+`s.runInPlaceThenOf n h t`.
 
 Tail programs also have loops in continuation-passing style, `Tail.forIn lo hi init body k` and
 `Tail.forInRev`, with up to four variables in `Tail.forIn2`, `Tail.forIn3`, `Tail.forIn4`, and so
@@ -1633,6 +1634,52 @@ public def runInPlaceThenOf {γ : Type u} (a : Float32Array) (n : Nat) (h : a.si
     (h : a.size = n) (t : InPlace.Tail n γ) :
     a.runInPlaceThenOf n h t = t.run a h := by
   rfl
+
+namespace Slice
+
+/-- The window of the slice at `s.start.toUSize` fits in its array. -/
+public theorem toNat_toUSize_start_add_le (s : Float32Array.Slice) :
+    s.start.toUSize.toNat + s.size ≤ s.array.size := by
+  have := Nat.mod_le s.start USize.size
+  have := s.start_le_stop
+  have := s.stop_le_array_size
+  simp only [Nat.toUSize_eq, USize.toNat_ofNat', size_eq]
+  lia
+
+/--
+Runs a tail program on the elements of the slice `s`, for a size `n` of `s`, in place in the
+slice's array. `t N off hw mk hmk` is a program on the array, of size `N`, that works on the window
+of `n` elements at `off`, where `hw` bounds the window; its continuation builds the new slice with
+`mk a' h`, on the new array `a'`, of size `n` by `hmk`. When the array's size is less than
+`USize.size`, `off` is the slice's start. `inplace s do …` runs its programs on slices this way.
+-/
+@[inline, expose]
+public def runInPlaceThenOf {γ : Type u} (s : Float32Array.Slice) (n : Nat) (h : s.size = n)
+    (t : (N : Nat) → (off : USize) → off.toNat + n ≤ N →
+      (mk : (a : Float32Array) → a.size = N → Float32Array.Slice) →
+      (∀ a h, (mk a h).size = n) → InPlace.Tail N γ) : γ :=
+  -- Taking `s` apart up front keeps the program from holding `s`, and with it the array.
+  match s, h with
+  | ⟨⟨a, start, stop, h₁, h₂⟩⟩, h =>
+    a.runInPlaceThenOf a.size rfl
+      (t a.size start.toUSize
+        (h ▸ toNat_toUSize_start_add_le ⟨⟨a, start, stop, h₁, h₂⟩⟩)
+        (fun a' ha => ⟨⟨a', start, stop, h₁, ha ▸ h₂⟩⟩) (fun _ _ => h))
+
+@[simp] public theorem runInPlaceThenOf_eq {γ : Type u} (s : Float32Array.Slice) (n : Nat)
+    (h : s.size = n)
+    (t : (N : Nat) → (off : USize) → off.toNat + n ≤ N →
+      (mk : (a : Float32Array) → a.size = N → Float32Array.Slice) →
+      (∀ a h, (mk a h).size = n) → InPlace.Tail N γ) :
+    s.runInPlaceThenOf n h t =
+      (t s.array.size s.start.toUSize (h ▸ toNat_toUSize_start_add_le s)
+        (fun a' ha => ⟨⟨a', s.start, s.stop, s.start_le_stop, ha ▸ s.stop_le_array_size⟩⟩)
+        (fun _ _ => h)).run s.array rfl := by
+  obtain ⟨⟨a, start, stop, h₁, h₂⟩⟩ := s
+  subst h
+  rfl
+
+end Slice
 
 end Float32Array
 
