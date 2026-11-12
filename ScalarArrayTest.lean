@@ -17,6 +17,7 @@ import ScalarArrayTest.ISize
 import ScalarArrayTest.Float32
 import ScalarArrayTest.Float64
 import ScalarArrayTest.Float
+import ScalarArrayTest.Stride
 import ScalarArrayTest.Conversions
 import ScalarArrayTest.Bytes
 import ScalarArrayTest.InPlaceSyntax

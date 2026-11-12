@@ -689,6 +689,75 @@ private def ranges (a : UInt8Array) (h : 10 ≤ a.size) : List Nat × UInt8Array
 #guard (ranges (UInt8Array.mk #[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) (by decide)).1 ==
   [2, 3, 4, 3, 3, 4, 101, 404, 707, 1009, 1005, 1001, 0, 1]
 
+-- The whole-loop lemmas of `InPlace.Tail` run the loops that the notation writes, so a change
+-- to how it writes them fails here.
+
+/-- Doubles the elements at the first `n` steps of the stride `s`. -/
+private def doubleStride (a : UInt32Array) (s : Stride) (n : USize) : UInt32Array :=
+  if h : s.Fits n.toNat a.size ∧ a.size < USize.size then
+    let o := s.off.toUSize
+    let c := s.inc.toUSize
+    (inplace a do
+      for k in 0...n do
+        have hk : (o + c * k).toNat < a.size := s.toNat_idx_toUSize_lt h.1 h.2 (by assumption)
+        a[o + c * k] := 2 * a[o + c * k]).2
+  else a
+
+/-- `doubleStride`, with the loop down. -/
+private def doubleStrideRev (a : UInt32Array) (s : Stride) (n : USize) : UInt32Array :=
+  if h : s.Fits n.toNat a.size ∧ a.size < USize.size then
+    let o := s.off.toUSize
+    let c := s.inc.toUSize
+    (inplace a do
+      for k in reverse 0...n do
+        have hk : (o + c * k).toNat < a.size := s.toNat_idx_toUSize_lt h.1 h.2 (by assumption)
+        a[o + c * k] := 2 * a[o + c * k]).2
+  else a
+
+/-- Writes `v` at the first `n` steps of the stride `s`. -/
+private def fillStride (a : UInt32Array) (s : Stride) (n : USize) (v : UInt32) : UInt32Array :=
+  if h : s.Fits n.toNat a.size ∧ a.size < USize.size then
+    let o := s.off.toUSize
+    let c := s.inc.toUSize
+    (inplace a do
+      for k in 0...n do
+        have hk : (o + c * k).toNat < a.size := s.toNat_idx_toUSize_lt h.1 h.2 (by assumption)
+        a[o + c * k] := v).2
+  else a
+
+#guard (doubleStride (UInt32Array.mk #[1, 2, 3, 4, 5, 6]) ⟨1, 2⟩ 3).toArray == #[1, 4, 3, 8, 5, 12]
+#guard (doubleStrideRev (UInt32Array.mk #[1, 2, 3, 4, 5, 6]) ⟨1, 2⟩ 3).toArray ==
+  #[1, 4, 3, 8, 5, 12]
+#guard (fillStride (UInt32Array.mk #[1, 2, 3, 4, 5, 6]) ⟨0, 3⟩ 2 7).toArray == #[7, 2, 3, 7, 5, 6]
+
+example (a : UInt32Array) (s : Stride) (n : USize) (h : s.Fits n.toNat a.size)
+    (hs : a.size < USize.size) :
+    doubleStride a s n = a.modifyAt s.idx 0 n.toNat fun _ v => 2 * v := by
+  rw [doubleStride, dite_eq_left_of_eq_true (eq_true ⟨h, hs⟩)]
+  simp only [UInt32Array.runInPlaceThenOf_eq, UInt32Array.InPlace.Tail.forIn_eq]
+  rw [UInt32Array.InPlace.Tail.run_forInFrom_modify (idx := s.idx) (G := fun _ v => 2 * v)
+    (he := fun _ _ hk => s.toNat_idx_toUSize h hs hk) (hg := fun _ _ _ _ => rfl)]
+  simp
+
+example (a : UInt32Array) (s : Stride) (n : USize) (h : s.Fits n.toNat a.size)
+    (hs : a.size < USize.size) :
+    doubleStrideRev a s n = a.modifyAt s.idx 0 n.toNat fun _ v => 2 * v := by
+  rw [doubleStrideRev, dite_eq_left_of_eq_true (eq_true ⟨h, hs⟩)]
+  simp only [UInt32Array.runInPlaceThenOf_eq, UInt32Array.InPlace.Tail.forInRev_eq]
+  rw [UInt32Array.InPlace.Tail.run_forInRevFrom_modify (idx := s.idx) (G := fun _ v => 2 * v)
+    (he := fun _ _ hk => s.toNat_idx_toUSize h hs hk)
+    (hinj := fun _ _ h₁ _ _ h₂ e => h.idx_inj h₁ h₂ e) (hg := fun _ _ _ _ => rfl)]
+  simp
+
+example (a : UInt32Array) (s : Stride) (n : USize) (v : UInt32) (h : s.Fits n.toNat a.size)
+    (hs : a.size < USize.size) :
+    fillStride a s n v = a.modifyAt s.idx 0 n.toNat fun _ _ => v := by
+  rw [fillStride, dite_eq_left_of_eq_true (eq_true ⟨h, hs⟩)]
+  simp only [UInt32Array.runInPlaceThenOf_eq, UInt32Array.InPlace.Tail.forIn_eq]
+  rw [UInt32Array.InPlace.Tail.run_forInFrom_write (idx := s.idx) (G := fun _ => v)
+    (he := fun _ _ hk => s.toNat_idx_toUSize h hs hk) (hg := fun _ _ _ => rfl)]
+  simp
+
 -- Errors.
 /-- error: `break` is only allowed in a loop -/
 #guard_msgs in

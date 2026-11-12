@@ -10,4 +10,5 @@ import ScalarArrayTest.UInt8.Slice
 import ScalarArrayTest.UInt8.Lemmas
 import ScalarArrayTest.UInt8.Program
 import ScalarArrayTest.UInt8.InPlace
+import ScalarArrayTest.UInt8.Stride
 import ScalarArrayTest.UInt8.Decidable
