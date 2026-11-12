@@ -20,4 +20,5 @@ import ScalarArrayTest.Float
 import ScalarArrayTest.Stride
 import ScalarArrayTest.Conversions
 import ScalarArrayTest.Bytes
-import ScalarArrayTest.InPlaceSyntax
+import ScalarArrayTest.Notation
+import ScalarArrayTest.NotationScope

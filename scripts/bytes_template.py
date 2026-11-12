@@ -30,7 +30,7 @@ public import ScalarArray.Int32
 public import ScalarArray.Int64
 public import ScalarArray.Float32
 import all ScalarArray.Internal
-import ScalarArray.InPlaceSyntax
+import ScalarArray.Notation
 import Std.Tactic.BVDecide
 
 /-!
