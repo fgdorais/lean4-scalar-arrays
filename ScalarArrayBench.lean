@@ -230,8 +230,8 @@ passes, one `foldlInPlace2Then` for each result.
     have ht : (2 * len).toNat + len.toNat ≤ a.size := by lia
     let r := inplace a do
       for j in 0...len with (c := 0) (b := 0) do
-        let x ← a[0 + j]
-        let y ← a[len + j]
+        let x := a[0 + j]
+        let y := a[len + j]
         let s := x + y + c
         a[0 + j] := s
         a[2 * len + j] := x - y - b
@@ -249,8 +249,8 @@ passes, one `foldlInPlace2Then` for each result.
     have ht : (2 * len).toNat + len.toNat ≤ a.size := by lia
     inplace a do
       for j in 0...len with (c := 0) (b := 0) do
-        let x ← a[0 + j]
-        let y ← a[len + j]
+        let x := a[0 + j]
+        let y := a[len + j]
         let s := x + y + c
         a[0 + j] := s
         a[2 * len + j] := x - y - b
@@ -358,7 +358,7 @@ def extras (rounds n : Nat) : IO (List Row) := do
         for r in 0...rows with (tot := (0 : UInt64)) do
           for c in 0...4 with (acc := (0 : UInt64)) (t := tot) do
             have hc : (4 * r + c).toNat < a.size := by inplace_bound
-            let x ← a[4 * r + c]
+            let x := a[4 * r + c]
             acc := acc + x
             a[4 * r + c] := acc
             t := t + x
