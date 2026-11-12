@@ -788,3 +788,136 @@ error: `inplace` needs the array as a local variable: bind it first, as in `let 
 example (a : UInt8Array) : Unit × UInt8Array :=
   inplace (a.push 0) do
     return ()
+
+/-! Tests of the bounds of loop indices: named, and with literals reduced. -/
+
+private def table : Array UInt8 := #[10, 20, 30, 40]
+
+/-- With a literal bound, the bound of `j` is `j.toNat < 4`, which `get_elem_tactic` uses. -/
+private def copyTable (a : UInt8Array) (h : 4 ≤ a.size) : Unit × UInt8Array :=
+  inplace a do
+    for j in 0...4 do
+      a[j] := table[j.toNat]
+
+#guard (copyTable (UInt8Array.mk #[0, 0, 0, 0, 5]) (by decide)).2 ==
+  UInt8Array.mk #[10, 20, 30, 40, 5]
+
+/--
+`for h : j in lo...hi` names the bounds of `j`, `h : lo.toNat ≤ j.toNat ∧ j.toNat < hi.toNat`.
+-/
+private def clearFrom (a : UInt8Array) (lo n : USize) (hn : n.toNat ≤ a.size) :
+    Unit × UInt8Array :=
+  inplace a do
+    for h : j in lo...n do
+      have hj : j.toNat < a.size := Nat.lt_of_lt_of_le h.2 hn
+      a[j] := 0
+
+#guard (clearFrom (UInt8Array.mk #[1, 2, 3, 4]) 1 3 (by simp)).2 == UInt8Array.mk #[1, 0, 0, 4]
+
+-- The names follow the range, with literals reduced.
+example (a : UInt8Array) (n : USize) (hn : n.toNat < a.size) (hn' : n.toNat + 1 < USize.size) :
+    Unit × UInt8Array :=
+  inplace a do
+    for h : j in reverse 2<...=n do
+      have h' : 2 < j.toNat ∧ j.toNat ≤ n.toNat := h
+      a[j] := 0
+
+example (a : UInt8Array) (h : 8 ≤ a.size) : Unit × UInt8Array :=
+  inplace a do
+    for h : j in *...8 by 2 do
+      have h' : j.toNat < 8 := h
+      a[j] := 0
+
+/-! Tests of programs on slices. -/
+
+/-- Doubles the elements of a slice, in place in its array. -/
+private def doubleSlice (s : UInt32Array.Slice) : UInt32Array.Slice :=
+  (inplace s do
+    for j in 0...s.usize do
+      s[j] := 2 * s[j]).2
+
+#guard (doubleSlice (UInt32Array.mk #[1, 2, 3, 4, 5])[1...4]).array ==
+  UInt32Array.mk #[1, 4, 6, 8, 5]
+#guard (doubleSlice (UInt32Array.mk #[1, 2, 3, 4, 5])[1...4]).toArray == #[4, 6, 8]
+
+/-- Increments the first element of a slice, and returns its old value. -/
+private def bumpFirst (s : UInt8Array.Slice) (h : 0 < s.size) : UInt8 × UInt8Array.Slice :=
+  inplace s do
+    let x ← s[0]
+    s[0] := x + 1
+    return x
+
+#guard (bumpFirst (UInt8Array.mk #[7, 8, 9])[1...*] (by decide)).1 == 8
+#guard (bumpFirst (UInt8Array.mk #[7, 8, 9])[1...*] (by decide)).2.array == UInt8Array.mk #[7, 9, 9]
+
+/-- `then k` gets the new slice and its size. -/
+private def sumSlice (s : UInt8Array.Slice) : Nat :=
+  inplace s do
+    for j in 0...s.usize with (t : Nat := 0) do
+      t := t + s[j].toNat
+    return t
+  then fun t s' _ => t + 100 * s'.size
+
+#guard sumSlice (UInt8Array.mk #[1, 2, 3, 4])[1...3] == 205
+
+-- A slice of an exclusive array is written in place, and a shared one copied.
+@[noinline] def UInt32Array.inplaceSliceInPlace (x : UInt32) : Bool :=
+  let a := (UInt32Array.emptyWithCapacity 4).push x |>.push 2 |>.push 3
+  let p := rawAddr a
+  let s := doubleSlice a[1...*]
+  rawAddr s.array == p && s.array.toArray == #[x, 4, 6]
+
+#guard UInt32Array.inplaceSliceInPlace 1
+
+#guard
+  let a := UInt32Array.mk #[1, 2, 3]
+  (doubleSlice a[*...2]).array.toArray == #[2, 4, 3] && a.toArray == #[1, 2, 3]
+
+/--
+error: inplace: cannot prove the bound of this index from the hypotheses in context:
+  j.toNat < Std.Slice.size s
+Add the missing fact with a `have` before the statement, or as a hypothesis around the program.
+-/
+#guard_msgs in
+example (s : UInt8Array.Slice) (n : USize) : Unit × UInt8Array.Slice :=
+  inplace s do
+    for j in 0...n do
+      s[j] := 0
+
+/-! Proofs about programs: see the module documentation of `ScalarArray.InPlaceSyntax`. -/
+
+-- A program without branches or loops: `simp` runs it.
+example (a : UInt8Array) (h : 2 ≤ a.size) :
+    (inplace a do
+      a[0] := 1
+      a[1] := a[0] + 1).2 = (a.set 0 1 (by lia)).set 1 2 (by simp; lia) := by
+  simp [UInt8Array.runInPlaceThenOf_eq]
+
+-- An `if`: `simp` lifts it out of the program, and the cases follow.
+example (a : UInt8Array) (h : 2 ≤ a.size) :
+    (inplace a do
+      if a[0] > 3 then
+        a[1] := a[0]
+      else
+        a[1] := 0).2 = a.set 1 (if a[0] > 3 then a[0] else 0) (by lia) := by
+  simp only [UInt8Array.runInPlaceThenOf_eq, UInt8Array.InPlace.Tail.run_readThen,
+    UInt8Array.InPlace.Tail.ite_eq]
+  by_cases hc : 3 < a[(0 : Nat)]'(by lia) <;> simp [hc]
+
+/-- The sum of the first `n` elements. -/
+private def sumFirst (a : UInt8Array) (n : USize) (hn : n.toNat ≤ a.size) : Nat × UInt8Array :=
+  inplace a do
+    for j in 0...n with (s : Nat := 0) do
+      s := s + a[j].toNat
+    return s
+
+-- A loop: `Tail.run_forInFrom` runs it as `iterRange` of its step, and `iterRange_prod_of_snd`
+-- drops the array, which a loop that only reads leaves alone.
+example (a : UInt8Array) (n : USize) (hn : n.toNat ≤ a.size) :
+    sumFirst a n hn = (iterRange (fun j s => s + (a[j]?.getD 0).toNat) 0 n.toNat 0, a) := by
+  simp only [sumFirst, UInt8Array.runInPlaceThenOf_eq, UInt8Array.InPlace.Tail.forIn_eq]
+  rw [UInt8Array.InPlace.Tail.run_forInFrom (f := fun j x => (x.1 + (x.2[j]?.getD 0).toNat, x.2))
+    (hf := fun _ _ => rfl)
+    (hbody := fun j _ hj _ _ a' h => by simp [show j.toNat < a'.size by lia])]
+  simp only [UInt8Array.InPlace.Tail.run_done, USize.reduceToNat]
+  rw [iterRange_prod_of_snd (g := fun j s => s + (a[j]?.getD 0).toNat) (fun _ _ _ _ => rfl)]
