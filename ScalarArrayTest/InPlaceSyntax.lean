@@ -921,3 +921,96 @@ example (a : UInt8Array) (n : USize) (hn : n.toNat ≤ a.size) :
     (hbody := fun j _ hj _ _ a' h => by simp [show j.toNat < a'.size by lia])]
   simp only [UInt8Array.InPlace.Tail.run_done, USize.reduceToNat]
   rw [iterRange_prod_of_snd (g := fun j s => s + (a[j]?.getD 0).toNat) (fun _ _ _ _ => rfl)]
+
+/-! Tests of `return` without a value, `if let`, `have` without a name or type, and errors. -/
+
+/-- Writes the value of `o`, if any, then increments it. -/
+private def writeSome (a : UInt8Array) (o : Option UInt8) (h : 0 < a.size) : Unit × UInt8Array :=
+  inplace a do
+    if let some x := o then
+      a[0] := x
+    a[0] := a[0] + 1
+    return
+
+#guard (writeSome (UInt8Array.mk #[5, 6]) (some 9) (by decide)).2 == UInt8Array.mk #[10, 6]
+#guard (writeSome (UInt8Array.mk #[5, 6]) none (by decide)).2 == UInt8Array.mk #[6, 6]
+
+/-- `if let` with an `else`, both ending the program. -/
+private def getOr (a : UInt8Array) (o : Option USize) : UInt8 × UInt8Array :=
+  inplace a do
+    if let some i := o then
+      if h : i.toNat < a.size then
+        return a[i]
+      else
+        return 0
+    else
+      return 1
+
+#guard (getOr (UInt8Array.mk #[5, 6]) (some 1)).1 == 6
+#guard (getOr (UInt8Array.mk #[5, 6]) (some 7)).1 == 0
+#guard (getOr (UInt8Array.mk #[5, 6]) none).1 == 1
+
+example (a : UInt8Array) (h : 1 < a.size) : Unit × UInt8Array :=
+  inplace a do
+    have : 1 < a.size := h
+    have h' := this
+    a[1] := 0
+
+/-- error: `inplace` has no `+=`: assign the new value, as in `x := x + e` or `a[i] := a[i] + e` -/
+#guard_msgs in
+example (a : UInt8Array) (h : 0 < a.size) : Unit × UInt8Array :=
+  inplace a do
+    a[0] += 1
+
+/--
+error: this is not a statement of an `inplace` program: to end the program with a result, write `return ()`. The statements are reads `let x ← a[i]`, writes `a[i] := e`, `let`, `let mut`, assignments `x := e`, `have`, `if`, `unless`, `match`, `for`, `while`, `break`, `continue` and `return`, and a program `m` runs with `let x ← m`
+-/
+#guard_msgs in
+example (a : UInt8Array) : Unit × UInt8Array :=
+  inplace a do
+    pure ()
+
+/--
+error: this is not a statement of an `inplace` program: a write is written `a[i] := e`. The statements are reads `let x ← a[i]`, writes `a[i] := e`, `let`, `let mut`, assignments `x := e`, `have`, `if`, `unless`, `match`, `for`, `while`, `break`, `continue` and `return`, and a program `m` runs with `let x ← m`
+-/
+#guard_msgs in
+example (a : UInt8Array) (h : 0 < a.size) : Unit × UInt8Array :=
+  inplace a do
+    a[0] = 1
+
+/-- error: a read in a term is written `a[i]`, not `(← a[i])` -/
+#guard_msgs in
+example (a : UInt8Array) (h : 1 < a.size) : Unit × UInt8Array :=
+  inplace a do
+    a[0] := (← a[1])
+
+/--
+error: the indices of an `inplace` program are `USize`s, but this one is a `Nat`: convert it with `toUSize`, with a bound on its `toNat`, or loop over a `USize` range
+-/
+#guard_msgs in
+example (a : UInt8Array) (k : Nat) (h : k < a.size) : Unit × UInt8Array :=
+  inplace a do
+    a[k] := 1
+
+/--
+error: Type mismatch
+  300
+has type
+  Nat
+but is expected to have type
+  UInt8
+-/
+#guard_msgs in
+example (a : UInt8Array) (h : 0 < a.size) : Unit × UInt8Array :=
+  inplace a do
+    a[0] := (300 : Nat)
+
+/--
+error: `inplace` loops over indices, not elements: write `for j in 0...a.usize do`, and read the element with `let x ← a[j]`
+-/
+#guard_msgs in
+example (a : UInt8Array) : Nat × UInt8Array :=
+  inplace a do
+    for x in a with (s := 0) do
+      s := s + x.toNat
+    return s

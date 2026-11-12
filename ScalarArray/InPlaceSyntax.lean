@@ -47,10 +47,13 @@ inplace a do
 * `let mut x := e` or `let mut x : t := e` declares a mutable variable, and `x := e` assigns it,
   or `(x, y) := e` for a pattern of mutable variables. As in `do` notation, a `let` can't shadow
   a mutable variable.
-* `have h : t := p` adds a fact to the context, for the bounds of later indices.
+* `have h : t := p` adds a fact to the context, for the bounds of later indices. As in terms, `h`
+  defaults to `this` and `t` to the type of `p`: `have : t := p`, `have h := p`.
 * `if c then … else …` and `if h : c then … else …` run one of two blocks, which may read, write,
   loop and assign mutable variables. The `else` block is optional, and `unless c do …` is
   `if ¬c then …`.
+* `if let p := e then … else …` runs the first block, with the variables of the pattern `p`, if `e`
+  matches it, and the second one, which is optional, otherwise.
 * `match e with | p => … | q => …` runs the block of the first pattern that `e` matches, and
   `match e, f with | p, q => …` matches several terms.
 * `for j in lo...hi do …` loops over `lo ≤ j < hi` upward, and `for j in reverse lo...hi do …`
@@ -74,8 +77,9 @@ inplace a do
   steps at the most.
 * `break` leaves the innermost loop, and its variables keep their current values after it.
   `continue` goes on with the loop's next step.
-* `return e` ends the program with the result `e`, anywhere, even in a loop. Without it, the result
-  is `()`. Nothing in a block can follow a `return`, a `break` or a `continue`.
+* `return e` ends the program with the result `e`, anywhere, even in a loop, and `return` with
+  `()`. Without it, the result is `()`. Nothing in a block can follow a `return`, a `break` or a
+  `continue`.
 
 A loop body can assign only its own variables: to update a variable across a loop, carry it, as
 `with (c := c)`.
@@ -198,12 +202,16 @@ else UInt64Array.mk (Array.replicate a.size 0)
 * A program makes the array exclusive before it runs, even when it only reads, so a shared array
   is copied. For a computation that only reads, use plain reads `a[i]`, `foldl` or the folds of
   slices, which don't copy.
-* `have` takes a name: `have h : t := p`.
+* There is no `x += e`, and a term such as `pure x` is no statement: both are errors that say what
+  to write instead.
 -/
 
 namespace ScalarArray.InPlaceSyntax
 
-/-- The index `off + j` of a window of `len` elements at `off` is in bounds, for `j < len`. -/
+/--
+The index `off + j` of a window of `len` elements at `off` is in bounds, for `j < len`. For internal
+use by the `inplace` notation.
+-/
 public theorem toNat_add_lt_of_window {n : Nat} {off len j : USize}
     (hw : off.toNat + len.toNat ≤ n) (hj : j.toNat < len.toNat) : (off + j).toNat < n := by
   grind
@@ -211,6 +219,7 @@ public theorem toNat_add_lt_of_window {n : Nat} {off len j : USize}
 /--
 The index `off + i` of a window of `n` elements at `off` is in bounds, for `i < n`: the bound of the
 indices of a program on a slice, in the slice's array.
+For internal use by the `inplace` notation.
 -/
 public theorem toNat_add_lt_of_window_of_lt {N n : Nat} {off i : USize}
     (hw : off.toNat + n ≤ N) (hi : i.toNat < n) : (off + i).toNat < N := by
@@ -219,6 +228,7 @@ public theorem toNat_add_lt_of_window_of_lt {N n : Nat} {off i : USize}
 /--
 The number of steps of the range `lo...hi` by `s`, for `s > 0`: of the indices `lo + s * k` below
 `hi`.
+For internal use by the `inplace` notation.
 -/
 @[inline, expose]
 public def stepCount (lo hi s : USize) : USize :=
@@ -249,16 +259,23 @@ private theorem step_toNat {lo hi s k : USize} (hk : k.toNat < (stepCount lo hi 
 `f k`. The notation `inplace` writes a loop that may `break` as `withExit (fun brk => loop) k`, with
 the rest `k` of the program after the loop, which `break` calls: elaborated as the arguments of
 `withExit`, the loop comes first and fixes the type of `k`.
+For internal use by the `inplace` notation.
 -/
 @[inline, expose]
 public def withExit {α : Sort u} {β : Sort v} (f : α → β) (k : α) : β := f k
 
-/-- The index `lo + s * k` of the step `k` of `lo...hi` by `s` is at least `lo`. -/
+/--
+The index `lo + s * k` of the step `k` of `lo...hi` by `s` is at least `lo`. For internal use by the
+`inplace` notation.
+-/
 public theorem step_le {lo hi s k : USize} (hk : k.toNat < (stepCount lo hi s).toNat) :
     lo.toNat ≤ (lo + s * k).toNat := by
   rw [(step_toNat hk).1]; lia
 
-/-- The index `lo + s * k` of the step `k` of `lo...hi` by `s` is below `hi`. -/
+/--
+The index `lo + s * k` of the step `k` of `lo...hi` by `s` is below `hi`. For internal use by the
+`inplace` notation.
+-/
 public theorem step_lt {lo hi s k : USize} (hk : k.toNat < (stepCount lo hi s).toNat) :
     (lo + s * k).toNat < hi.toNat := by
   rw [(step_toNat hk).1]; exact (step_toNat hk).2
@@ -266,12 +283,16 @@ public theorem step_lt {lo hi s k : USize} (hk : k.toNat < (stepCount lo hi s).t
 /--
 The index of a loop over `lo...hi + 1`, which is `lo...=hi`, is at most `hi`. The proof doesn't need
 `hi + 1` not to wrap around, but the loop does, so the notation passes that fact here too.
+For internal use by the `inplace` notation.
 -/
 public theorem le_of_lt_succ {hi j : USize} (_h : hi.toNat + 1 < USize.size)
     (hj : j.toNat < (hi + 1).toNat) : j.toNat ≤ hi.toNat := by
   grind
 
-/-- The index of a loop over `lo + 1...hi`, which is `lo<...hi`, is above `lo`. -/
+/--
+The index of a loop over `lo + 1...hi`, which is `lo<...hi`, is above `lo`. For internal use by the
+`inplace` notation.
+-/
 public theorem lt_of_succ_le {lo j : USize} (h : lo.toNat + 1 < USize.size)
     (hj : (lo + 1).toNat ≤ j.toNat) : lo.toNat < j.toNat := by
   grind
@@ -286,7 +307,7 @@ Adds the conjuncts of the conjunctions in the context of `g` to its context, rec
 them as new hypotheses, rather than with `cases`, which would revert and reintroduce the
 hypotheses after them, and fails on the `let` variables of an `inplace` program.
 -/
-def splitAnds (g : MVarId) : MetaM MVarId := do
+private def splitAnds (g : MVarId) : MetaM MVarId := do
   let mut g := g
   let mut todo : Array FVarId := #[]
   for d in ← g.withContext getLCtx do
@@ -308,12 +329,12 @@ def splitAnds (g : MVarId) : MetaM MVarId := do
     todo := todo ++ xs
   return g
 
-/-- Splits the conjunctions in context, recursively. -/
+/-- Splits the conjunctions in context, recursively. For internal use by the `inplace` notation. -/
 syntax (name := inplaceSplit) "inplace_split" : tactic
 
 open Lean Elab Tactic in
 /-- Elaborates `inplace_split`. -/
-@[tactic inplaceSplit] def evalInplaceSplit : Tactic := fun _ =>
+@[tactic inplaceSplit] def ScalarArray.InPlaceSyntax.evalInplaceSplit : Tactic := fun _ =>
   liftMetaTactic fun g => return [← splitAnds g]
 
 /--
@@ -324,7 +345,10 @@ around. Conjunctions in context are split first.
 -/
 syntax (name := inplaceBound) "inplace_bound" : tactic
 
-/-- The proof search of `inplace_bound`, which fails with the errors of its last attempt. -/
+/--
+The proof search of `inplace_bound`, which fails with the errors of its last attempt. For internal
+use by the `inplace` notation.
+-/
 syntax (name := inplaceBoundCore) "inplace_bound_core" : tactic
 
 macro_rules
@@ -343,7 +367,7 @@ macro_rules
 
 open Lean Elab Tactic Meta in
 /-- Elaborates `inplace_bound`: runs its proof search, and reports a failure with the bound. -/
-@[tactic inplaceBound] def evalInplaceBound : Tactic := fun _ => do
+@[tactic inplaceBound] def ScalarArray.InPlaceSyntax.evalInplaceBound : Tactic := fun _ => do
   let g ← getMainGoal
   try evalTactic (← `(tactic| inplace_bound_core))
   catch _ =>
@@ -373,14 +397,22 @@ syntax "let " "mut " ident (" : " term)? " := " term : inplaceStmt
 syntax "let " ident " : " term " := " term : inplaceStmt
 /-- `let p := e` binds the value of the pure term `e` to the pattern `p`. -/
 syntax "let " term " := " term : inplaceStmt
-/-- `have h : t := p` adds the fact `h` to the context, for the bounds of later indices. -/
-syntax "have " ident " : " term " := " term : inplaceStmt
+/--
+`have h : t := p` adds the fact `h` to the context, for the bounds of later indices; as in terms,
+`h` defaults to `this`, and `t` to the type of `p`.
+-/
+syntax "have " (ident)? (" : " term)? " := " term : inplaceStmt
 /-- `x := e` assigns the mutable variable `x`. -/
 syntax ident " := " term : inplaceStmt
 /-- `(x, y) := e` assigns the mutable variables of the pattern `(x, y)`. -/
 syntax (priority := low) term:max " := " term : inplaceStmt
 /-- `if c then … else …` runs one of two blocks. -/
 syntax "if " (atomic(ident " : "))? term " then" inplaceSeq (" else" inplaceSeq)? : inplaceStmt
+/--
+`if let p := e then … else …` runs the first block if `e` matches the pattern `p`, with its
+variables, and the second one otherwise.
+-/
+syntax "if " "let " term " := " term " then" inplaceSeq (" else" inplaceSeq)? : inplaceStmt
 /-- `unless c do …` runs the block if `c` doesn't hold. -/
 syntax "unless " termBeforeDo " do" inplaceSeq : inplaceStmt
 /-- The variables of a loop, `with (x := init) (y : t := init) …`. -/
@@ -402,8 +434,19 @@ syntax (name := inplaceContinue) "continue" : inplaceStmt
 syntax inplaceMatchAlt := ppDedent(ppLine) "| " sepBy1(term, ", ") " => " inplaceSeq
 /-- `match e with | p => … | q => …` runs the block of the first pattern that `e` matches. -/
 syntax (name := inplaceMatch) "match " sepBy1(term, ", ") " with" (inplaceMatchAlt)+ : inplaceStmt
-/-- `return e` ends the program with the result `e`. -/
-syntax "return " term : inplaceStmt
+/-- `return e` ends the program with the result `e`, and `return` with `()`. -/
+syntax "return" (ppSpace colGt term)? : inplaceStmt
+/-- `x += e` isn't a statement of an `inplace` program: this reports it, with what to write. -/
+syntax (name := inplaceAddEq) (priority := low) term:max " += " term : inplaceStmt
+/-- `x -= e` isn't a statement of an `inplace` program: this reports it, with what to write. -/
+syntax (name := inplaceSubEq) (priority := low) term:max " -= " term : inplaceStmt
+/-- `x *= e` isn't a statement of an `inplace` program: this reports it, with what to write. -/
+syntax (name := inplaceMulEq) (priority := low) term:max " *= " term : inplaceStmt
+/--
+An application `f x …`, such as `pure x`, isn't a statement of an `inplace` program: this reports
+it, with the statements that are, rather than a parse error.
+-/
+syntax (name := inplaceApp) (priority := low) ident (ppSpace colGt term:max)+ : inplaceStmt
 
 /--
 `inplace a do …` is the in-place program on `a` that the statements describe, run on `a`: it
@@ -412,6 +455,20 @@ size. See the module documentation of `ScalarArray.InPlaceSyntax`.
 -/
 syntax (name := inplaceTerm) "inplace " termBeforeDo " do" inplaceSeq
   (ppDedent(ppLine) "then " term)? : term
+
+/--
+`inplace_index% i` is the `USize` index `i` of a read or a write of an `inplace` program, with an
+error that says so for an index of another type, such as a `Nat`.
+For internal use by the `inplace` notation.
+-/
+syntax (name := inplaceIndex) "inplace_index% " term:max : term
+
+/--
+`inplace_elem% a v` is the value `v` of a write to the array or slice `a` of an `inplace` program,
+elaborated as an element of `a`, so that a type error names `v`.
+For internal use by the `inplace` notation.
+-/
+syntax (name := inplaceElem) "inplace_elem% " ident term:max : term
 
 open Lean
 
@@ -485,6 +542,13 @@ condition.
 -/
 private partial def liftReads (arr : Ident) (lazy : Bool) (stx : Syntax) :
     StateT (Array (Ident × Term)) MacroM Syntax := do
+  if stx.getKind == ``Lean.Parser.Term.nestedAction then
+    -- `← e` holds `e` as a `do` element.
+    let e := if stx[1].getKind == ``Lean.Parser.Term.doExpr then stx[1][0] else stx[1]
+    if let `($a:ident[$_]) := e then
+      if a.getId == arr.getId then
+        Macro.throwErrorAt stx s!"a read in a term is written `{arr.getId}[i]`, not \
+          `(← {arr.getId}[i])`"
   if let `($a:ident[$i]) := stx then
     if a.getId == arr.getId then
       if lazy then
@@ -513,7 +577,8 @@ The index in the program's array of the index `i` of `arr`, and the proof of its
 `i.toNat < arr.size`: `i` itself for an array, and `off + i` for a slice.
 -/
 private def access (p : Arr) (i : Term) : MacroM (Term × Term) := do
-  let h ← `((Nat.lt_of_lt_of_eq (by inplace_bound) $p.hsize : USize.toNat $i < _))
+  let i ← `(inplace_index% $i)
+  let h ← `(Nat.lt_of_lt_of_eq (by inplace_bound) $p.hsize)
   match p.window with
   | none => return (i, h)
   | some (off, hw) =>
@@ -539,14 +604,14 @@ private def replaceStmt (p : Arr) (s : TSyntax `inplaceStmt) : MacroM (TSyntax `
     let i : Term := ⟨← replaceArray p true i⟩
     let v : Term := ⟨← replaceArray p true v⟩
     `(inplaceStmt| $b:ident[$i] := $v)
-  | `(inplaceStmt| have $_:ident : $_ := $_) => return s
+  | `(inplaceStmt| have $[$_:ident]? $[: $_]? := $_) => return s
   | _ => return ⟨← replaceArray p true s⟩
 
 /-- Runs `f` on the statement `s` with its nested reads lifted, and puts the reads before it. -/
 private def lifting (p : Arr) (s : TSyntax `inplaceStmt)
     (f : TSyntax `inplaceStmt → MacroM Term) : MacroM Term := do
   -- A `have` is about the array before the program, and reads nothing.
-  if let `(inplaceStmt| have $_:ident : $_ := $_) := s then return ← f s
+  if let `(inplaceStmt| have $[$_:ident]? $[: $_]? := $_) := s then return ← f s
   let (s, reads) ← (liftReads p.arr false (← replaceStmt p s)).run #[]
   withReads p reads (← f ⟨s⟩)
 
@@ -613,14 +678,15 @@ private partial def hasBreak (stx : Syntax) : Bool :=
 
 /--
 Whether the statements `stmts` never reach their end: they end with `return`, `break` or
-`continue`, or with an `if` or a `match` whose blocks all never reach their ends.
+`continue`, or with an `if`, an `if let` or a `match` whose blocks all never reach their ends.
 -/
 private partial def ends (stmts : List (TSyntax `inplaceStmt)) : Bool :=
   match stmts.getLast? with
   | none => false
   | some s => match s with
-    | `(inplaceStmt| return $_) | `(inplaceStmt| break) | `(inplaceStmt| continue) => true
-    | `(inplaceStmt| if $[$_ :]? $_ then $t;* else $e;*) =>
+    | `(inplaceStmt| return $[$_]?) | `(inplaceStmt| break) | `(inplaceStmt| continue) => true
+    | `(inplaceStmt| if $[$_ :]? $_ then $t;* else $e;*)
+    | `(inplaceStmt| if let $_ := $_ then $t;* else $e;*) =>
       ends t.getElems.toList && ends e.getElems.toList
     | `(inplaceStmt| match $_,* with $alts:inplaceMatchAlt*) =>
       alts.all fun
@@ -740,18 +806,24 @@ private partial def expandSeq (p : Arr) (ending : Term → MacroM Term) (mvars :
     (loop : Option InplaceLoop) (ret : Term) : List (TSyntax `inplaceStmt) → MacroM Term
   | [] => pure ret
   | s :: rest => withRef s do
+    if let `(inplaceStmt| for $[$_ :]? $_ in $[reverse%$_]? $r $[by $_]? $[$_:inplaceLoopVars]?
+        do $_;*) := s then
+      if let `($r':ident) := r then
+        if r'.getId == p.arr.getId then
+          Macro.throwErrorAt r s!"`inplace` loops over indices, not elements: write \
+            `for j in 0...{r'.getId}.usize do`, and read the element with `let x ← {r'.getId}[j]`"
     let isEnd := match s with
-      | `(inplaceStmt| return $_) | `(inplaceStmt| break) | `(inplaceStmt| continue) => true
+      | `(inplaceStmt| return $[$_]?) | `(inplaceStmt| break) | `(inplaceStmt| continue) => true
       | _ => false
     if isEnd then
       if let some s' := rest.head? then
         Macro.throwErrorAt s' "this statement is unreachable: it follows a `return`, `break` or \
           `continue`"
     match s with
-    | `(inplaceStmt| return $_) =>
+    | `(inplaceStmt| return $[$_]?) =>
       lifting p s fun s => do
-        let `(inplaceStmt| return $e) := s | Macro.throwUnsupported
-        ending e
+        let `(inplaceStmt| return $[$e]?) := s | Macro.throwUnsupported
+        ending (← match e with | some e => pure e | none => `(()))
     | `(inplaceStmt| break) =>
       let some l := loop | Macro.throwError "`break` is only allowed in a loop"
       pure l.brk
@@ -761,7 +833,12 @@ private partial def expandSeq (p : Arr) (ending : Term → MacroM Term) (mvars :
     -- The condition of a `while` runs at each step, so its reads are lifted inside the loop.
     | `(inplaceStmt| while $[$_ :]? $_ $[$_:inplaceLoopVars]? do $_;*) =>
       expandStmt p ending mvars loop ret ⟨← replaceArray p true s⟩ rest
-    | _ => lifting p s fun s => expandStmt p ending mvars loop ret s rest
+    -- Statements that aren't statements are reported as such, before their terms are checked.
+    | `(inplaceStmt| $_:ident $_*) => expandStmt p ending mvars loop ret s rest
+    | _ =>
+      if [``inplaceAddEq, ``inplaceSubEq, ``inplaceMulEq].contains s.raw.getKind then
+        expandStmt p ending mvars loop ret s rest
+      else lifting p s fun s => expandStmt p ending mvars loop ret s rest
 
 /-- The program of the statement `s` followed by `rest`. -/
 private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars : Array Ident)
@@ -778,7 +855,7 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
   | `(inplaceStmt| $a:ident[$i] := $v) =>
     checkArray arr a
     let (i, h) ← access p i
-    `(.writeThen $i $h $v $(← k mvars))
+    `(.writeThen $i $h (inplace_elem% $arr $v) $(← k mvars))
   | `(inplaceStmt| let mut $x:ident $[: $ty]? := $e) =>
     match ty with
     | some ty => `(let $x:ident : $ty := $e; $(← k (mvars.push x)))
@@ -793,8 +870,13 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
   | `(inplaceStmt| let $p := $e) =>
     checkNoShadow mvars (patternVars p)
     `(match $e:term with | $p:term => $(← k mvars))
-  | `(inplaceStmt| have $h:ident : $t := $p) =>
-    `(have $h:ident : $t := $p; $(← k mvars))
+  | `(inplaceStmt| have $[$h:ident]? $[: $t]? := $p) =>
+    let rest ← k mvars
+    match h, t with
+    | some h, some t => `(have $h:ident : $t := $p; $rest)
+    | none, some t => `(have $(mkIdent `this):ident : $t := $p; $rest)
+    | some h, none => `(have $h:ident := $p; $rest)
+    | none, none => `(have $(mkIdent `this):ident := $p; $rest)
   | `(inplaceStmt| $x:ident := $e) =>
     unless mvars.any (·.getId == x.getId) do
       Macro.throwErrorAt x s!"`{x.getId}` is not a mutable variable here: declare it with \
@@ -811,6 +893,21 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
       [t.getElems.toList, (e.map (·.getElems.toList)).getD []] fun bs => match h with
         | some h => `(.dite $c (fun $h => $(bs[0]!)) (fun $h => $(bs[1]!)))
         | none => `(.ite $c $(bs[0]!) $(bs[1]!))
+  | `(inplaceStmt| if let $q := $d then $t;* $[else $e;*]?) =>
+    checkNoShadow mvars (patternVars q)
+    expandBranches p ending mvars loop (k mvars) rest
+      [t.getElems.toList, (e.map (·.getElems.toList)).getD []] fun bs =>
+        `(match $d:term with | $q:term => $(bs[0]!) | _ => $(bs[1]!))
+  | `(inplaceStmt| $f:ident $xs*) =>
+    let hint := if f.getId.eraseMacroScopes == `pure && xs.size == 1 then
+        s!": to end the program with a result, write `return {xs[0]!.raw.prettyPrint}`"
+      else if xs.any (·.raw.isOfKind ``«term[_]») then
+        s!": a write is written `{f.getId}[i] := e`"
+      else ""
+    Macro.throwErrorAt s s!"this is not a statement of an `inplace` program{hint}. The \
+      statements are reads `let x ← a[i]`, writes `a[i] := e`, `let`, `let mut`, assignments \
+      `x := e`, `have`, `if`, `unless`, `match`, `for`, `while`, `break`, `continue` and `return`, \
+      and a program `m` runs with `let x ← m`"
   | `(inplaceStmt| unless $c do $t;*) =>
     expandBranches p ending mvars loop (k mvars) rest [t.getElems.toList, []] fun bs =>
       `(.ite $c $(bs[1]!) $(bs[0]!))
@@ -878,7 +975,13 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
       fun body k =>
         if xs.isEmpty then `($f 0 ((0 : USize) - 1) () $body $k) else
           `($f 0 ((0 : USize) - 1) $inits* $body $k)
-  | _ => Macro.throwUnsupported
+  | _ =>
+    let op? := if s.raw.getKind == ``inplaceAddEq then some "+"
+      else if s.raw.getKind == ``inplaceSubEq then some "-"
+      else if s.raw.getKind == ``inplaceMulEq then some "*" else none
+    let some o := op? | Macro.throwUnsupported
+    Macro.throwErrorAt s s!"`inplace` has no `{o}=`: assign the new value, as in \
+      `x := x {o} e` or `a[i] := a[i] {o} e`"
 
 /--
 The program of a loop over the variables `xs` with the body `b`, followed by `rest`:
@@ -937,6 +1040,7 @@ end
 /--
 `inplace_choose% a e f` is `e` if `a` is an array and `f` if it is a slice: `inplace a do …` expands
 to both programs, and elaborates the one for the type of `a`.
+For internal use by the `inplace` notation.
 -/
 syntax (name := inplaceChoose) "inplace_choose% " ident term:max term:max : term
 
@@ -947,6 +1051,33 @@ public meta def ScalarArray.InPlaceSyntax.elabInplaceChoose : TermElab := fun st
   let a ← elabTerm stx[1] none
   let ty ← whnfR (← instantiateMVars (← inferType a))
   if ty.isAppOf ``Std.Slice then elabTerm stx[3] expected? else elabTerm stx[2] expected?
+
+
+open Lean Elab Term Meta in
+/-- Elaborates `inplace_index%`. -/
+@[term_elab inplaceIndex]
+public meta def ScalarArray.InPlaceSyntax.elabInplaceIndex : TermElab := fun stx _ => do
+  let i ← elabTerm stx[1] (some (mkConst ``USize))
+  let ty ← instantiateMVars (← inferType i)
+  if ← isDefEq ty (mkConst ``USize) then return i
+  throwErrorAt stx[1] m!"the indices of an `inplace` program are `USize`s, but this one is a \
+    `{ty}`{if ty.isConstOf ``Nat then m!": convert it with `toUSize`, with a bound on its `toNat`, \
+    or loop over a `USize` range" else m!""}"
+
+
+open Lean Elab Term Meta in
+/-- Elaborates `inplace_elem%`. -/
+@[term_elab inplaceElem]
+public meta def ScalarArray.InPlaceSyntax.elabInplaceElem : TermElab := fun stx _ => do
+  let a ← elabTerm stx[1] none
+  let ty ← instantiateMVars (← inferType a)
+  let elem ← mkFreshTypeMVar
+  let valid ← mkFreshExprMVar (← mkArrow ty (← mkArrow (mkConst ``Nat) (mkSort .zero)))
+  let us ← (List.range 3).mapM fun _ => mkFreshLevelMVar
+  let inst := mkApp4 (mkConst ``GetElem us) ty (mkConst ``Nat) elem valid
+  match ← trySynthInstance inst with
+  | .some _ => elabTermEnsuringType stx[2] (← instantiateMVars elem)
+  | _ => elabTerm stx[2] none
 
 macro_rules
   | `(inplace $a:ident do $stmts;* $[then $k]?) => do
