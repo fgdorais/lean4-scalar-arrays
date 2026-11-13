@@ -5,7 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 import ScalarArray
-import ScalarArray.InPlaceSyntax
+import ScalarArray.Notation
 import ScalarArrayTest.Util
 meta import ScalarArray
 meta import ScalarArrayTest.Util
@@ -890,7 +890,7 @@ example (s : UInt8Array.Slice) (n : USize) : Unit × UInt8Array.Slice :=
     for j in 0...n do
       s[j] := 0
 
-/-! Proofs about programs: see the module documentation of `ScalarArray.InPlaceSyntax`. -/
+/-! Proofs about programs: see the module documentation of `ScalarArray.Notation`. -/
 
 -- A program without branches or loops: `simp` runs it.
 example (a : UInt8Array) (h : 2 ≤ a.size) :
