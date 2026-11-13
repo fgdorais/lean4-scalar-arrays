@@ -281,6 +281,51 @@ passes, one `foldlInPlace2Then` for each result.
         a[o + c * k] := 2 * a[o + c * k]).2
   else a
 
+/-- The cosine of the plane rotations. -/
+def rotC : Float := 0.6
+
+/-- The sine of the plane rotations. -/
+def rotS : Float := 0.8
+
+-- The constants are definitions of their own: a literal such as `0.6` inside the loop body is
+-- `OfScientific.ofScientific 6 true 1`, and the compiler can replace its `true` with the value of
+-- a `Decidable` test in the same branch, which then makes it run at every step.
+
+/-- A plane rotation by `rotC` and `rotS`: the new first element. -/
+@[inline] def rotX (u v : Float) : Float := rotC * u + rotS * v
+
+/-- A plane rotation by `rotC` and `rotS`: the new second element. -/
+@[inline] def rotY (u v : Float) : Float := rotC * v - rotS * u
+
+/-- The loop of `rotChecked`. -/
+@[specialize] def rotCheckedLoop (i : Nat) (x y : Float64Array) : Float64Array × Float64Array :=
+  if h : i < x.size ∧ i < y.size then
+    let u := x[i]
+    let v := y[i]
+    rotCheckedLoop (i + 1) (x.set i (rotX u v) h.1) (y.set i (rotY u v) (by simpa using h.2))
+  else (x, y)
+termination_by x.size - i
+
+/-- A plane rotation of two vectors, with a store into each array that checks it is exclusive. -/
+@[noinline] def rotChecked (x y : Float64Array) : Float64Array × Float64Array :=
+  rotCheckedLoop 0 x y
+
+/-- A plane rotation of two vectors, with `zipModifyStride`. -/
+@[noinline] def rotZip (x y : Float64Array) : Float64Array × Float64Array :=
+  if h : Stride.Fits ⟨0, 1⟩ x.size x.size ∧ Stride.Fits ⟨0, 1⟩ x.size y.size then
+    Float64Array.zipModifyStride x y ⟨0, 1⟩ ⟨0, 1⟩ x.size rotX rotY h.1 h.2
+  else (x, y)
+
+/-- A plane rotation of the two rows of a `2 × m` matrix stored by columns, with `modifyStride2`. -/
+@[noinline] def rotRows (a : Float64Array) (m : Nat) : Float64Array :=
+  if h : Stride.Fits ⟨0, 2⟩ m a.size ∧ Stride.Fits ⟨1, 2⟩ m a.size then
+    a.modifyStride2 ⟨0, 2⟩ ⟨1, 2⟩ m rotX rotY h.1 h.2
+  else a
+
+/-- `doubleStride` with `modifyStride`. -/
+@[noinline] def doubleModifyStride (a : Float64Array) (s : Stride) (m : Nat) : Float64Array :=
+  if h : s.Fits m a.size then a.modifyStride s m (2 * ·) h else a
+
 /-- `doubleStride` on all the elements, as a contiguous loop. -/
 @[noinline] def doubleAll (a : Float64Array) : Float64Array :=
   have := a.toNat_usize_le
@@ -308,6 +353,7 @@ def extras (rounds n : Nat) : IO (List Row) := do
   let bytes := a.toBytesLE
   let w : UInt64Array := build n
   let f : Float64Array := build n
+  let g : Float64Array := build n
   let one {α : Type} (name : String) (x : α) (f : α → Nat → UInt64) : IO Row := do
     return { name, time := ← time rounds n (f x), core := none }
   return [
@@ -374,6 +420,15 @@ def extras (rounds n : Nat) : IO (List Row) := do
       (Nat.fold 10 (fun _ _ a => doubleStride a ⟨0, 2⟩ (n / 2).toUSize) a).size.toUInt64,
     ← one "Float64 double ×10, stride 8" f fun a n =>
       (Nat.fold 10 (fun _ _ a => doubleStride a ⟨0, 8⟩ (n / 8).toUSize) a).size.toUInt64,
+    ← one "Float64 double ×10, stride 2, modifyStride" f fun a n =>
+      (Nat.fold 10 (fun _ _ a => doubleModifyStride a ⟨0, 2⟩ (n / 2)) a).size.toUInt64,
+    -- A plane rotation (BLAS `drot`) of two vectors, ten passes.
+    ← one "Float64 rot ×10, checked stores" (f, g) fun p _ =>
+      (Nat.fold 10 (fun _ _ p => rotChecked p.1 p.2) p).2.size.toUInt64,
+    ← one "Float64 rot ×10, zipModifyStride" (f, g) fun p _ =>
+      (Nat.fold 10 (fun _ _ p => rotZip p.1 p.2) p).2.size.toUInt64,
+    ← one "Float64 rot ×10, two rows of one array, modifyStride2" f fun a n =>
+      (Nat.fold 10 (fun _ _ a => rotRows a (n / 2)) a).size.toUInt64,
     -- lean4-mpn's FFT residues are windows of about 137 limbs.
     ← one "UInt64 add 137, foldlInPlace2" (w.extract 0 411) fun a n =>
       butterflies addFold2 a 137 (n / 137),
