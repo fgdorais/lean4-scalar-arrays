@@ -44,8 +44,8 @@ rev = "v1.0.0"
 Then `import ScalarArray` for every type, or `import ScalarArray.UInt32` and so on for just one.
 The experimental `ScalarArray.Bytes`, which converts the arrays to and from `ByteArray` in little-
 or big-endian byte order, is not part of `import ScalarArray` and has to be imported on its own.
-So is the experimental `ScalarArray.InPlaceSyntax`, the `inplace a do …` notation for in-place
-programs.
+So is `ScalarArray.Notation`, the `inplace a do …` notation for in-place programs, because
+importing it makes `inplace` a keyword. It adds nothing else outside of `inplace … do` blocks.
 
 Reads, writes and copies are implemented in C, so the library is built with `precompileModules`,
 and Lake loads the compiled code whenever a file that imports it runs `#eval` or `#guard`. This
@@ -91,7 +91,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Slice writes | `Slice.set`, `set!`, `modify`, `swap`, `reverse`, `foldlInPlace`, `foldrInPlace`, `foldlInPlaceThen`, `foldrInPlaceThen`, which write into the slice's array; `s.array` gives the whole array back |
 | In-place folds | `Slice.foldlInPlace`, `Slice.foldrInPlace` and their `Then` forms; `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
 | In-place programs | `XArray.InPlace n α`, a monad of programs that read and write an array of size `n` in place: `InPlace.read`, `readThen`, `write`, `InPlace.ite`, `InPlace.dite`; the loops `forIn lo hi` and `forInRev lo hi` (from `hi - 1` down to `lo`), whose bodies get both `lo ≤ j` and `j < hi`, `forIn2` and `forInRev2` with two unboxed accumulators, and their `Bind` forms (`forInBind`, …), which run straight into the rest of the program; run with `a.runInPlace m` or `m.run a h`, or a single loop with `runForInThen`, `runForInRevThen` and `runForIn2Then`. Tail programs `InPlace.Tail n γ` end by handing their result and the new array to a continuation, without a result pair: `Tail.bind`, `readThen`, `writeThen`, `Tail.ite`, `Tail.dite`, the `Bind` loops and `Tail.done x k`, and loops in continuation-passing style `Tail.forIn`, `Tail.forInRev` and their forms with two to four variables (`Tail.forIn2`, …), whose body ends by calling `next`, so that nested loops allocate nothing; run with `a.runInPlaceThen t`, or on a slice's window with `s.runInPlaceThenOf n h t`. For kernels that no fold shape covers, such as a butterfly that writes two windows with two carries |
-| `inplace` notation | In the experimental `ScalarArray.InPlaceSyntax`: `inplace a do …`, an in-place program on an array or a slice `a` written with reads `let x := a[i]` (or `a[i]` in any term), writes `a[i] := e`, `let`, `let mut` and `x := e`, `have`, `if … then … else …` and `if let`, loops `for j in lo...hi with (x := init) … do …` with up to four unboxed variables and `for j in reverse lo...hi …`, with `for h : j in …` naming the bounds of `j`, and `return e`, and an optional `then k` that hands the result and the new array to `k` with no result pair; it compiles to the same loops as hand-written programs, and the tactic `inplace_bound` proves the index bounds, including `USize` arithmetic such as `j - 17` |
+| `inplace` notation | In `ScalarArray.Notation`: `inplace a do …`, an in-place program on an array or a slice `a` written with reads `let x := a[i]` (or `a[i]` in any term), writes `a[i] := e`, `let`, `let mut` and `x := e`, `have`, `if … then … else …` and `if let`, loops `for j in lo...hi with (x := init) … do …` with up to four unboxed variables and `for j in reverse lo...hi …`, with `for h : j in …` naming the bounds of `j`, and `return e`, and an optional `then k` that hands the result and the new array to `k` with no result pair; it compiles to the same loops as hand-written programs, and the tactic `inplace_bound` proves the index bounds, including `USize` arithmetic such as `j - 17` |
 | Loop specifications | `modifyAt idx lo hi g`, which writes `g i a[idx i]` at the index `idx i` for each step `i` of a range, the model of a loop over a map of indices, with `getElem_modifyAt_idx` and `getElem_modifyAt_of_forall_ne`; `ScalarArray.Stride`, the strides `off + inc * i`, with `Stride.Fits` and `toNat_idx_toUSize` for their `USize` indices; `ScalarArray.iterRange` and `iterRangeRev`, the models of loops up and down, with `iterRange_prod_of_snd` for a loop that only reads; whole-loop lemmas for tail programs, `Tail.run_forInFrom` and `Tail.run_forInRevFrom` for a loop whose step maps its variable and the array, `_unit` for a loop with no variable, such as a loop of loops, and `_modify` and `_write` for the loops `for j in lo...hi do a[e j] := …` of the `inplace` notation |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array, and `Std.Iter.toXSlice` for the rest of a slice iterator as a slice, whose `start` is its position |
 | Equality     | `a == b` and `s == t`; for integer types also `DecidableEq` (`decEq`), `Hashable` (`hash`), and for slices `Hashable` (`Slice.hash`), `EquivBEq` and `LawfulHashable` |
@@ -150,15 +150,15 @@ a.iter.length                                -- size
 `Std.Iter.toXArrayWithCapacity` allocates up front when the number of elements is known or
 bounded, for example `(a.iter.map f).toUInt32ArrayWithCapacity a.size`.
 
-In-place programs cover loops that no fold shape fits. In the experimental
-`ScalarArray.InPlaceSyntax`, `inplace a do …` writes one in a small imperative language, and
+In-place programs cover loops that no fold shape fits. In `ScalarArray.Notation`,
+`inplace a do …` writes one in a small imperative language, and
 compiles it to the same unboxed loop as a hand-written program. Here a single pass adds and
 subtracts two windows of `a` with a carry and a borrow, writing the sum over `x` and the
 difference to `t`:
 
 ```lean
 import ScalarArray
-import ScalarArray.InPlaceSyntax
+import ScalarArray.Notation
 
 open ScalarArray
 
@@ -243,7 +243,7 @@ The following are not covered by this promise:
 
 - `ScalarArray.Internal`, including `ScalarArray.Raw`, and the declarations whose documentation
   says they are for internal use only;
-- the experimental `ScalarArray.Bytes` and `ScalarArray.InPlaceSyntax`;
+- the experimental `ScalarArray.Bytes`;
 - which lemmas are `@[simp]` or `@[grind]`, so `simp` and `grind` proofs may need adjusting after
   an upgrade;
 - changes forced by changes to Lean and its core library, which is still evolving; in particular,

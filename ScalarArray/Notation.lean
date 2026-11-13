@@ -11,7 +11,10 @@ import ScalarArray.Internal
 /-!
 # Notation for in-place programs
 
-Experimental: the root module `ScalarArray` doesn't import this one.
+The root module `ScalarArray` doesn't import this one, because it makes `inplace` a keyword.
+Outside of `inplace … do` blocks it adds nothing else: no other keyword, and no other term. The
+statements are parsed only in a block, the terms of the expansion aren't terms that can be written,
+and `inplace_bound`, the tactic that proves the bounds of indices, isn't a keyword.
 
 `inplace a do …` writes an in-place program (`XArray.InPlace`) on the array `a` in a small
 imperative language, and runs it, which returns the program's result and the new array, or hands
@@ -124,7 +127,7 @@ When the array's size is less than `USize.size`, as it always is at runtime, tha
 ## Proofs
 
 A program is defined by its expansion, which `runInPlaceThenOf_eq` and the `run` lemmas of
-`XArray.InPlace.Tail` take apart (`ScalarArrayTest/InPlaceSyntax.lean` has these examples):
+`XArray.InPlace.Tail` take apart (`ScalarArrayTest/Notation.lean` has these examples):
 
 * A program without branches or loops: `simp [XArray.runInPlaceThenOf_eq]` runs it.
 * An `if`: `simp only [XArray.runInPlaceThenOf_eq, XArray.InPlace.Tail.run_readThen,
@@ -206,7 +209,7 @@ else UInt64Array.mk (Array.replicate a.size 0)
   to write instead.
 -/
 
-namespace ScalarArray.InPlaceSyntax
+namespace ScalarArray.Notation
 
 /--
 The index `off + j` of a window of `len` elements at `off` is in bounds, for `j < len`. For internal
@@ -297,7 +300,7 @@ public theorem lt_of_succ_le {lo j : USize} (h : lo.toNat + 1 < USize.size)
     (hj : (lo + 1).toNat ≤ j.toNat) : lo.toNat < j.toNat := by
   grind
 
-end ScalarArray.InPlaceSyntax
+end ScalarArray.Notation
 
 public meta section
 
@@ -329,14 +332,6 @@ private def splitAnds (g : MVarId) : MetaM MVarId := do
     todo := todo ++ xs
   return g
 
-/-- Splits the conjunctions in context, recursively. For internal use by the `inplace` notation. -/
-syntax (name := inplaceSplit) "inplace_split" : tactic
-
-open Lean Elab Tactic in
-/-- Elaborates `inplace_split`. -/
-@[tactic inplaceSplit] def ScalarArray.InPlaceSyntax.evalInplaceSplit : Tactic := fun _ =>
-  liftMetaTactic fun g => return [← splitAnds g]
-
 /--
 Proves the bound `i.toNat < n` of an index in an `inplace` program: for `i = off + j`, from a
 window hypothesis `off.toNat + len.toNat ≤ n` and the loop bound `j.toNat < len.toNat`, or else by
@@ -345,31 +340,23 @@ around. Conjunctions in context are split first.
 -/
 syntax (name := inplaceBound) "inplace_bound" : tactic
 
-/--
-The proof search of `inplace_bound`, which fails with the errors of its last attempt. For internal
-use by the `inplace` notation.
--/
-syntax (name := inplaceBoundCore) "inplace_bound_core" : tactic
-
-macro_rules
-  | `(tactic| inplace_bound_core) => `(tactic| (
-      inplace_split
+open Lean Elab Tactic Meta in
+/-- Elaborates `inplace_bound`: runs its proof search, and reports a failure with the bound. -/
+@[tactic inplaceBound] def ScalarArray.Notation.evalInplaceBound : Tactic := fun _ => do
+  let g ← getMainGoal
+  try
+    liftMetaTactic fun g => return [← splitAnds g]
+    evalTactic (← `(tactic|
       first
         -- At reducible transparency, so that an index that isn't a sum, such as a literal, fails
         -- at once rather than unfolding to match `off + j`.
         | (with_reducible
-             refine ScalarArray.InPlaceSyntax.toNat_add_lt_of_window (len := ?len) ?hw ?hj
+             refine ScalarArray.Notation.toNat_add_lt_of_window (len := ?len) ?hw ?hj
            case hj => assumption
            case hw => assumption)
         | assumption
         | lia
         | grind))
-
-open Lean Elab Tactic Meta in
-/-- Elaborates `inplace_bound`: runs its proof search, and reports a failure with the bound. -/
-@[tactic inplaceBound] def ScalarArray.InPlaceSyntax.evalInplaceBound : Tactic := fun _ => do
-  let g ← getMainGoal
-  try evalTactic (← `(tactic| inplace_bound_core))
   catch _ =>
     let t ← instantiateMVars (← g.getType)
     throwError m!"inplace: cannot prove the bound of this index from the hypotheses in context:"
@@ -435,11 +422,11 @@ syntax (name := inplaceMatch) "match " sepBy1(term, ", ") " with" (inplaceMatchA
 /-- `return e` ends the program with the result `e`, and `return` with `()`. -/
 syntax "return" (ppSpace colGt term)? : inplaceStmt
 /-- `x += e` isn't a statement of an `inplace` program: this reports it, with what to write. -/
-syntax (name := inplaceAddEq) (priority := low) term:max " += " term : inplaceStmt
+syntax (name := inplaceAddEq) (priority := low) term:max " +" noWs "= " term : inplaceStmt
 /-- `x -= e` isn't a statement of an `inplace` program: this reports it, with what to write. -/
-syntax (name := inplaceSubEq) (priority := low) term:max " -= " term : inplaceStmt
+syntax (name := inplaceSubEq) (priority := low) term:max " -" noWs "= " term : inplaceStmt
 /-- `x *= e` isn't a statement of an `inplace` program: this reports it, with what to write. -/
-syntax (name := inplaceMulEq) (priority := low) term:max " *= " term : inplaceStmt
+syntax (name := inplaceMulEq) (priority := low) term:max " *" noWs "= " term : inplaceStmt
 /--
 An application `f x …`, such as `pure x`, isn't a statement of an `inplace` program: this reports
 it, with the statements that are, rather than a parse error.
@@ -449,24 +436,48 @@ syntax (name := inplaceApp) (priority := low) ident (ppSpace colGt term:max)+ : 
 /--
 `inplace a do …` is the in-place program on `a` that the statements describe, run on `a`: it
 returns the program's result and the new array, or, with `then k`, `k` on them and the new array's
-size. See the module documentation of `ScalarArray.InPlaceSyntax`.
+size. See the module documentation of `ScalarArray.Notation`.
 -/
 syntax (name := inplaceTerm) "inplace " termBeforeDo " do" inplaceSeq
   (ppDedent(ppLine) "then " term)? : term
 
 /--
-`inplace_index% i` is the `USize` index `i` of a read or a write of an `inplace` program, with an
-error that says so for an index of another type, such as a `Nat`.
-For internal use by the `inplace` notation.
+The internal terms of the expansion of an `inplace` program. They aren't terms of the `term`
+category, so they can't be written outside of the expansion, and their names aren't keywords.
 -/
-syntax (name := inplaceIndex) "inplace_index% " term:max : term
+declare_syntax_cat inplaceInternal (behavior := both)
 
 /--
-`inplace_elem% a v` is the value `v` of a write to the array or slice `a` of an `inplace` program,
-elaborated as an element of `a`, so that a type error names `v`.
-For internal use by the `inplace` notation.
+`inplace_index i` is the `USize` index `i` of a read or a write of an `inplace` program, with an
+error that says so for an index of another type, such as a `Nat`.
 -/
-syntax (name := inplaceElem) "inplace_elem% " ident term:max : term
+syntax (name := inplaceIndex) "inplace_index " term:max : inplaceInternal
+
+/--
+`inplace_elem a v` is the value `v` of a write to the array or slice `a` of an `inplace` program,
+elaborated as an element of `a`, so that a type error names `v`.
+-/
+syntax (name := inplaceElem) "inplace_elem " ident term:max : inplaceInternal
+
+/--
+`inplace_choose a e f` is `e` if `a` is an array and `f` if it is a slice: `inplace a do …` expands
+to both programs, and elaborates the one for the type of `a`.
+-/
+syntax (name := inplaceChoose) "inplace_choose " ident term:max term:max : inplaceInternal
+
+open Lean in
+/-- The term `inplace_index i`. -/
+private def mkIndex (i : Term) : Term := ⟨mkNode ``inplaceIndex #[mkAtom "inplace_index", i]⟩
+
+open Lean in
+/-- The term `inplace_elem a v`. -/
+private def mkElem (a : Ident) (v : Term) : Term :=
+  ⟨mkNode ``inplaceElem #[mkAtom "inplace_elem", a, v]⟩
+
+open Lean in
+/-- The term `inplace_choose a e f`. -/
+private def mkChoose (a : Ident) (e f : Term) : Term :=
+  ⟨mkNode ``inplaceChoose #[mkAtom "inplace_choose", a, e, f]⟩
 
 open Lean
 
@@ -575,12 +586,12 @@ The index in the program's array of the index `i` of `arr`, and the proof of its
 `i.toNat < arr.size`: `i` itself for an array, and `off + i` for a slice.
 -/
 private def access (p : Arr) (i : Term) : MacroM (Term × Term) := do
-  let i ← `(inplace_index% $i)
+  let i := mkIndex i
   let h ← `(Nat.lt_of_lt_of_eq (by inplace_bound) $p.hsize)
   match p.window with
   | none => return (i, h)
   | some (off, hw) =>
-    return (← `($off + $i), ← `(ScalarArray.InPlaceSyntax.toNat_add_lt_of_window_of_lt $hw $h))
+    return (← `($off + $i), ← `(ScalarArray.Notation.toNat_add_lt_of_window_of_lt $hw $h))
 
 /-- `k` after the reads `reads`. -/
 private def withReads (p : Arr) (reads : Array (Ident × Term)) (k : Term) : MacroM Term :=
@@ -715,10 +726,10 @@ private def rangeBounds (range : Term) :
     return (← `(USize.toNat $j < USize.toNat $hi), hj, true)
   let upperEq (hi j hj : Term) : MacroM IndexFact :=
     return (← `(USize.toNat $j ≤ USize.toNat $hi),
-      ← `(ScalarArray.InPlaceSyntax.le_of_lt_succ $hh $hj), false)
+      ← `(ScalarArray.Notation.le_of_lt_succ $hh $hj), false)
   let lowerLt (lo j hlo : Term) : MacroM IndexFact :=
     return (← `(USize.toNat $lo < USize.toNat $j),
-      ← `(ScalarArray.InPlaceSyntax.lt_of_succ_le $hl $hlo), false)
+      ← `(ScalarArray.Notation.lt_of_succ_le $hl $hlo), false)
   let factHi (hi : Term) : MacroM (Ident × Term) :=
     return (hh, ← `(USize.toNat $hi + 1 < USize.size))
   let factLo (lo : Term) : MacroM (Ident × Term) :=
@@ -848,7 +859,7 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
   | `(inplaceStmt| $a:ident[$i] := $v) =>
     checkArray arr a
     let (i, h) ← access p i
-    `(.writeThen $i $h (inplace_elem% $arr $v) $(← k mvars))
+    `(.writeThen $i $h $(mkElem arr v) $(← k mvars))
   | `(inplaceStmt| let mut $x:ident $[: $ty]? := $e) =>
     match ty with
     | some ty => `(let $x:ident : $ty := $e; $(← k (mvars.push x)))
@@ -923,7 +934,7 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
     let b := b.getElems.toList
     let (lo', hi') ← match step with
       | none => pure (lo, hi)
-      | some step => pure (← `((0 : USize)), ← `(ScalarArray.InPlaceSyntax.stepCount $lo $hi $step))
+      | some step => pure (← `((0 : USize)), ← `(ScalarArray.Notation.stepCount $lo $hi $step))
     let mkBody (next : Ident) (_ : Term) (body : Term) : MacroM Term := do
       let hlo ← fresh `hlo
       let hj ← fresh `hj
@@ -937,7 +948,7 @@ private partial def expandStmt (p : Arr) (ending : Term → MacroM Term) (mvars 
         let hk ← fresh `hk
         let body ← `((fun ($j : USize) ($hlo : USize.toNat $lo ≤ USize.toNat $j)
             ($hj : USize.toNat $j < USize.toNat $hi) => $body) ($lo + $step * $kk)
-          (ScalarArray.InPlaceSyntax.step_le $hk) (ScalarArray.InPlaceSyntax.step_lt $hk))
+          (ScalarArray.Notation.step_le $hk) (ScalarArray.Notation.step_lt $hk))
         lam kk (← fresh `_hk0) hk next xs body
     let f ← loopFn rev.isSome xs.size
     let brk := hasBreak (mkNullNode (b.toArray.map (·.raw)))
@@ -999,7 +1010,7 @@ private partial def expandLoop (p : Arr) (ending : Term → MacroM Term) (rest :
   let rest ← rest
   let restFn ← if xs.isEmpty then `(fun _ => $rest) else `(fun $xs* => $rest)
   -- `withExit` elaborates the loop before the rest, so that the loop fixes the type of the rest.
-  if brk then `(ScalarArray.InPlaceSyntax.withExit (fun $brkFn => $(← mkLoop body brkFn)) $restFn)
+  if brk then `(ScalarArray.Notation.withExit (fun $brkFn => $(← mkLoop body brkFn)) $restFn)
   else mkLoop body restFn
 
 /--
@@ -1029,26 +1040,19 @@ end
 
 end
 
-/--
-`inplace_choose% a e f` is `e` if `a` is an array and `f` if it is a slice: `inplace a do …` expands
-to both programs, and elaborates the one for the type of `a`.
-For internal use by the `inplace` notation.
--/
-syntax (name := inplaceChoose) "inplace_choose% " ident term:max term:max : term
-
 open Lean Elab Term Meta in
-/-- Elaborates `inplace_choose%`. -/
+/-- Elaborates `inplace_choose`. -/
 @[term_elab inplaceChoose]
-public meta def ScalarArray.InPlaceSyntax.elabInplaceChoose : TermElab := fun stx expected? => do
+public meta def ScalarArray.Notation.elabInplaceChoose : TermElab := fun stx expected? => do
   let a ← elabTerm stx[1] none
   let ty ← whnfR (← instantiateMVars (← inferType a))
   if ty.isAppOf ``Std.Slice then elabTerm stx[3] expected? else elabTerm stx[2] expected?
 
 
 open Lean Elab Term Meta in
-/-- Elaborates `inplace_index%`. -/
+/-- Elaborates `inplace_index`. -/
 @[term_elab inplaceIndex]
-public meta def ScalarArray.InPlaceSyntax.elabInplaceIndex : TermElab := fun stx _ => do
+public meta def ScalarArray.Notation.elabInplaceIndex : TermElab := fun stx _ => do
   let i ← elabTerm stx[1] (some (mkConst ``USize))
   let ty ← instantiateMVars (← inferType i)
   if ← isDefEq ty (mkConst ``USize) then return i
@@ -1058,9 +1062,9 @@ public meta def ScalarArray.InPlaceSyntax.elabInplaceIndex : TermElab := fun stx
 
 
 open Lean Elab Term Meta in
-/-- Elaborates `inplace_elem%`. -/
+/-- Elaborates `inplace_elem`. -/
 @[term_elab inplaceElem]
-public meta def ScalarArray.InPlaceSyntax.elabInplaceElem : TermElab := fun stx _ => do
+public meta def ScalarArray.Notation.elabInplaceElem : TermElab := fun stx _ => do
   let a ← elabTerm stx[1] none
   let ty ← instantiateMVars (← inferType a)
   let elem ← mkFreshTypeMVar
@@ -1107,14 +1111,14 @@ macro_rules
     let progS ← expandSeq ps (ending true) #[] none (← ending true (← `(()))) stmts
     -- They are bound by a function application, not by `let`, which fails to elaborate when the
     -- program has metavariables left for later, such as the types of loop variables.
-    `(inplace_choose% $a
-      ((fun ($size : Nat) ($p.hsize : ($a).size = $size) ($p.usize : USize)
+    let run ← `((fun ($size : Nat) ($p.hsize : ($a).size = $size) ($p.usize : USize)
           (_ : ($p.usize).toNat ≤ ($a).size) => ($a).runInPlaceThenOf $size $p.hsize $prog)
         ($a).size rfl ($a).usize ($a).toNat_usize_le)
-      ((fun ($size : Nat) ($p.hsize : ($a).size = $size) ($p.usize : USize)
+    let runS ← `((fun ($size : Nat) ($p.hsize : ($a).size = $size) ($p.usize : USize)
           (_ : ($p.usize).toNat ≤ ($a).size) =>
           ($a).runInPlaceThenOf $size $p.hsize fun $bigN $off $hw $mk $hmk => $progS)
-        ($a).size rfl ($a).usize ($a).toNat_usize_le))
+        ($a).size rfl ($a).usize ($a).toNat_usize_le)
+    return mkChoose a run runS
   | `(inplace $e do $_;* $[then $_]?) =>
     Lean.Macro.throwErrorAt e "`inplace` needs the array as a local variable: bind it first, as \
       in `let a := e; inplace a do …`"
