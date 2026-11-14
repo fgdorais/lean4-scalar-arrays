@@ -114,3 +114,133 @@ example (a : Int32Array) (s : Stride) (n : Nat) (p : Nat) (hp : ∀ i < n, s.idx
     (h : p < a.size) :
     (a.modifyAt s.idx 0 n fun _ v => 2 * v)[p]'(by simpa using h) = a[p] :=
   getElem_modifyAt_of_forall_ne a s.idx _ (fun i _ hi => hp i hi) _
+
+/-! `modifyAt2` and `zipModifyAt` -/
+
+-- Two strides of one array: every second element from index `0`, and from index `1`.
+#guard ((mk #[1, 2, 3, 4, 5, 6]).modifyAt2 (Stride.idx ⟨0, 2⟩) (Stride.idx ⟨1, 2⟩) 0 3
+  (fun _ u v => u + v) (fun _ u v => u * v)).toArray == #[3, 2, 7, 12, 11, 30]
+
+-- Both elements are read before either is written, and the second write wins where they meet.
+#guard ((mk #[3, 2]).modifyAt2 id id 0 1 (fun _ u v => u + v) (fun _ u v => u * v)).toArray ==
+  #[9, 2]
+
+-- The steps run in order, and each sees the earlier writes.
+#guard ((mk #[1, 2]).modifyAt2 (fun _ => 0) (fun _ => 1) 0 2 (fun _ u v => u + v)
+  (fun _ u v => u * v)).toArray == #[5, 6]
+
+-- Indices out of bounds read `default` and are not written.
+#guard ((mk #[1, 2, 3]).modifyAt2 id (· + 2) 0 2 (fun _ u v => u + v)
+  (fun _ u v => u * v)).toArray == #[4, 2, 3]
+
+-- Two arrays.
+#guard (zipModifyAt (mk #[1, 2, 3]) (mk #[4, 5, 6, 7]) id (· + 1) 0 3 (fun _ u v => u + v)
+  (fun _ u v => u * v)) |> fun r => r.1.toArray == #[6, 8, 10] && r.2.toArray == #[4, 5, 12, 21]
+
+-- An empty range changes nothing.
+#guard (zipModifyAt (mk #[1, 2]) (mk #[3]) id id 2 1 (fun _ u v => u + v)
+  (fun _ u v => u * v)) |> fun r => r.1.toArray == #[1, 2] && r.2.toArray == #[3]
+
+/-! Strided loops -/
+
+/-- `modifyStride` on a stride that fits, and `a` itself otherwise. -/
+private def stride1 (a : Int32Array) (s : Stride) (n : Nat) (f : Int32 → Int32) :
+    Int32Array :=
+  if h : s.Fits n a.size then a.modifyStride s n f h else a
+
+/-- `modifyStride2` on strides that fit, and `a` itself otherwise. -/
+private def stride2 (a : Int32Array) (sa sb : Stride) (n : Nat)
+    (f g : Int32 → Int32 → Int32) : Int32Array :=
+  if h : sa.Fits n a.size ∧ sb.Fits n a.size then a.modifyStride2 sa sb n f g h.1 h.2 else a
+
+/-- `zipModifyStride` on strides that fit, and `(a, b)` otherwise. -/
+private def strideZip (a b : Int32Array) (sa sb : Stride) (n : Nat)
+    (f g : Int32 → Int32 → Int32) : Int32Array × Int32Array :=
+  if h : sa.Fits n a.size ∧ sb.Fits n b.size then zipModifyStride a b sa sb n f g h.1 h.2
+  else (a, b)
+
+#guard (stride1 (mk #[1, 2, 3, 4, 5, 6]) ⟨1, 2⟩ 3 (2 * ·)).toArray == #[1, 4, 3, 8, 5, 12]
+-- A stride of `0` with one step, no steps, and a stride ending at the last element.
+#guard (stride1 (mk #[1, 2, 3]) ⟨2, 0⟩ 1 (2 * ·)).toArray == #[1, 2, 6]
+#guard (stride1 (mk #[1, 2, 3]) ⟨5, 7⟩ 0 (2 * ·)).toArray == #[1, 2, 3]
+#guard (stride1 (mk #[1, 2, 3, 4, 5]) ⟨1, 3⟩ 2 (2 * ·)).toArray == #[1, 4, 3, 4, 10]
+
+-- Two rows of a 3 × 3 matrix stored by columns.
+#guard (stride2 (mk #[1, 2, 3, 4, 5, 6, 7, 8, 9]) ⟨0, 3⟩ ⟨1, 3⟩ 3 (· + ·) (· * ·)).toArray ==
+  #[3, 2, 3, 9, 20, 6, 15, 56, 9]
+#guard (stride2 (mk #[1, 2, 3, 4, 5, 6, 7, 8, 9]) ⟨0, 3⟩ ⟨1, 3⟩ 3 (· + ·) (· * ·)).toArray ==
+  ((mk #[1, 2, 3, 4, 5, 6, 7, 8, 9]).modifyAt2 (Stride.idx ⟨0, 3⟩) (Stride.idx ⟨1, 3⟩) 0 3
+    (fun _ => (· + ·)) (fun _ => (· * ·))).toArray
+
+#guard (strideZip (mk #[1, 2, 3]) (mk #[4, 5, 6, 7]) ⟨0, 1⟩ ⟨1, 1⟩ 3 (· + ·) (· * ·)) |>
+  fun r => r.1.toArray == #[6, 8, 10] && r.2.toArray == #[4, 5, 12, 21]
+#guard (strideZip (mk #[1, 2, 3, 4]) (mk #[5, 6]) ⟨0, 2⟩ ⟨1, 0⟩ 1 (· + ·) (· * ·)) |>
+  fun r => r.1.toArray == #[7, 2, 3, 4] && r.2.toArray == #[5, 6]
+
+/-- `strideZip` with the same array, fresh at runtime, as both arrays. -/
+@[noinline] private def zipSelf (n : Nat) : Int32Array × Int32Array :=
+  let v := Int32Array.ofFn (n := n) fun i => i.val.toInt32 + 1
+  strideZip v v ⟨0, 1⟩ ⟨0, 1⟩ n (· + ·) (· * ·)
+
+/-- `zipSelf` where the array also stays alive, and is unchanged. -/
+@[noinline] private def zipSelfKept (n : Nat) : Int32Array × Int32Array × Int32Array :=
+  let v := Int32Array.ofFn (n := n) fun i => i.val.toInt32 + 1
+  let r := strideZip v v ⟨0, 1⟩ ⟨0, 1⟩ n (· + ·) (· * ·)
+  (r.1, r.2, v)
+
+-- The same array as both arrays: the loop writes two arrays, as the model does.
+#guard zipSelf 3 |> fun r => r.1.toArray == #[2, 4, 6] && r.2.toArray == #[1, 4, 9]
+#guard zipSelfKept 3 |> fun r =>
+  r.1.toArray == #[2, 4, 6] && r.2.1.toArray == #[1, 4, 9] && r.2.2.toArray == #[1, 2, 3]
+
+-- The elements of two rows of a matrix stored by columns, with leading dimension `ld`.
+example (a : Int32Array) (ld r n : Nat) (hr : r + 1 < ld) (h₁ : Stride.Fits ⟨r, ld⟩ n a.size)
+    (h₂ : Stride.Fits ⟨r + 1, ld⟩ n a.size) (f g : Int32 → Int32 → Int32) (i : Nat)
+    (hi : i < n) :
+    (a.modifyStride2 ⟨r, ld⟩ ⟨r + 1, ld⟩ n f g h₁ h₂)[Stride.idx ⟨r, ld⟩ i]'(by
+        simpa using h₁.idx_lt hi) =
+      f (a[Stride.idx ⟨r, ld⟩ i]'(h₁.idx_lt hi)) (a[Stride.idx ⟨r + 1, ld⟩ i]'(h₂.idx_lt hi)) := by
+  simp only [modifyStride2_eq]
+  exact getElem_modifyAt2_stride_left a h₁ h₂
+    (fun i _ j _ => Stride.idx_ne_idx_of_same_inc (s := ⟨r, ld⟩) (t := ⟨r + 1, ld⟩) rfl
+      (by simp) (by simp; lia) i j)
+    (Nat.le_refl _) _ _ (Nat.zero_le _) hi
+
+-- Two vectors, by `zipModifyAt_eq`.
+example (a b : Int32Array) (sa sb : Stride) (n : Nat) (ha : sa.Fits n a.size)
+    (hb : sb.Fits n b.size) (f g : Int32 → Int32 → Int32) :
+    zipModifyStride a b sa sb n f g ha hb =
+      (a.modifyAt sa.idx 0 n fun i u => f u b[sb.idx i]!,
+        b.modifyAt sb.idx 0 n fun i v => g a[sa.idx i]! v) := by
+  rw [zipModifyStride_eq]
+  exact zipModifyAt_eq a b _ _ (fun _ _ h₁ _ _ h₂ e => ha.idx_inj h₁ h₂ e)
+    (fun _ _ h₁ _ _ h₂ e => hb.idx_inj h₁ h₂ e)
+
+/-- A loop with two reads and two writes per step. -/
+private def addMul (a : Int32Array) (sa sb : Stride) (n : USize) : Int32Array :=
+  if h : sa.Fits n.toNat a.size ∧ sb.Fits n.toNat a.size ∧ a.size < USize.size then
+    (InPlace.Tail.forIn (n := a.size) 0 n () (fun j _ hj next _ =>
+        InPlace.Tail.readThen (sa.off.toUSize + sa.inc.toUSize * j)
+          (sa.toNat_idx_toUSize_lt h.1 h.2.2 hj) fun u =>
+        InPlace.Tail.readThen (sb.off.toUSize + sb.inc.toUSize * j)
+          (sb.toNat_idx_toUSize_lt h.2.1 h.2.2 hj) fun v =>
+        InPlace.Tail.writeThen (sa.off.toUSize + sa.inc.toUSize * j)
+          (sa.toNat_idx_toUSize_lt h.1 h.2.2 hj) (u + v)
+          (InPlace.Tail.writeThen (sb.off.toUSize + sb.inc.toUSize * j)
+            (sb.toNat_idx_toUSize_lt h.2.1 h.2.2 hj) (u * v) (next ())))
+      fun _ => InPlace.Tail.done () fun _ a _ => a).run a rfl
+  else a
+
+#guard (addMul (mk #[1, 2, 3, 4, 5, 6]) ⟨0, 2⟩ ⟨1, 2⟩ 3).toArray == #[3, 2, 7, 12, 11, 30]
+
+example (a : Int32Array) (sa sb : Stride) (n : USize) (ha : sa.Fits n.toNat a.size)
+    (hb : sb.Fits n.toNat a.size) (hs : a.size < USize.size) :
+    addMul a sa sb n =
+      a.modifyAt2 sa.idx sb.idx 0 n.toNat (fun _ u v => u + v) (fun _ u v => u * v) := by
+  rw [addMul, dite_eq_left_of_eq_true (eq_true ⟨ha, hb, hs⟩), InPlace.Tail.forIn_eq,
+    InPlace.Tail.run_forInFrom_modify2 (ia := sa.idx) (ib := sb.idx)
+      (F := fun _ u v => u + v) (G := fun _ u v => u * v)
+      (hea := fun _ _ hj => sa.toNat_idx_toUSize ha hs hj)
+      (heb := fun _ _ hj => sb.toNat_idx_toUSize hb hs hj)
+      (hf := fun _ _ _ _ _ => rfl) (hg := fun _ _ _ _ _ => rfl)]
+  simp

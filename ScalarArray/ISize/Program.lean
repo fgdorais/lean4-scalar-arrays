@@ -38,6 +38,9 @@ and no result pair is built. A tail program runs with `a.runInPlaceThen t`,
 `a.runInPlaceThenOf n h t` or `t.run a h`, and on the window of a slice `s` in its array with
 `s.runInPlaceThenOf n h t`.
 
+`InPlace.zipForInFrom`, for internal use, is the loop of the two-array updates `zipModifyStride`:
+it threads two states, one for each array.
+
 Tail programs also have loops in continuation-passing style, `Tail.forIn lo hi init body k` and
 `Tail.forInRev`, with up to four variables in `Tail.forIn2`, `Tail.forIn3`, `Tail.forIn4`, and so
 on. Their body is itself a tail program, which ends by calling a continuation `next` on the next
@@ -1591,6 +1594,66 @@ public theorem forInRev4From_eq {β₁ : Type v₁} {β₂ : Type v₂} {β₃ :
   rfl
 
 end Tail
+
+/-! ## Two arrays -/
+
+/--
+The loop of `zipForInFrom`. The two states are separate arguments, so that each is the array
+itself at runtime: a state that held both arrays would be a cell of its own, which each step would
+check and reuse.
+-/
+@[specialize]
+private def zipLoop {m : Nat} (hi : USize) (ea eb : USize → USize)
+    (hea : ∀ j : USize, j.toNat < hi.toNat → (ea j).toNat < n)
+    (heb : ∀ j : USize, j.toNat < hi.toNat → (eb j).toNat < m)
+    (f g : ISize → ISize → ISize) (j : USize) (s : State n) (t : State m) :
+    ISizeArray × ISizeArray :=
+  if hj : j < hi then
+    let u := s.array.uget (ea j) (by rw [s.size_array]; exact hea j hj)
+    let v := t.array.uget (eb j) (by rw [t.size_array]; exact heb j hj)
+    zipLoop hi ea eb hea heb f g (j + 1) ((write.{0} (ea j) (hea j hj) (f u v)).fn s).2
+      ((write.{0} (eb j) (heb j hj) (g u v)).fn t).2
+  else
+    (s.array, t.array)
+termination_by hi.toNat - j.toNat
+decreasing_by exact sub_toNat_add_one_lt hj
+
+/--
+For internal use only: the loop of the two-array updates `zipModifyStride`. For each `j` from `j₀`
+up to `hi - 1`, it reads `u := a[ea j]` and `v := b[eb j]`, then writes `f u v` at `ea j` in `a`
+and `g u v` at `eb j` in `b`. Each array is made exclusive once, before the loop, and then updated
+in place without checks. It is specified by `zipForInFrom_eq`.
+-/
+@[inline]
+public def zipForInFrom {m : Nat} (hi : USize) (ea eb : USize → USize)
+    (hea : ∀ j : USize, j.toNat < hi.toNat → (ea j).toNat < n)
+    (heb : ∀ j : USize, j.toNat < hi.toNat → (eb j).toNat < m)
+    (f g : ISize → ISize → ISize) (j₀ : USize) (a b : ISizeArray) (ha : a.size = n)
+    (hb : b.size = m) : ISizeArray × ISizeArray :=
+  -- When `a` and `b` are the same array, the first `ensureExclusive` copies it and the second then
+  -- finds the original exclusive. This relies on `never_extract`, which keeps the compiler from
+  -- merging the two calls into one, so that both loops would write the same array.
+  zipLoop hi ea eb hea heb f g j₀ ⟨a.ensureExclusive, by rw [ensureExclusive_eq]; exact ha⟩
+    ⟨b.ensureExclusive, by rw [ensureExclusive_eq]; exact hb⟩
+
+/-- The steps of `zipForInFrom`, one at a time. -/
+public theorem zipForInFrom_eq {m : Nat} (hi : USize) (ea eb : USize → USize)
+    (hea : ∀ j : USize, j.toNat < hi.toNat → (ea j).toNat < n)
+    (heb : ∀ j : USize, j.toNat < hi.toNat → (eb j).toNat < m)
+    (f g : ISize → ISize → ISize) (j : USize) (a b : ISizeArray) (ha : a.size = n)
+    (hb : b.size = m) :
+    zipForInFrom hi ea eb hea heb f g j a b ha hb =
+      if hj : j < hi then
+        zipForInFrom hi ea eb hea heb f g (j + 1)
+          (a.uset (ea j) (f (a.uget (ea j) (by rw [ha]; exact hea j hj))
+            (b.uget (eb j) (by rw [hb]; exact heb j hj))) (by rw [ha]; exact hea j hj))
+          (b.uset (eb j) (g (a.uget (ea j) (by rw [ha]; exact hea j hj))
+            (b.uget (eb j) (by rw [hb]; exact heb j hj))) (by rw [hb]; exact heb j hj))
+          (by rw [size_uset]; exact ha) (by rw [size_uset]; exact hb)
+      else (a, b) := by
+  simp only [zipForInFrom, ensureExclusive_eq]
+  rw [zipLoop]
+  split <;> rfl
 
 end InPlace
 

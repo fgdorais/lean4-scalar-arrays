@@ -42,3 +42,11 @@ Tests for `ScalarArray.Stride`, `ScalarArray.iterRange` and `ScalarArray.iterRan
 example (s : Stride) (k i : Nat) : (s.shift k).idx i = s.idx (k + i) := by simp
 
 example (s : Stride) (h : s.Fits 4 10) : s.Fits 2 10 := h.mono (by decide)
+
+/-! Disjoint strides -/
+
+example (i j : Nat) : Stride.idx ⟨1, 4⟩ i ≠ Stride.idx ⟨3, 4⟩ j :=
+  Stride.idx_ne_idx_of_same_inc (s := ⟨1, 4⟩) (t := ⟨3, 4⟩) rfl (by decide) (by decide) i j
+
+example (i j : Nat) (hi : i < 3) : Stride.idx ⟨0, 2⟩ i ≠ Stride.idx ⟨5, 1⟩ j :=
+  Stride.idx_ne_idx_of_lt_off (s := ⟨0, 2⟩) (t := ⟨5, 1⟩) (by decide) hi j
