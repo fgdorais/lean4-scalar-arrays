@@ -121,23 +121,29 @@ example (s : Int8Array.Slice) : s.reverse.copy.toList = s.copy.toList.reverse :=
   simp
 example (s : Int8Array.Slice) (f : Int8 → Int8) : (s.modify 0 f).size = s.size := by
   simp
-example (s : Int8Array.Slice) (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) :
+example (s : Int8Array.Slice)
+    (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) :
     (s.foldlInPlace 0 f).1.size = s.size := by
   simp
-example (s : Int8Array.Slice) (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) :
+example (s : Int8Array.Slice)
+    (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) :
     (s.foldrInPlace 0 f).1.size = s.size := by
   simp
-example (s : Int8Array.Slice) (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) :
+example (s : Int8Array.Slice)
+    (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) :
     (s.foldrInPlaceThen 0 f fun t _ => t).size = s.size := by
   simp
-example (s : Int8Array.Slice) (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) :
+example (s : Int8Array.Slice)
+    (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) :
     (s.foldlInPlace 0 f).1.array.size = s.array.size ∧
       (s.foldrInPlace 0 f).1.array.size = s.array.size := by
   simp
-example (s : Int8Array.Slice) (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat)
-    (h : 0 < s.start) : (s.foldlInPlace 0 f).1.array[0]? = s.array[0]? :=
+example (s : Int8Array.Slice)
+    (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) (h : 0 < s.start) :
+    (s.foldlInPlace 0 f).1.array[0]? = s.array[0]? :=
   s.getElem?_array_foldlInPlace 0 f 0 (.inl h)
-example (s : Int8Array.Slice) (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) :
+example (s : Int8Array.Slice)
+    (f : (k : USize) → k.toNat < s.size → Int8 → Nat → Int8 × Nat) :
     (s.foldrInPlace 0 f).1.array[s.stop]? = s.array[s.stop]? :=
   s.getElem?_array_foldrInPlace 0 f _ (.inr (Nat.le_refl _))
 

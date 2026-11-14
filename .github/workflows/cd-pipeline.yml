@@ -28,8 +28,10 @@ jobs:
         id: merge
         run: |
           git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
-          git merge origin/main --no-commit --no-ff --strategy-option ours --allow-unrelated-histories
+          git config user.email \
+            "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          git merge origin/main --no-commit --no-ff --strategy-option ours \
+            --allow-unrelated-histories
           # nightly-testing keeps its own toolchain and manifest
           git checkout HEAD -- lean-toolchain lake-manifest.json
           # take main's lakefile but keep nightly-testing's dependency revisions

@@ -42,7 +42,8 @@ jobs:
             docs/docs-${{ github.ref_name }}.zip
           fail_on_unmatched_files: true
 
-      # GitHub Pages serves the `docs` branch. The generated files are ignored on `main`, hence `-f`.
+      # GitHub Pages serves the `docs` branch. The generated files are ignored on `main`, hence
+      # `-f`.
       - name: Deploy Docs
         run: |
           git config user.name "github-actions[bot]"

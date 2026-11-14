@@ -337,8 +337,8 @@ The elements that the slice iterator `it` has yet to yield, as a slice of the sa
 copying. The start of the slice is the index of the next element in the array.
 -/
 @[inline, expose]
-public def _root_.Std.Iter.toInt64Slice (it : Std.Iter (α := Int64Array.SliceIterator) Int64) :
-    Int64Array.Slice :=
+public def _root_.Std.Iter.toInt64Slice
+    (it : Std.Iter (α := Int64Array.SliceIterator) Int64) : Int64Array.Slice :=
   it.internalState.xs
 
 /-- An iterator over the elements of `a`, for use with the `Std.Iterators` API. -/

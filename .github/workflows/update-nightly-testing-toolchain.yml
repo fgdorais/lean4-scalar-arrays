@@ -60,7 +60,8 @@ jobs:
           TOOLCHAIN_REV: ${{ steps.toolchain.outputs.toolchain_rev }}
         run: |
           git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          git config user.email \
+            "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
           git add lean-toolchain lake-manifest.json
           git commit -m "chore: update toolchain to ${TOOLCHAIN_REV}"
           git push origin nightly-testing

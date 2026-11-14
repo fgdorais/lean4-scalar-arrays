@@ -121,23 +121,29 @@ example (s : USizeArray.Slice) : s.reverse.copy.toList = s.copy.toList.reverse :
   simp
 example (s : USizeArray.Slice) (f : USize → USize) : (s.modify 0 f).size = s.size := by
   simp
-example (s : USizeArray.Slice) (f : (k : USize) → k.toNat < s.size → USize → Nat → USize × Nat) :
+example (s : USizeArray.Slice)
+    (f : (k : USize) → k.toNat < s.size → USize → Nat → USize × Nat) :
     (s.foldlInPlace 0 f).1.size = s.size := by
   simp
-example (s : USizeArray.Slice) (f : (k : USize) → k.toNat < s.size → USize → Nat → USize × Nat) :
+example (s : USizeArray.Slice)
+    (f : (k : USize) → k.toNat < s.size → USize → Nat → USize × Nat) :
     (s.foldrInPlace 0 f).1.size = s.size := by
   simp
-example (s : USizeArray.Slice) (f : (k : USize) → k.toNat < s.size → USize → Nat → USize × Nat) :
+example (s : USizeArray.Slice)
+    (f : (k : USize) → k.toNat < s.size → USize → Nat → USize × Nat) :
     (s.foldrInPlaceThen 0 f fun t _ => t).size = s.size := by
   simp
-example (s : USizeArray.Slice) (f : (k : USize) → k.toNat < s.size → USize → Nat → USize × Nat) :
+example (s : USizeArray.Slice)
+    (f : (k : USize) → k.toNat < s.size → USize → Nat → USize × Nat) :
     (s.foldlInPlace 0 f).1.array.size = s.array.size ∧
       (s.foldrInPlace 0 f).1.array.size = s.array.size := by
   simp
-example (s : USizeArray.Slice) (f : (k : USize) → k.toNat < s.size → USize → Nat → USize × Nat)
-    (h : 0 < s.start) : (s.foldlInPlace 0 f).1.array[0]? = s.array[0]? :=
+example (s : USizeArray.Slice)
+    (f : (k : USize) → k.toNat < s.size → USize → Nat → USize × Nat) (h : 0 < s.start) :
+    (s.foldlInPlace 0 f).1.array[0]? = s.array[0]? :=
   s.getElem?_array_foldlInPlace 0 f 0 (.inl h)
-example (s : USizeArray.Slice) (f : (k : USize) → k.toNat < s.size → USize → Nat → USize × Nat) :
+example (s : USizeArray.Slice)
+    (f : (k : USize) → k.toNat < s.size → USize → Nat → USize × Nat) :
     (s.foldrInPlace 0 f).1.array[s.stop]? = s.array[s.stop]? :=
   s.getElem?_array_foldrInPlace 0 f _ (.inr (Nat.le_refl _))
 

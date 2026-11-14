@@ -121,23 +121,29 @@ example (s : UInt64Array.Slice) : s.reverse.copy.toList = s.copy.toList.reverse 
   simp
 example (s : UInt64Array.Slice) (f : UInt64 → UInt64) : (s.modify 0 f).size = s.size := by
   simp
-example (s : UInt64Array.Slice) (f : (k : USize) → k.toNat < s.size → UInt64 → Nat → UInt64 × Nat) :
+example (s : UInt64Array.Slice)
+    (f : (k : USize) → k.toNat < s.size → UInt64 → Nat → UInt64 × Nat) :
     (s.foldlInPlace 0 f).1.size = s.size := by
   simp
-example (s : UInt64Array.Slice) (f : (k : USize) → k.toNat < s.size → UInt64 → Nat → UInt64 × Nat) :
+example (s : UInt64Array.Slice)
+    (f : (k : USize) → k.toNat < s.size → UInt64 → Nat → UInt64 × Nat) :
     (s.foldrInPlace 0 f).1.size = s.size := by
   simp
-example (s : UInt64Array.Slice) (f : (k : USize) → k.toNat < s.size → UInt64 → Nat → UInt64 × Nat) :
+example (s : UInt64Array.Slice)
+    (f : (k : USize) → k.toNat < s.size → UInt64 → Nat → UInt64 × Nat) :
     (s.foldrInPlaceThen 0 f fun t _ => t).size = s.size := by
   simp
-example (s : UInt64Array.Slice) (f : (k : USize) → k.toNat < s.size → UInt64 → Nat → UInt64 × Nat) :
+example (s : UInt64Array.Slice)
+    (f : (k : USize) → k.toNat < s.size → UInt64 → Nat → UInt64 × Nat) :
     (s.foldlInPlace 0 f).1.array.size = s.array.size ∧
       (s.foldrInPlace 0 f).1.array.size = s.array.size := by
   simp
-example (s : UInt64Array.Slice) (f : (k : USize) → k.toNat < s.size → UInt64 → Nat → UInt64 × Nat)
-    (h : 0 < s.start) : (s.foldlInPlace 0 f).1.array[0]? = s.array[0]? :=
+example (s : UInt64Array.Slice)
+    (f : (k : USize) → k.toNat < s.size → UInt64 → Nat → UInt64 × Nat) (h : 0 < s.start) :
+    (s.foldlInPlace 0 f).1.array[0]? = s.array[0]? :=
   s.getElem?_array_foldlInPlace 0 f 0 (.inl h)
-example (s : UInt64Array.Slice) (f : (k : USize) → k.toNat < s.size → UInt64 → Nat → UInt64 × Nat) :
+example (s : UInt64Array.Slice)
+    (f : (k : USize) → k.toNat < s.size → UInt64 → Nat → UInt64 × Nat) :
     (s.foldrInPlace 0 f).1.array[s.stop]? = s.array[s.stop]? :=
   s.getElem?_array_foldrInPlace 0 f _ (.inr (Nat.le_refl _))
 
