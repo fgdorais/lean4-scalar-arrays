@@ -137,7 +137,7 @@ private unsafe def replicateImpl (n : Nat) (v : USize) : USizeArray :=
   loop sz (allocUnsafe sz sz) 0
 where
   loop (sz : USize) (r : USizeArray) (i : USize) : USizeArray :=
-    if i < sz then loop sz (setUnsafe r i v) (i + 1) else r
+    if i < sz then loop sz (Internal.setUnsafe r i v) (i + 1) else r
 
 /-- An array of `n` copies of `v`. -/
 @[implemented_by replicateImpl, expose]
@@ -149,7 +149,7 @@ private unsafe def ofFnImpl {n : Nat} (f : Fin n → USize) : USizeArray :=
   loop (allocUnsafe sz sz) 0
 where
   loop (r : USizeArray) (i : Nat) : USizeArray :=
-    if h : i < n then loop (setUnsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
+    if h : i < n then loop (Internal.setUnsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
 
 /-- The array `#[f 0, …, f (n - 1)]`. -/
 @[implemented_by ofFnImpl, expose]

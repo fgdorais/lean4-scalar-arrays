@@ -15,7 +15,7 @@ This module binds the runtime functions on that header: allocation, size and cap
 copying, resizing and copies of raw bytes. The typed array modules use it as their runtime
 representation through `import all ScalarArray.Internal`, and reach it with `unsafeCast`. Their own
 externs are only those that are part of their API, such as `size`, `decEq` and `markLinear`, and
-the reads and writes `uget` and `setUnsafe`, whose C names the element type.
+the reads and writes `uget` and `Internal.setUnsafe`, whose C names the element type.
 
 Only what the typed modules' inlined code calls is public: the type, `size`, `capacity`,
 `resizeUnsafe` and `ensureExclusive`. Inlined code can only use declarations of publicly imported

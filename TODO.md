@@ -16,8 +16,6 @@ Open work on Scalar Arrays, roughly by area. Entries name `UInt16Array`, but eac
 
 ## API cleanups
 
-- Move the public unsafe helpers (`setUnsafe`, `pushGrowUnsafe`, `ensureCapacityGrowUnsafe` and
-  the public `…Impl`s) into a sub-namespace, so they drop out of dot completion.
 - The `Impl` suffix names both `implemented_by` targets, which are unsafe, and `csimp` targets,
   which are safe. Pick one meaning.
 - Give `popWhile` a safe implementation proved by `csimp` instead of `implemented_by`.
@@ -77,7 +75,3 @@ Found by the probes of `ScalarArrayBench.Probes` (see the README):
   `==`, so they differ on NaN and ±0.
 - `decide` can't evaluate `USize` and `ISize` literals because `System.Platform.numBits` is opaque,
   so those tests skip the `decide` examples (`WORD_TEST_DECIDE` in `generate.py`).
-
-## Housekeeping
-
-- Add `python3 scripts/generate.py --check` to CI.

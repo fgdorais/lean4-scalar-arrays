@@ -32,13 +32,13 @@ in-place updates, and have a simple `Array`-based model for proofs.
 
 The library depends only on Lean itself. The `main` branch follows the newest Lean release,
 including release candidates, and the `nightly-testing` branch follows the newest Lean nightly.
-Releases are tagged `vX.Y.Z`. Add one to your `lakefile.toml`, or `main` for the latest changes:
+Add it to your `lakefile.toml` with `main` for the latest changes, or a release tag `vX.Y.Z`:
 
 ```toml
 [[require]]
 name = "lean4-scalar-arrays"
 git = "https://github.com/fgdorais/lean4-scalar-arrays"
-rev = "v1.0.0"
+rev = "main"
 ```
 
 Then `import ScalarArray` for every type, or `import ScalarArray.UInt32` and so on for just one.
@@ -258,8 +258,9 @@ Releases are git tags `vX.Y.Z`, with release notes on GitHub. Starting with vers
 breaking changes to the API are made only in a new major version.
 The following are not covered by this promise:
 
-- `ScalarArray.Internal`, including `ScalarArray.Raw`, and the declarations whose documentation
-  says they are for internal use only;
+- `ScalarArray.Internal`, including `ScalarArray.Raw`, the unsafe helpers in each type's
+  `XArray.Internal` namespace, such as `XArray.Internal.setUnsafe`, and the declarations whose
+  documentation says they are for internal use only;
 - the experimental `ScalarArray.Bytes`;
 - which lemmas are `@[simp]` or `@[grind]`, so `simp` and `grind` proofs may need adjusting after
   an upgrade;
@@ -336,6 +337,7 @@ python3 scripts/generate.py
 ```
 
 `python3 scripts/generate.py --check` changes nothing and fails if a generated file is out of date.
+CI runs it on every pull request.
 The generated files are marked `linguist-generated` in `.gitattributes`, so GitHub collapses them in
 diffs.
 

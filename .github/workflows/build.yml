@@ -26,6 +26,10 @@ jobs:
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: check generated files
+        if: runner.os == 'Linux' && runner.arch == 'X64'
+        run: python3 scripts/generate.py --check
+
       - name: build and test
         uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
         with:

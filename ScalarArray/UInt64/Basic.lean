@@ -64,13 +64,13 @@ public def size (a : @& UInt64Array) : Nat :=
 
 /-- For internal use only. -/
 @[inline]
-public unsafe def usizeImpl (a : @& UInt64Array) : USize := (unsafeCast a : Raw).size
+public unsafe def Internal.usizeImpl (a : @& UInt64Array) : USize := (unsafeCast a : Raw).size
 
 /--
 The size of `a` as a `USize`. Since `USize` can address all memory, no array has more elements than
 `USize` can count.
 -/
-@[implemented_by usizeImpl, simp, expose]
+@[implemented_by Internal.usizeImpl, simp, expose]
 public def usize (a : @& UInt64Array) : USize :=
   a.size.toUSize
 
@@ -80,7 +80,7 @@ public theorem toNat_usize_le (a : UInt64Array) : a.usize.toNat ≤ a.size := by
 
 /-- For internal use only. -/
 @[inline]
-public unsafe def decSizeLtImpl (a : @& UInt64Array) : Decidable (a.size < USize.size) :=
+public unsafe def Internal.decSizeLtImpl (a : @& UInt64Array) : Decidable (a.size < USize.size) :=
   .isTrue lcProof
 
 /--
@@ -90,7 +90,7 @@ runtime this instance is `isTrue` without a test, so the compiler removes the te
 which would otherwise cost a `Nat` comparison and, when the fallback calls a fold, a closure for its
 function. This is the one unchecked fact behind those proofs.
 -/
-@[implemented_by decSizeLtImpl]
+@[implemented_by Internal.decSizeLtImpl]
 public instance (priority := high) decSizeLt (a : @& UInt64Array) :
     Decidable (a.size < USize.size) :=
   Nat.decLt ..
@@ -112,22 +112,22 @@ public def get (a : @& UInt64Array) (i : @& Nat) (h : i < a.size := by get_elem_
 -- `implemented_by` target attached with a separate `attribute` command is not visible to other
 -- modules, so code there that uses `get`, `mk`, `toArray`, `uset` or `set` would fail to compile.
 @[inline]
-public unsafe def getImpl : type_of% @get :=
+public unsafe def Internal.getImpl : type_of% @get :=
   fun a i _ => a.uget i.toUSize lcProof
 
-attribute [implemented_by getImpl] get
+attribute [implemented_by Internal.getImpl] get
 
 /--
 Stores `v` at index `i` in place. Only valid when `a` is exclusive and `i` is in bounds. Public only
 so that `uset` can be inlined into code in other modules.
 -/
 @[never_extract, extern c inline "#1;\n((uint64_t*)lean_sarray_cptr(#1))[#2] = #3"]
-public unsafe def setUnsafe (a : UInt64Array) (i : USize) (v : UInt64) : UInt64Array :=
+public unsafe def Internal.setUnsafe (a : UInt64Array) (i : USize) (v : UInt64) : UInt64Array :=
   mk <| a.toArray.uset i v lcProof
 
 /-- For internal use only. -/
 @[inline, never_extract]
-public unsafe def ensureExclusiveImpl (a : UInt64Array) : UInt64Array :=
+public unsafe def Internal.ensureExclusiveImpl (a : UInt64Array) : UInt64Array :=
   unsafeCast (unsafeCast a : Raw).ensureExclusive
 
 /--
@@ -137,7 +137,7 @@ It is useful before a run of in-place writes, so that only the first one can cop
 -- `never_extract`: once `uset` or `push` is inlined, `c.ensureExclusive` on a closed array `c`
 -- would otherwise be hoisted into a shared constant, which the following in-place write would then
 -- modify.
-@[never_extract, implemented_by ensureExclusiveImpl, expose]
+@[never_extract, implemented_by Internal.ensureExclusiveImpl, expose]
 public def ensureExclusive (a : UInt64Array) : UInt64Array := a
 
 private def toUSizeChecked (n : Nat) : USize :=
@@ -151,7 +151,7 @@ Public only so that those functions can be inlined into code in other modules.
 -- `never_extract`: on a closed array, a hoisted copy would be a shared constant, so the writes that
 -- follow would copy it again.
 @[never_extract]
-public unsafe def ensureCapacityGrowUnsafe (a : UInt64Array) (n : Nat) : UInt64Array :=
+public unsafe def Internal.ensureCapacityGrowUnsafe (a : UInt64Array) (n : Nat) : UInt64Array :=
   let s : Raw := unsafeCast a
   unsafeCast (s.copyWithCapacity (toUSizeChecked (max n s.size.toNat)) lcProof)
 
@@ -159,31 +159,32 @@ public unsafe def ensureCapacityGrowUnsafe (a : UInt64Array) (n : Nat) : UInt64A
 -- Inline, and made of public inline externs, so that the common path compiles to an inline capacity
 -- check in other modules.
 @[inline]
-public unsafe def ensureCapacityImpl (a : UInt64Array) (n : Nat) : UInt64Array :=
-  if n ≤ (unsafeCast a : Raw).capacity.toNat then a else ensureCapacityGrowUnsafe a n
+public unsafe def Internal.ensureCapacityImpl (a : UInt64Array) (n : Nat) : UInt64Array :=
+  if n ≤ (unsafeCast a : Raw).capacity.toNat then a else Internal.ensureCapacityGrowUnsafe a n
 
 /--
 Returns `a` itself when it has room for `n` elements, and otherwise a copy with room for exactly
 `max n a.size` elements. Logically this is the identity. Unlike `ensureExclusiveWithCapacity`, it
 does not copy `a` just because it is shared.
 -/
-@[never_extract, implemented_by ensureCapacityImpl, expose]
+@[never_extract, implemented_by Internal.ensureCapacityImpl, expose]
 public def ensureCapacity (a : UInt64Array) (n : Nat) : UInt64Array := a
 
 /-- For internal use only. -/
 -- Inline, like `ensureCapacityImpl`: one capacity check, then one exclusivity check. The copy made
 -- when `a` lacks room is exclusive, so `a` is copied at most once.
 @[inline]
-public unsafe def ensureExclusiveWithCapacityImpl (a : UInt64Array) (n : Nat) : UInt64Array :=
+public unsafe def Internal.ensureExclusiveWithCapacityImpl (a : UInt64Array) (n : Nat) :
+    UInt64Array :=
   if n ≤ (unsafeCast a : Raw).capacity.toNat then a.ensureExclusive
-  else ensureCapacityGrowUnsafe a n
+  else Internal.ensureCapacityGrowUnsafe a n
 
 /--
 Returns `a` itself when it is not shared and has room for `n` elements, and otherwise a single copy
 with room for exactly `max n a.size` elements. Logically this is the identity. It is useful before a
 run of in-place writes and pushes, so that none of them copies.
 -/
-@[never_extract, implemented_by ensureExclusiveWithCapacityImpl, expose]
+@[never_extract, implemented_by Internal.ensureExclusiveWithCapacityImpl, expose]
 public def ensureExclusiveWithCapacity (a : UInt64Array) (n : Nat) : UInt64Array := a
 
 /-- A new array of size `size` with room for `capacity` elements. Requires `size ≤ capacity`. -/
@@ -198,13 +199,13 @@ private unsafe def mkWithCapacityImpl (a : Array UInt64) (capacity : Nat := a.si
   loop sz r 0
 where
   loop (sz : USize) (r : UInt64Array) (i : USize) : UInt64Array :=
-    if i < sz then loop sz (setUnsafe r i (a.uget i lcProof)) (i + 1) else r
+    if i < sz then loop sz (Internal.setUnsafe r i (a.uget i lcProof)) (i + 1) else r
 
 /-- For internal use only. -/
-public unsafe def mkImpl (a : Array UInt64) : UInt64Array :=
+public unsafe def Internal.mkImpl (a : Array UInt64) : UInt64Array :=
   mkWithCapacityImpl a a.size
 
-attribute [implemented_by mkImpl] UInt64Array.mk
+attribute [implemented_by Internal.mkImpl] UInt64Array.mk
 
 private theorem size_toArray' (a : UInt64Array) : a.toArray.size = a.size := rfl
 
@@ -301,10 +302,10 @@ public def uset (a : UInt64Array) (i : USize) (v : UInt64)
 /-- For internal use only. -/
 -- Inline, and made of public inline externs, so that it compiles to inline C in other modules.
 @[inline]
-public unsafe def usetImpl : type_of% @uset :=
-  fun a i v _ => setUnsafe a.ensureExclusive i v
+public unsafe def Internal.usetImpl : type_of% @uset :=
+  fun a i v _ => Internal.setUnsafe a.ensureExclusive i v
 
-attribute [implemented_by usetImpl] uset
+attribute [implemented_by Internal.usetImpl] uset
 
 /-- Replaces the element at index `i`, in place when `a` is not shared, like `uset`. -/
 @[expose]
@@ -314,10 +315,10 @@ public def set (a : UInt64Array) (i : Nat) (v : UInt64) (h : i < a.size := by ge
 
 /-- For internal use only. -/
 @[inline]
-public unsafe def setImpl : type_of% @set :=
+public unsafe def Internal.setImpl : type_of% @set :=
   fun a i v _ => a.uset i.toUSize v lcProof
 
-attribute [implemented_by setImpl] set
+attribute [implemented_by Internal.setImpl] set
 
 /-- The element at index `i`. Panics if `i` is out of bounds, and then returns `default`. -/
 @[inline, expose]
@@ -345,13 +346,13 @@ public instance : GetElem UInt64Array USize UInt64 fun a i => i.toNat < a.size w
 line so that inlined `push` call sites stay small. Public only so that `push` can be inlined into
 code in other modules.
 -/
-public unsafe def pushGrowUnsafe (a : UInt64Array) (v : UInt64) : UInt64Array :=
+public unsafe def Internal.pushGrowUnsafe (a : UInt64Array) (v : UInt64) : UInt64Array :=
   let s : Raw := unsafeCast a
   let cap := s.capacity
   if cap < cap + cap + 1 then
     let s := s.copyWithCapacity (cap + cap + 1) lcProof
     let i := s.size
-    setUnsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
+    Internal.setUnsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
   else
     panic! "out of memory"
 
@@ -359,20 +360,20 @@ public unsafe def pushGrowUnsafe (a : UInt64Array) (v : UInt64) : UInt64Array :=
 -- Inline, and made of public inline externs, so that the common path compiles to inline C in other
 -- modules: one capacity check, one exclusivity check, a size bump and one store.
 @[inline]
-public unsafe def pushImpl (a : UInt64Array) (v : UInt64) : UInt64Array :=
+public unsafe def Internal.pushImpl (a : UInt64Array) (v : UInt64) : UInt64Array :=
   if a.usize < (unsafeCast a : Raw).capacity then
     let a := a.ensureExclusive
     let i := a.usize
     let s : Raw := unsafeCast a
-    setUnsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
+    Internal.setUnsafe (unsafeCast (s.resizeUnsafe (i + 1) lcProof lcProof)) i v
   else
-    pushGrowUnsafe a v
+    Internal.pushGrowUnsafe a v
 
 /--
 Appends `v` to `a`, in place when `a` is not shared and has room. A full array grows to capacity
 `2 * capacity + 1`, so repeated pushes take amortized constant time.
 -/
-@[implemented_by pushImpl, expose]
+@[implemented_by Internal.pushImpl, expose]
 public def push (a : UInt64Array) (v : UInt64) : UInt64Array :=
   mk (a.toArray.push v)
 
