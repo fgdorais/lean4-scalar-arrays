@@ -7,6 +7,7 @@ module
 import ScalarArray
 import ScalarArray.Notation
 import ScalarArray.Bytes
+import ScalarArrayBench.Probes
 
 /-!
 # Benchmarks
@@ -15,6 +16,10 @@ Times the main operations of `UInt8Array`, `UInt32Array`, `UInt64Array` and `Flo
 cover 1-, 4- and 8-byte elements, and compares each with the same operation on core's `ByteArray`,
 `Array UInt32`, `Array UInt64` and `FloatArray`. The ratios are more meaningful than the times,
 since both sides run on the same machine at the same moment.
+
+The `call` rows time `probeCalls` calls of each probe of `ScalarArrayBench.Probes` on inputs of 4
+and 137 elements, so that their milliseconds, times 100, are nanoseconds per call. They catch a
+fixed charge per call, which the other rows, on `size` elements, hide.
 
 Usage: `lake exe bench [--tsv] [size] [rounds]`. Each benchmark runs `rounds` times and reports
 the fastest run. `--tsv` prints `name<TAB>milliseconds` lines, which
@@ -455,6 +460,18 @@ def extras (rounds n : Nat) : IO (List Row) := do
     ← one "UInt64 butterfly n/3, inplace notation" w fun a n =>
       butterflies butterflySyntax a (n / 3).toUSize 3]
 
+/-- The number of calls in the `call` rows. -/
+def probeCalls : Nat := 10_000
+
+/-- Times each probe on inputs of 4 and 137 elements. -/
+def calls (rounds : Nat) : IO (List Row) := do
+  let mut rows := []
+  for n in [4, 137] do
+    for (name, f) in Probes.all do
+      let t ← time rounds probeCalls (f n)
+      rows := rows ++ [{ name := s!"call {name}, {n} elements", time := t, core := none }]
+  return rows
+
 /-- Formats milliseconds with three decimals. -/
 def fmt (t : Float) : String :=
   let s := toString ((t * 1000).round / 1000)
@@ -476,7 +493,8 @@ public def main (args : List String) : IO Unit := do
     (← compare UInt32Array (Array UInt32) "UInt32" rounds n) ++
     (← compare UInt64Array (Array UInt64) "UInt64" rounds n) ++
     (← compare Float64Array FloatArray "Float64" rounds n) ++
-    (← extras rounds n)
+    (← extras rounds n) ++
+    (← calls rounds)
   if tsv then
     for r in rows do
       IO.println s!"{r.name}\t{fmt r.time}"

@@ -50,6 +50,16 @@ Still experimental. Before it graduates:
   which could clash with core.
 - A float round-trip lemma, which needs `Float.ofBits_toBits` in core.
 
+## Speed
+
+Found by the probes of `ScalarArrayBench.Probes` (see the README):
+
+- A float literal in the step of a slice `foldlInPlace` is rebuilt at every step, about 800
+  instructions per element (`f64FoldlInPlaceW`; with the literal in a definition of its own, 12).
+  This is the compiler quirk noted in `ScalarArrayBench.lean`.
+- `ofFn` allocates once per element (`ofFnW`).
+- `modifyAt` allocates twice per element (`modifyAtW`); `modifyStride` doesn't.
+
 ## Waiting on core
 
 - `UIntX` lemmas next to `toNat_sub_of_le` in `Init/Data/UInt/Lemmas.lean`: `toNat_add_of_lt`,

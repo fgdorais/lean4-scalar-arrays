@@ -40,12 +40,8 @@ jobs:
         if: env.BASE != ''
         continue-on-error: true
         run: |
-          git worktree add "$RUNNER_TEMP/base" "$BASE"
-          cp ScalarArrayBench.lean "$RUNNER_TEMP/base/"
+          scripts/bench_base.sh "$BASE" "$RUNNER_TEMP/base"
           cd "$RUNNER_TEMP/base"
-          if ! grep -q '^name = "bench"' lakefile.toml; then
-            printf '\n[[lean_exe]]\nname = "bench"\nroot = "ScalarArrayBench"\n' >> lakefile.toml
-          fi
           lake build bench
           cp .lake/build/bin/bench "$RUNNER_TEMP/bench-base"
 
@@ -58,7 +54,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           if [ -x "$RUNNER_TEMP/bench-base" ]; then
             # Alternate the two builds, so that drift in the runner's speed affects both alike.
-            for _ in 1 2 3; do
+            for _ in 1 2 3 4 5; do
               "$RUNNER_TEMP/bench-base" --tsv >> "$RUNNER_TEMP/base.tsv"
               "$RUNNER_TEMP/bench-head" --tsv >> "$RUNNER_TEMP/head.tsv"
             done

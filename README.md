@@ -300,10 +300,28 @@ loop specifications that name no element type: strides and the models `iterRange
 
 `lake exe bench` times the main operations of `UInt8Array`, `UInt32Array`, `UInt64Array` and
 `Float64Array`, and compares each with the same operation on core's `ByteArray`, `Array` or
-`FloatArray`. `lake build` compiles it so that it keeps up with the API, but CI doesn't run it.
-To run it on GitHub, add the `benchmark` label to a pull request, which compares the pull request
-with its base, or start the Benchmarks workflow from the Actions tab. The results are in the run's
-summary.
+`FloatArray`. Its `call` rows time the probes of `ScalarArrayBench.Probes`: short calls on inputs
+of 4 and 137 elements, compiled in a module of their own as downstream code is, which show a fixed
+charge per call that large inputs hide. `lake build` compiles both, so that they keep up with the
+API.
+
+Three checks guard against slowdowns:
+
+- CI checks the C code of the probes against the snapshot in `ScalarArrayBench/codegen.tsv`
+  (closures, constructors, closure calls and unspecialized library calls in each probe), with
+  `python3 scripts/codegen_check.py`. After an intended change, or a toolchain update, update the
+  snapshot with `--update`.
+- The Counts workflow runs on every pull request. It counts the instructions and allocations of
+  each probe call with valgrind, in the pull request and in its base, and fails if a probe makes
+  more allocations or runs more than 5% more instructions. The counts are the same on every run,
+  so they don't depend on the runner. Locally:
+  `python3 scripts/bench_counts.py run .lake/build/bin/probes > head.tsv`, then
+  `python3 scripts/bench_counts.py compare base.tsv head.tsv`.
+- Times need a quiet machine: `scripts/bench_ab.sh BASE` builds this checkout and the revision
+  `BASE` with the same benchmarks, runs them alternately, and marks the rows whose median ratio is
+  above 1.05. On Linux, `CPU=3 scripts/bench_ab.sh BASE` pins them to one core. On GitHub, add the
+  `benchmark` label to a pull request, or start the Benchmarks workflow from the Actions tab; the
+  runners vary by about 25%, and the results are in the run's summary.
 
 The source and test files for the twelve types are generated from the `UInt16` versions, in
 `ScalarArray/UInt16/` and `ScalarArrayTest/UInt16/`. Make changes there, then regenerate the other

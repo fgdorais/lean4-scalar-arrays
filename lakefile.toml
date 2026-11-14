@@ -1,5 +1,5 @@
 name = "«lean4-scalar-arrays»"
-defaultTargets = ["ScalarArray", "ScalarArrayTest", "bench"]
+defaultTargets = ["ScalarArray", "ScalarArrayTest", "bench", "probes"]
 testDriver = "ScalarArrayTest"
 
 # Linters that are off by default.
@@ -22,8 +22,21 @@ moreLeancArgs = ["-falign-loops=64"]
 name = "ScalarArrayTest"
 precompileModules = true
 
+# The probes, which `bench` and `probes` call; a library of their own, so that they are compiled
+# apart from the code that calls them, as in a downstream package.
+[[lean_lib]]
+name = "ScalarArrayProbes"
+roots = ["ScalarArrayBench.Probes"]
+moreLeancArgs = ["-falign-loops=64"]
+
 [[lean_exe]]
 name = "bench"
 root = "ScalarArrayBench"
 # As for `ScalarArray`, since the benchmarked loops are mostly inlined here.
+moreLeancArgs = ["-falign-loops=64"]
+
+[[lean_exe]]
+name = "probes"
+root = "ScalarArrayBench.Driver"
+# As for `bench`.
 moreLeancArgs = ["-falign-loops=64"]
