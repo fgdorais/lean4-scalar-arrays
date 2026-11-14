@@ -340,6 +340,29 @@ public theorem toNat_idx_toUSize_lt (h : s.Fits n size) (hs : size < USize.size)
 
 end Fits
 
+/-! ### Disjoint strides -/
+
+/--
+Two strides with the same increment, whose offsets differ by less than it, never meet: for
+example two rows of a matrix stored by columns, whose increment is the leading dimension.
+-/
+public theorem idx_ne_idx_of_same_inc {s t : Stride} (hinc : s.inc = t.inc) (h₁ : s.off < t.off)
+    (h₂ : t.off < s.off + s.inc) (i j : Nat) : s.idx i ≠ t.idx j := by
+  simp only [idx, ← hinc]
+  rcases Nat.lt_or_ge j i with h | h
+  · have e : s.inc * i = s.inc * j + s.inc * (i - j) := by rw [← Nat.mul_add]; congr 1; lia
+    have : s.inc ≤ s.inc * (i - j) := Nat.le_mul_of_pos_right _ (by lia)
+    lia
+  · have : s.inc * j = s.inc * i + s.inc * (j - i) := by rw [← Nat.mul_add]; congr 1; lia
+    lia
+
+/-- The first `n` steps of `s` never meet `t` when they all come before the offset of `t`. -/
+public theorem idx_ne_idx_of_lt_off {s t : Stride} {n : Nat} (h : s.idx (n - 1) < t.off) {i : Nat}
+    (hi : i < n) (j : Nat) : s.idx i ≠ t.idx j := by
+  have : s.inc * i ≤ s.inc * (n - 1) := Nat.mul_le_mul_left _ (by lia)
+  simp only [idx] at h ⊢
+  lia
+
 end Stride
 
 end ScalarArray
