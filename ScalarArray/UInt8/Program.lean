@@ -51,8 +51,8 @@ with no allocation. They are specified by their one-step equations (`Tail.forInF
 The array is never visible to a program: `InPlace` and its state have private constructors, so the
 only code that touches the state is the code in this module, which passes it on linearly. That is
 what lets `write` store without checking that the array is exclusive. The in-place folds of
-`ScalarArray.UInt8.InPlace` are programs of this kind, and the experimental notation
-`inplace a do …` of `ScalarArray.Notation` writes programs of this kind.
+`ScalarArray.UInt8.InPlace` are programs of this kind, and the notation `inplace a do …` of
+`ScalarArray.Notation` writes programs of this kind.
 
 The loops must be the loops of this module. A program that calls itself recursively compiles to a
 closure for each step, and `for` in `do` notation boxes its mutable variables at each step, so both
