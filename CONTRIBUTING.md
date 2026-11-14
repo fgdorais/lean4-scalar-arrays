@@ -1,7 +1,7 @@
 # Contributing
 
 Thanks for your interest in Scalar Arrays. This file collects the conventions the library follows.
-When in doubt, copy what the code nearby already does.
+When in doubt, copy what the code nearby already does. Open work is listed in [TODO.md](TODO.md).
 
 ## Building and testing
 
