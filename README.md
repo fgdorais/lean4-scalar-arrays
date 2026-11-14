@@ -32,13 +32,13 @@ in-place updates, and have a simple `Array`-based model for proofs.
 
 The library depends only on Lean itself. The `main` branch follows the newest Lean release,
 including release candidates, and the `nightly-testing` branch follows the newest Lean nightly.
-Releases are tagged `vX.Y.Z`. Add one to your `lakefile.toml`, or `main` for the latest changes:
+Add it to your `lakefile.toml` with `main` for the latest changes, or a release tag `vX.Y.Z`:
 
 ```toml
 [[require]]
 name = "lean4-scalar-arrays"
 git = "https://github.com/fgdorais/lean4-scalar-arrays"
-rev = "v1.5.1"
+rev = "main"
 ```
 
 Then `import ScalarArray` for every type, or `import ScalarArray.UInt32` and so on for just one.
