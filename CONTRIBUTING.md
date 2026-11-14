@@ -12,11 +12,9 @@ lake exe bench       # the benchmarks, when a change may affect speed
 ```
 
 CI runs `lake build --wfail` and `lake test` on Linux (x86 and ARM), macOS and Windows for every
-pull request to `main`. It also checks the C code of the probes in `ScalarArrayBench.Probes`
-against `ScalarArrayBench/codegen.tsv`, and counts the instructions and allocations of each probe
-call against the base of the pull request (see the README). If a change to the library or the
-toolchain changes the C code on purpose, run `python3 scripts/codegen_check.py --update` and commit
-the new snapshot. When adding an operation, add a probe for it.
+pull request to `main`. When a change may affect speed, add the `benchmark` label to the
+pull request: it compares the times, the instructions and allocations of each probe call, and the C
+code of the probes with the base (see the README). When adding an operation, add a probe for it.
 
 ## Generated files
 

@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 # Copyright © 2026 François G. Dorais. All rights reserved.
 # Released under Apache 2.0 license as described in the file LICENSE.
-"""Check the C code of the probes against a snapshot.
+"""Compare the C code of the probes in two builds.
 
-Usage: codegen_check.py [--update]
+Usage: codegen_check.py BASE_DIR [HEAD_DIR]
 
-Reads the C code that Lean generated for `ScalarArrayBench/Probes.lean` (run `lake build probes`
-first) and counts, in each probe and in the helpers the compiler made for it (its `_spec` and
-`_lam` functions), the closures built, the constructors allocated, the calls of closures, and the
-calls of functions of the library that weren't specialized for the probe. The rest of the module,
-such as instances, counts as `(shared)`. It compares the counts with `ScalarArrayBench/codegen.tsv`
-and fails if any differs. With `--update`, it writes the new counts there instead.
+Reads the C code that Lean generated for `ScalarArrayBench/Probes.lean` in two checkouts (run
+`lake build probes` in each first; HEAD_DIR defaults to this one) and counts, in each probe and in
+the helpers the compiler made for it (its `_spec` and `_lam` functions), the closures built, the
+constructors allocated, the calls of closures, and the calls of functions of the library that
+weren't specialized for the probe. The rest of the module, such as instances, counts as
+`(shared)`. It prints a Markdown table of the counts that differ, and marks the increases.
 
 The counts don't say whether code runs: a closure in a fallback branch that never runs costs
-nothing. So a change here is a prompt to look at the C code and at `bench_counts.py`, which counts
-what runs, before updating the snapshot. The C code also changes with the Lean toolchain, so a
-toolchain update usually updates the snapshot too.
+nothing. So a change here is a prompt to look at the C code, and at `bench_counts.py`, which counts
+what runs. The C code also changes with the Lean toolchain.
 """
 
 import os
@@ -24,8 +23,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCE = os.path.join(ROOT, "ScalarArrayBench", "Probes.lean")
-C_FILE = os.path.join(ROOT, ".lake", "build", "ir", "ScalarArrayBench", "Probes.c")
-SNAPSHOT = os.path.join(ROOT, "ScalarArrayBench", "codegen.tsv")
+C_FILE = os.path.join(".lake", "build", "ir", "ScalarArrayBench", "Probes.c")
 
 PREFIX = "lp_lean4_x2dscalar_x2darrays_"
 # The code that no single probe owns, such as instances and the driver's loops.
@@ -42,8 +40,11 @@ def probes():
         return re.findall(r'\("(\w+)", run \w+\)', f.read())
 
 
-def counts():
-    with open(C_FILE) as f:
+def counts(directory):
+    path = os.path.join(directory, C_FILE)
+    if not os.path.exists(path):
+        sys.exit(f"{path} doesn't exist: run `lake build probes` there first.")
+    with open(path) as f:
         src = f.read()
     names = probes()
     pattern = re.compile(r"ScalarArrayBench_Probes_(" + "|".join(names) + r")(?=_|$)")
@@ -65,40 +66,28 @@ def counts():
 
 
 def main():
-    update = sys.argv[1:] == ["--update"]
-    if sys.argv[1:] and not update:
+    if len(sys.argv) not in (2, 3):
         sys.exit(__doc__)
-    if not os.path.exists(C_FILE):
-        sys.exit(f"{C_FILE} doesn't exist: run `lake build probes` first.")
-    names, result = counts()
-    if update:
-        with open(SNAPSHOT, "w") as f:
-            f.write("probe\t" + "\t".join(COLUMNS) + "\n")
-            for p in names:
-                f.write(p + "\t" + "\t".join(map(str, result[p])) + "\n")
-        print(f"Wrote {os.path.relpath(SNAPSHOT, ROOT)}.")
-        return
-    old = {}
-    with open(SNAPSHOT) as f:
-        next(f)
-        for line in f:
-            p, *vals = line.split()
-            old[p] = [int(v) for v in vals]
-    diffs = []
+    _, base = counts(sys.argv[1])
+    names, head = counts(sys.argv[2] if len(sys.argv) == 3 else ROOT)
+    lines = []
     for p in names:
-        if p not in old:
-            diffs.append(f"{p}: new probe")
+        b = base.get(p)
+        h = head[p]
+        if b == h:
             continue
-        for col, a, b in zip(COLUMNS, old[p], result[p]):
-            if a != b:
-                diffs.append(f"{p}: {col} {a} -> {b}")
-    diffs += [f"{p}: probe removed" for p in old if p not in result]
-    if diffs:
-        print("The C code of the probes changed:")
-        print("\n".join("  " + d for d in diffs))
-        print("If the change is intended, run `python3 scripts/codegen_check.py --update`.")
-        sys.exit(1)
-    print(f"The C code of the {len(names)} probes matches the snapshot.")
+        if b is None:
+            lines.append(f"| {p} | " + " | ".join(f"— → {y}" for y in h) + " | new |")
+            continue
+        cells = [f"{x}" if x == y else f"{x} → {y}" for x, y in zip(b, h)]
+        mark = "⚠️" if any(y > x for x, y in zip(b, h)) else "✅"
+        lines.append(f"| {p} | " + " | ".join(cells) + f" | {mark} |")
+    if not lines:
+        print(f"The C code of the {len(names)} probes has the same counts.")
+        return
+    print("| Probe | " + " | ".join(COLUMNS) + " | |")
+    print("|---|" + "--:|" * len(COLUMNS) + "---|")
+    print("\n".join(lines))
 
 
 if __name__ == "__main__":

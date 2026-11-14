@@ -1,6 +1,9 @@
 name: Benchmarks
 
 # Runs only on request: from the Actions tab, or by adding the `benchmark` label to a pull request.
+# Times the benchmarks, counts the instructions and allocations of each probe call with valgrind,
+# and compares the C code of the probes, in the head and, if there is one, the base. It only
+# reports: the results are in the run's summary.
 on:
   workflow_dispatch:
     inputs:
@@ -29,9 +32,12 @@ jobs:
         with:
           auto-config: false
 
+      - name: install valgrind
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+
       - name: build head
         run: |
-          lake build bench
+          lake build bench probes
           cp .lake/build/bin/bench "$RUNNER_TEMP/bench-head"
 
       # The base is built with the head's benchmark source, so both run the same benchmarks.
@@ -42,7 +48,7 @@ jobs:
         run: |
           scripts/bench_base.sh "$BASE" "$RUNNER_TEMP/base"
           cd "$RUNNER_TEMP/base"
-          lake build bench
+          lake build bench probes
           cp .lake/build/bin/bench "$RUNNER_TEMP/bench-base"
 
       - name: run
@@ -68,3 +74,29 @@ jobs:
             echo "The base \`$BASE\` could not be built with this benchmark." \
               >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: count
+        run: |
+          python3 scripts/bench_counts.py run .lake/build/bin/probes \
+            > "$RUNNER_TEMP/head-counts.tsv"
+          {
+            echo
+            echo "## Instructions and allocations per probe call"
+            echo
+            if [ -x "$RUNNER_TEMP/bench-base" ]; then
+              python3 scripts/bench_counts.py run "$RUNNER_TEMP/base/.lake/build/bin/probes" \
+                > "$RUNNER_TEMP/base-counts.tsv"
+              echo "Compared with \`$BASE\`."
+              echo
+              python3 scripts/bench_counts.py compare "$RUNNER_TEMP/base-counts.tsv" \
+                "$RUNNER_TEMP/head-counts.tsv"
+              echo
+              echo "## C code of the probes"
+              echo
+              python3 scripts/codegen_check.py "$RUNNER_TEMP/base"
+            else
+              echo "| Probe | Size | Instructions | Allocations | Arrays and closures |"
+              echo "|---|--:|--:|--:|--:|"
+              sed 's/\t/ | /g; s/^/| /; s/$/ |/' "$RUNNER_TEMP/head-counts.tsv"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

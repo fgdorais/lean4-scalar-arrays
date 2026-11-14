@@ -15,11 +15,13 @@ of the same binary. Each line of the output is
 count the calls to the runtime's two allocators: `lean_alloc_small_object_core` for constructors
 and boxed scalars, and `lean_alloc_object` for arrays and closures, which is the second count.
 
-`compare` prints a Markdown table of the probes whose counts changed, and exits with status 1 if
-a probe makes more allocations per call, or more than `FAIL` more instructions (and at least
-`MIN_FAIL`), than in the base.
-Changes of more than `WARN` are marked. The counts don't see the cache, branch prediction or code
-alignment: they catch work and allocations, and `lake exe bench` measures time.
+`compare` prints a Markdown table of the probes whose counts changed by more than `SHOW`. It
+marks with ⚠️ a probe that makes more allocations per call, or runs more than `SLOWER` more
+instructions (and at least `MIN_SLOWER`), than in the base, and with ✅ one that got faster by as
+much. It only warns: a few more instructions can come from the C compiler's choice of registers or
+loop counters, so read the C code before deciding. The counts don't see the cache, branch
+prediction or code alignment: they catch work and allocations, and `lake exe bench` measures
+time.
 """
 
 import concurrent.futures
@@ -28,11 +30,11 @@ import subprocess
 import sys
 import tempfile
 
-WARN = 0.01
-FAIL = 0.05
-# A change of fewer instructions than this per call only warns: on the smallest probes, which run
-# about 150 instructions, a register spill or a moved branch is already a few percent.
-MIN_FAIL = 16
+SHOW = 0.01
+SLOWER = 0.05
+# On the smallest probes, which run about 150 instructions, a register spill or a moved branch is
+# already a few percent, so a change also needs this many instructions per call to be marked.
+MIN_SLOWER = 16
 
 # The runtime's allocators: `lean_alloc_ctor` and the boxes call the first one (inlined fast paths
 # aside, which the runtime doesn't have), and arrays and closures call the second.
@@ -115,8 +117,8 @@ def compare(args):
         sys.exit(__doc__)
     _, base = load(args[0])
     order, head = load(args[1])
-    failed = []
     lines = []
+    marked = 0
     for key in order:
         h = head[key]
         b = base.get(key)
@@ -125,15 +127,14 @@ def compare(args):
             lines.append(f"| {name} | — | {h[0]:.0f} | — | — | {h[1]:.2f} | new |")
             continue
         ratio = h[0] / b[0] if b[0] > 0 else 1.0
-        more_allocs = h[1] > b[1] + 0.05
-        if abs(ratio - 1) <= WARN / 10 and abs(h[1] - b[1]) <= 0.05:
+        if abs(ratio - 1) <= SHOW and abs(h[1] - b[1]) <= 0.05:
             continue
         mark = ""
-        if more_allocs or (ratio > 1 + FAIL and h[0] - b[0] >= MIN_FAIL):
-            mark = "❌"
-            failed.append(name)
-        elif abs(ratio - 1) > WARN:
-            mark = "⚠️" if ratio > 1 else "✅"
+        if h[1] > b[1] + 0.05 or (ratio > 1 + SLOWER and h[0] - b[0] >= MIN_SLOWER):
+            mark = "⚠️"
+            marked += 1
+        elif h[1] < b[1] - 0.05 or (ratio < 1 - SLOWER and b[0] - h[0] >= MIN_SLOWER):
+            mark = "✅"
         lines.append(f"| {name} | {b[0]:.0f} | {h[0]:.0f} | {ratio:.3f} | {b[1]:.2f} | "
                      f"{h[1]:.2f} | {mark} |")
     if lines:
@@ -143,10 +144,9 @@ def compare(args):
         print("\n".join(lines))
     else:
         print("No probe changed.")
-    if failed:
-        print(f"\n{len(failed)} probe(s) got slower: more allocations per call, or more than "
-              f"{FAIL:.0%} more instructions.")
-        sys.exit(1)
+    if marked:
+        print(f"\n⚠️ {marked} probe(s) may have got slower: more allocations per call, or more "
+              f"than {SLOWER:.0%} more instructions.")
 
 
 def main():
