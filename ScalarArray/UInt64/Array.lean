@@ -137,7 +137,7 @@ private unsafe def replicateImpl (n : Nat) (v : UInt64) : UInt64Array :=
   loop sz (allocUnsafe sz sz) 0
 where
   loop (sz : USize) (r : UInt64Array) (i : USize) : UInt64Array :=
-    if i < sz then loop sz (setUnsafe r i v) (i + 1) else r
+    if i < sz then loop sz (Internal.setUnsafe r i v) (i + 1) else r
 
 /-- An array of `n` copies of `v`. -/
 @[implemented_by replicateImpl, expose]
@@ -149,7 +149,7 @@ private unsafe def ofFnImpl {n : Nat} (f : Fin n → UInt64) : UInt64Array :=
   loop (allocUnsafe sz sz) 0
 where
   loop (r : UInt64Array) (i : Nat) : UInt64Array :=
-    if h : i < n then loop (setUnsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
+    if h : i < n then loop (Internal.setUnsafe r i.toUSize (f ⟨i, h⟩)) (i + 1) else r
 
 /-- The array `#[f 0, …, f (n - 1)]`. -/
 @[implemented_by ofFnImpl, expose]

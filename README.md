@@ -258,8 +258,9 @@ Releases are git tags `vX.Y.Z`, with release notes on GitHub. Starting with vers
 breaking changes to the API are made only in a new major version.
 The following are not covered by this promise:
 
-- `ScalarArray.Internal`, including `ScalarArray.Raw`, and the declarations whose documentation
-  says they are for internal use only;
+- `ScalarArray.Internal`, including `ScalarArray.Raw`, the unsafe helpers in each type's
+  `XArray.Internal` namespace, such as `XArray.Internal.setUnsafe`, and the declarations whose
+  documentation says they are for internal use only;
 - the experimental `ScalarArray.Bytes`;
 - which lemmas are `@[simp]` or `@[grind]`, so `simp` and `grind` proofs may need adjusting after
   an upgrade;

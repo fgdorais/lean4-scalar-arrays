@@ -16,8 +16,6 @@ Open work on Scalar Arrays, roughly by area. Entries name `UInt16Array`, but eac
 
 ## API cleanups
 
-- Move the public unsafe helpers (`setUnsafe`, `pushGrowUnsafe`, `ensureCapacityGrowUnsafe` and
-  the public `…Impl`s) into a sub-namespace, so they drop out of dot completion.
 - The `Impl` suffix names both `implemented_by` targets, which are unsafe, and `csimp` targets,
   which are safe. Pick one meaning.
 - Give `popWhile` a safe implementation proved by `csimp` instead of `implemented_by`.
