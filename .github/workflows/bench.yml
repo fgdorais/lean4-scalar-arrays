@@ -69,5 +69,6 @@ jobs:
               python3 scripts/bench_compare.py "$RUNNER_TEMP/base.tsv" "$RUNNER_TEMP/head.tsv"
             } >> "$GITHUB_STEP_SUMMARY"
           elif [ -n "$BASE" ]; then
-            echo "The base \`$BASE\` could not be built with this benchmark." >> "$GITHUB_STEP_SUMMARY"
+            echo "The base \`$BASE\` could not be built with this benchmark." \
+              >> "$GITHUB_STEP_SUMMARY"
           fi

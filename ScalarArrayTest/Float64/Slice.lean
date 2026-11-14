@@ -202,7 +202,8 @@ example (s : Float64Array.Slice) : s.copy.size = s.size := by simp
   | ⟨.yield it x, _⟩ =>
     x == 1 && it.toFloatSlice.start == 1 && it.toFloatSlice.copy == Float64Array.mk #[2, 3]
   | _ => false
-example (it : Std.Iter (α := Float64Array.SliceIterator) Float) : it.toFloatSlice.iter = it := by
+example (it : Std.Iter (α := Float64Array.SliceIterator) Float) :
+    it.toFloatSlice.iter = it := by
   simp
 example (it : Std.Iter (α := Float64Array.SliceIterator) Float) :
     it.toList = it.toFloatSlice.copy.toList := by

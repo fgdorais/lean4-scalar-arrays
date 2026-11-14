@@ -44,11 +44,13 @@ private def headOrZero (a : Float32Array) : Float32 := by
 
 -- There is no constructor to match on, which would run `Array` code on a scalar array.
 /--
-error: Invalid `⟨...⟩` notation: The expected type `Quot fun x x_1 => False` is not an inductive type
+error: Invalid `⟨...⟩` notation: The expected type `Quot fun x x_1 => False` is not an
+inductive type
 
-Note: This notation can only be used when the expected type is an inductive type with a single constructor
+Note: This notation can only be used when the expected type is an inductive type with a
+single constructor
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : Float32Array) : Float32 := match a with | ⟨a⟩ => a[0]!
 
 /-! Size -/

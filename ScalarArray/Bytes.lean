@@ -242,7 +242,8 @@ public def Slice.ofBytesLE! (s : UInt8Array.Slice) : UInt16Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : UInt16Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 2]'(by rw [Slice.size_toBytesLE] at h; lia)) >>> (8 * (j % 2)).toUInt16).toUInt8 := by
+      ((s[j / 2]'(by rw [Slice.size_toBytesLE] at h; lia))
+        >>> (8 * (j % 2)).toUInt16).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesLE?_toBytesLE_slice (s : UInt16Array.Slice) :
@@ -383,7 +384,8 @@ public def Slice.ofBytesBE! (s : UInt8Array.Slice) : UInt16Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : UInt16Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 2]'(by rw [Slice.size_toBytesBE] at h; lia)) >>> (8 * (1 - j % 2)).toUInt16).toUInt8 := by
+      ((s[j / 2]'(by rw [Slice.size_toBytesBE] at h; lia))
+        >>> (8 * (1 - j % 2)).toUInt16).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesBE?_toBytesBE_slice (s : UInt16Array.Slice) :
@@ -559,7 +561,8 @@ public def Slice.ofBytesLE! (s : UInt8Array.Slice) : UInt32Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : UInt32Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 4]'(by rw [Slice.size_toBytesLE] at h; lia)) >>> (8 * (j % 4)).toUInt32).toUInt8 := by
+      ((s[j / 4]'(by rw [Slice.size_toBytesLE] at h; lia))
+        >>> (8 * (j % 4)).toUInt32).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesLE?_toBytesLE_slice (s : UInt32Array.Slice) :
@@ -708,7 +711,8 @@ public def Slice.ofBytesBE! (s : UInt8Array.Slice) : UInt32Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : UInt32Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 4]'(by rw [Slice.size_toBytesBE] at h; lia)) >>> (8 * (3 - j % 4)).toUInt32).toUInt8 := by
+      ((s[j / 4]'(by rw [Slice.size_toBytesBE] at h; lia))
+        >>> (8 * (3 - j % 4)).toUInt32).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesBE?_toBytesBE_slice (s : UInt32Array.Slice) :
@@ -898,7 +902,8 @@ public def Slice.ofBytesLE! (s : UInt8Array.Slice) : UInt64Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : UInt64Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 8]'(by rw [Slice.size_toBytesLE] at h; lia)) >>> (8 * (j % 8)).toUInt64).toUInt8 := by
+      ((s[j / 8]'(by rw [Slice.size_toBytesLE] at h; lia))
+        >>> (8 * (j % 8)).toUInt64).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesLE?_toBytesLE_slice (s : UInt64Array.Slice) :
@@ -1063,7 +1068,8 @@ public def Slice.ofBytesBE! (s : UInt8Array.Slice) : UInt64Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : UInt64Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 8]'(by rw [Slice.size_toBytesBE] at h; lia)) >>> (8 * (7 - j % 8)).toUInt64).toUInt8 := by
+      ((s[j / 8]'(by rw [Slice.size_toBytesBE] at h; lia))
+        >>> (8 * (7 - j % 8)).toUInt64).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesBE?_toBytesBE_slice (s : UInt64Array.Slice) :
@@ -1239,7 +1245,8 @@ public def Slice.ofBytesLE! (s : UInt8Array.Slice) : Int16Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : Int16Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 2]'(by rw [Slice.size_toBytesLE] at h; lia)).toUInt16 >>> (8 * (j % 2)).toUInt16).toUInt8 := by
+      ((s[j / 2]'(by rw [Slice.size_toBytesLE] at h; lia)).toUInt16
+        >>> (8 * (j % 2)).toUInt16).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesLE?_toBytesLE_slice (s : Int16Array.Slice) :
@@ -1382,7 +1389,8 @@ public def Slice.ofBytesBE! (s : UInt8Array.Slice) : Int16Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : Int16Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 2]'(by rw [Slice.size_toBytesBE] at h; lia)).toUInt16 >>> (8 * (1 - j % 2)).toUInt16).toUInt8 := by
+      ((s[j / 2]'(by rw [Slice.size_toBytesBE] at h; lia)).toUInt16
+        >>> (8 * (1 - j % 2)).toUInt16).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesBE?_toBytesBE_slice (s : Int16Array.Slice) :
@@ -1560,7 +1568,8 @@ public def Slice.ofBytesLE! (s : UInt8Array.Slice) : Int32Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : Int32Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 4]'(by rw [Slice.size_toBytesLE] at h; lia)).toUInt32 >>> (8 * (j % 4)).toUInt32).toUInt8 := by
+      ((s[j / 4]'(by rw [Slice.size_toBytesLE] at h; lia)).toUInt32
+        >>> (8 * (j % 4)).toUInt32).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesLE?_toBytesLE_slice (s : Int32Array.Slice) :
@@ -1711,7 +1720,8 @@ public def Slice.ofBytesBE! (s : UInt8Array.Slice) : Int32Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : Int32Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 4]'(by rw [Slice.size_toBytesBE] at h; lia)).toUInt32 >>> (8 * (3 - j % 4)).toUInt32).toUInt8 := by
+      ((s[j / 4]'(by rw [Slice.size_toBytesBE] at h; lia)).toUInt32
+        >>> (8 * (3 - j % 4)).toUInt32).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesBE?_toBytesBE_slice (s : Int32Array.Slice) :
@@ -1903,7 +1913,8 @@ public def Slice.ofBytesLE! (s : UInt8Array.Slice) : Int64Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : Int64Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 8]'(by rw [Slice.size_toBytesLE] at h; lia)).toUInt64 >>> (8 * (j % 8)).toUInt64).toUInt8 := by
+      ((s[j / 8]'(by rw [Slice.size_toBytesLE] at h; lia)).toUInt64
+        >>> (8 * (j % 8)).toUInt64).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesLE?_toBytesLE_slice (s : Int64Array.Slice) :
@@ -2070,7 +2081,8 @@ public def Slice.ofBytesBE! (s : UInt8Array.Slice) : Int64Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : Int64Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 8]'(by rw [Slice.size_toBytesBE] at h; lia)).toUInt64 >>> (8 * (7 - j % 8)).toUInt64).toUInt8 := by
+      ((s[j / 8]'(by rw [Slice.size_toBytesBE] at h; lia)).toUInt64
+        >>> (8 * (7 - j % 8)).toUInt64).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 @[simp] public theorem ofBytesBE?_toBytesBE_slice (s : Int64Array.Slice) :
@@ -2229,7 +2241,8 @@ public def Slice.ofBytesLE! (s : UInt8Array.Slice) : Float32Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : Float32Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 4]'(by rw [Slice.size_toBytesLE] at h; lia)).toBits >>> (8 * (j % 4)).toUInt32).toUInt8 := by
+      ((s[j / 4]'(by rw [Slice.size_toBytesLE] at h; lia)).toBits
+        >>> (8 * (j % 4)).toUInt32).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 private unsafe def Slice.toBytesBEImpl (s : Float32Array.Slice) : ByteArray :=
@@ -2356,7 +2369,8 @@ public def Slice.ofBytesBE! (s : UInt8Array.Slice) : Float32Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : Float32Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 4]'(by rw [Slice.size_toBytesBE] at h; lia)).toBits >>> (8 * (3 - j % 4)).toUInt32).toUInt8 := by
+      ((s[j / 4]'(by rw [Slice.size_toBytesBE] at h; lia)).toBits
+        >>> (8 * (3 - j % 4)).toUInt32).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 end Float32Array
@@ -2499,7 +2513,8 @@ public def Slice.ofBytesLE! (s : UInt8Array.Slice) : Float64Array :=
 @[simp] public theorem Slice.getElem_toBytesLE (s : Float64Array.Slice) (j : Nat)
     (h : j < s.toBytesLE.size) :
     s.toBytesLE[j] =
-      ((s[j / 8]'(by rw [Slice.size_toBytesLE] at h; lia)).toBits >>> (8 * (j % 8)).toUInt64).toUInt8 := by
+      ((s[j / 8]'(by rw [Slice.size_toBytesLE] at h; lia)).toBits
+        >>> (8 * (j % 8)).toUInt64).toUInt8 := by
   simp only [Slice.toBytesLE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 private unsafe def Slice.toBytesBEImpl (s : Float64Array.Slice) : ByteArray :=
@@ -2638,7 +2653,8 @@ public def Slice.ofBytesBE! (s : UInt8Array.Slice) : Float64Array :=
 @[simp] public theorem Slice.getElem_toBytesBE (s : Float64Array.Slice) (j : Nat)
     (h : j < s.toBytesBE.size) :
     s.toBytesBE[j] =
-      ((s[j / 8]'(by rw [Slice.size_toBytesBE] at h; lia)).toBits >>> (8 * (7 - j % 8)).toUInt64).toUInt8 := by
+      ((s[j / 8]'(by rw [Slice.size_toBytesBE] at h; lia)).toBits
+        >>> (8 * (7 - j % 8)).toUInt64).toUInt8 := by
   simp only [Slice.toBytesBE, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 
 end Float64Array

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright © 2026 François G. Dorais. All rights reserved.
+# Released under Apache 2.0 license as described in the file LICENSE.
 """Compare benchmark results of two builds.
 
 Usage: bench_compare.py BASE.tsv HEAD.tsv

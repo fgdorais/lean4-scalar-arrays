@@ -48,7 +48,8 @@ public theorem size_eq_toArray_size (a : Int32Array) : a.size = a.toArray.size :
     (a ++ b).toArray = a.toArray ++ b.toArray := by
   cases a; cases b; rfl
 
-@[simp, grind =] public theorem size_append (a b : Int32Array) : (a ++ b).size = a.size + b.size := by
+@[simp, grind =] public theorem size_append (a b : Int32Array) :
+    (a ++ b).size = a.size + b.size := by
   simp [-size_toArray, size_eq_toArray_size]
 
 @[ext] public theorem ext {a b : Int32Array} (h : a.toArray = b.toArray) : a = b :=
@@ -112,7 +113,8 @@ public theorem ext_getElem {a b : Int32Array} (h₁ : a.size = b.size)
     (a.extract start stop).size = min stop a.size - start := by
   simp [-size_toArray, size_eq_toArray_size]
 
-@[simp, grind =] public theorem size_replicate (n : Nat) (v : Int32) : (replicate n v).size = n := by
+@[simp, grind =] public theorem size_replicate (n : Nat) (v : Int32) :
+    (replicate n v).size = n := by
   simp [-size_toArray, size_eq_toArray_size]
 
 @[simp] public theorem size_ofFn {n : Nat} (f : Fin n → Int32) : (ofFn f).size = n := by
@@ -120,7 +122,8 @@ public theorem ext_getElem {a b : Int32Array} (h₁ : a.size = b.size)
 
 @[simp, grind =] public theorem size_empty : (empty : Int32Array).size = 0 := rfl
 
-@[simp, grind =] public theorem getElem_set (a : Int32Array) (i : Nat) (v : Int32) (h) (j : Nat) (hj) :
+@[simp, grind =] public theorem getElem_set (a : Int32Array) (i : Nat) (v : Int32) (h) (j : Nat)
+    (hj) :
     (a.set i v h)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_set]
 
@@ -286,11 +289,13 @@ public theorem copySlice_eq_append (src : Int32Array) (srcOff : Nat) (dest : Int
 @[simp, grind =] public theorem length_toList (a : Int32Array) : a.toList.length = a.size := by
   simp [← toList_toArray]
 
-@[simp, grind =] public theorem getElem_toList (a : Int32Array) (i : Nat) (h : i < a.toList.length) :
+@[simp, grind =] public theorem getElem_toList (a : Int32Array) (i : Nat)
+    (h : i < a.toList.length) :
     a.toList[i] = a[i]'(by simpa using h) := by
   simp [← toList_toArray]
 
-@[simp, grind =] public theorem getElem?_toList (a : Int32Array) (i : Nat) : a.toList[i]? = a[i]? := by
+@[simp, grind =] public theorem getElem?_toList (a : Int32Array) (i : Nat) :
+    a.toList[i]? = a[i]? := by
   by_cases h : i < a.size <;> simp [h, ← toList_toArray]
 
 @[simp] public theorem toList_inj {a b : Int32Array} : a.toList = b.toList ↔ a = b :=
@@ -401,11 +406,13 @@ public theorem back_eq_getElem (a : Int32Array) (h : 0 < a.size) :
 
 /-! ## Writes -/
 
-@[simp, grind =] public theorem getElem_uset (a : Int32Array) (i : USize) (v : Int32) (h) (j : Nat)
-    (hj) : (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
+@[simp, grind =] public theorem getElem_uset (a : Int32Array) (i : USize) (v : Int32) (h)
+    (j : Nat) (hj) :
+    (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_set]
 
-@[simp, grind =] public theorem getElem_set! (a : Int32Array) (i : Nat) (v : Int32) (j : Nat) (hj) :
+@[simp, grind =] public theorem getElem_set! (a : Int32Array) (i : Nat) (v : Int32) (j : Nat)
+    (hj) :
     (a.set! i v)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
   simp only [getElem_eq_getElem_toArray, toArray_set!, Array.set!_eq_setIfInBounds]
   rw [Array.getElem_setIfInBounds]

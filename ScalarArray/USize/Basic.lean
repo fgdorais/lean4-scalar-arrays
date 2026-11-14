@@ -24,8 +24,8 @@ universe u
 /--
 Arrays of `USize` values, stored unboxed in a scalar array, one machine word per element.
 
-The logical model is an `Array USize`: `USizeArray.mk` and `USizeArray.toArray` convert between
-the two. `cases` and `induction` split a `USizeArray` as `mk a`.
+The logical model is an `Array USize`: `USizeArray.mk` and `USizeArray.toArray` convert
+between the two. `cases` and `induction` split a `USizeArray` as `mk a`.
 -/
 -- At runtime a `USizeArray` is a `ScalarArray.Raw`, so every function that looks inside the
 -- quotient must be `extern` or `implemented_by`. A quotient rather than a structure: the compiler
@@ -224,7 +224,8 @@ where
 private theorem toArrayImpl_loop (a : USizeArray) (sz : USize) (hsz : sz.toNat ≤ a.size)
     (hsz' : a.size ≤ sz.toNat) (i : USize) (r : Array USize) (hr : r.size = a.size)
     (hi : i.toNat ≤ sz.toNat)
-    (h : ∀ (k : Nat) (hk : k < i.toNat), r[k]'(by lia) = a.toArray[k]'(by rw [size_toArray']; lia)) :
+    (h : ∀ (k : Nat) (hk : k < i.toNat),
+      r[k]'(by lia) = a.toArray[k]'(by rw [size_toArray']; lia)) :
     toArrayImpl.loop a sz hsz i r hr = a.toArray := by
   fun_induction toArrayImpl.loop a sz hsz i r hr with
   | case1 i r hr hi' _ ih =>

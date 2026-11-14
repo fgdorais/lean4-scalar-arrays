@@ -7,8 +7,9 @@ leanOptions = { linter.missingDocs = true, linter.extra = true }
 
 [[lean_lib]]
 name = "ScalarArray"
-# The root module doesn't import `ScalarArray.Bytes`, which is experimental, or `ScalarArray.Notation`,
-# which makes `inplace` a keyword, but they are built, precompiled and documented with the rest.
+# The root module doesn't import `ScalarArray.Bytes`, which is experimental, or
+# `ScalarArray.Notation`, which makes `inplace` a keyword, but they are built, precompiled and
+# documented with the rest.
 roots = ["ScalarArray", "ScalarArray.Bytes", "ScalarArray.Notation"]
 # Lets the interpreter run the `extern` C code in downstream files, for `#eval` and `#guard`.
 precompileModules = true

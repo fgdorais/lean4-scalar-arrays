@@ -202,7 +202,8 @@ example (s : Int32Array.Slice) : s.copy.size = s.size := by simp
   | ⟨.yield it x, _⟩ =>
     x == 1 && it.toInt32Slice.start == 1 && it.toInt32Slice.copy == Int32Array.mk #[2, 3]
   | _ => false
-example (it : Std.Iter (α := Int32Array.SliceIterator) Int32) : it.toInt32Slice.iter = it := by
+example (it : Std.Iter (α := Int32Array.SliceIterator) Int32) :
+    it.toInt32Slice.iter = it := by
   simp
 example (it : Std.Iter (α := Int32Array.SliceIterator) Int32) :
     it.toList = it.toInt32Slice.copy.toList := by

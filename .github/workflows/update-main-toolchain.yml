@@ -50,7 +50,8 @@ jobs:
           REQUESTED_TOOLCHAIN: ${{ steps.toolchain.outputs.requested_toolchain }}
         run: |
           git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          git config user.email \
+            "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
           git merge --no-edit origin/nightly-testing
           git restore --source=origin/main -- lakefile.toml
           echo "$REQUESTED_TOOLCHAIN" > lean-toolchain

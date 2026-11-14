@@ -254,9 +254,10 @@ example (a : UInt8Array) (h : 0 < a.size) : UInt8 × UInt8Array :=
     return x
 
 /--
-error: `y` is not a mutable variable here: declare it with `let mut`, or carry it into the loop with `with (y := y)`
+error: `y` is not a mutable variable here: declare it with `let mut`, or carry it into the loop with
+`with (y := y)`
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) (h : 0 < a.size) : UInt8 × UInt8Array :=
   inplace a do
     let mut y := 0
@@ -373,18 +374,20 @@ rest of the program after an `if` with loops uses mutable variables, or the arra
 -- Inside the program, `a` is the array before the program runs, so uses of it other than `a[i]`,
 -- `a.size` and `a.usize` are errors.
 /--
-error: inside `inplace a do`, `a` is the array before the program runs: read its current elements with `a[i]`, at a `USize` index `i`, and its size with `a.size` or `a.usize`
+error: inside `inplace a do`, `a` is the array before the program runs: read its current elements
+with `a[i]`, at a `USize` index `i`, and its size with `a.size` or `a.usize`
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) (h : 0 < a.size) : UInt8 × UInt8Array :=
   inplace a do
     a[0] := 42
     return a[0]!
 
 /--
-error: inside `inplace a do`, `a` is the array before the program runs: read its current elements with `a[i]`, at a `USize` index `i`, and its size with `a.size` or `a.usize`
+error: inside `inplace a do`, `a` is the array before the program runs: read its current elements
+with `a[i]`, at a `USize` index `i`, and its size with `a.size` or `a.usize`
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) (h : 0 < a.size) : Nat × UInt8Array :=
   inplace a do
     a[0] := 42
@@ -392,17 +395,19 @@ example (a : UInt8Array) (h : 0 < a.size) : Nat × UInt8Array :=
 
 -- Reads run before their statement, so reads under a binder or in a branch of a term are errors.
 /--
-error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a branch of a term: read the element first, with `let x := a[i]`, or branch with an `if` statement
+error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a
+branch of a term: read the element first, with `let x := a[i]`, or branch with an `if` statement
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) (j : USize) (h : 0 < a.size) : Unit × UInt8Array :=
   inplace a do
     a[0] := if h : j.toNat < a.size then a[j] else 0
 
 /--
-error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a branch of a term: read the element first, with `let x := a[i]`, or branch with an `if` statement
+error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a
+branch of a term: read the element first, with `let x := a[i]`, or branch with an `if` statement
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) (n : USize) (h : n.toNat ≤ a.size) : Bool × UInt8Array :=
   inplace a do
     for j in 0...n with (r := false) do
@@ -411,9 +416,10 @@ example (a : UInt8Array) (n : USize) (h : n.toNat ≤ a.size) : Bool × UInt8Arr
     return r
 
 /--
-error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a branch of a term: read the element first, with `let x := a[i]`, or branch with an `if` statement
+error: `inplace` reads `a[i]` before the statement runs, so it can't read under a binder or in a
+branch of a term: read the element first, with `let x := a[i]`, or branch with an `if` statement
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) (h : 4 ≤ a.size) : Unit × UInt8Array :=
   inplace a do
     a[0] := (List.range 3).foldl (fun s k => s + a[k.toUSize]) 0
@@ -578,9 +584,10 @@ example (a : UInt8Array) : Unit × UInt8Array :=
 
 -- A `let` can't shadow a mutable variable, as in `do` notation: assign it instead.
 /--
-error: mutable variable `k` cannot be shadowed: assign it with `k := e`, or in a pattern, as in `(k, y) := e`
+error: mutable variable `k` cannot be shadowed: assign it with `k := e`, or in a pattern, as in `(k,
+y) := e`
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) (h : 0 < a.size) : Nat × UInt8Array :=
   inplace a do
     for j in 0...1 with (k := 0) do
@@ -779,18 +786,20 @@ example (a : UInt8Array) : Nat × UInt8Array :=
     return 2
 
 /--
-error: this statement is unreachable: every block of the statement before it ends with `return`, `break` or `continue`
+error: this statement is unreachable: every block of the statement before it ends with `return`,
+`break` or `continue`
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) (b : Bool) : Nat × UInt8Array :=
   inplace a do
     if b then return 1 else return 2
     return 3
 
 /--
-error: `inplace` needs the array as a local variable: bind it first, as in `let a := e; inplace a do …`
+error: `inplace` needs the array as a local variable: bind it first, as in `let a := e; inplace a do
+…`
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) : Unit × UInt8Array :=
   inplace (a.push 0) do
     return ()
@@ -969,17 +978,23 @@ example (a : UInt8Array) (h : 0 < a.size) : Unit × UInt8Array :=
     a[0] += 1
 
 /--
-error: this is not a statement of an `inplace` program: to end the program with a result, write `return ()`. The statements are reads `let x := a[i]`, writes `a[i] := e`, `let`, `let mut`, assignments `x := e`, `have`, `if`, `unless`, `match`, `for`, `while`, `break`, `continue` and `return`, and a program `m` runs with `let x ← m`
+error: this is not a statement of an `inplace` program: to end the program with a result, write
+`return ()`. The statements are reads `let x := a[i]`, writes `a[i] := e`, `let`, `let mut`,
+assignments `x := e`, `have`, `if`, `unless`, `match`, `for`, `while`, `break`, `continue` and
+`return`, and a program `m` runs with `let x ← m`
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) : Unit × UInt8Array :=
   inplace a do
     pure ()
 
 /--
-error: this is not a statement of an `inplace` program: a write is written `a[i] := e`. The statements are reads `let x := a[i]`, writes `a[i] := e`, `let`, `let mut`, assignments `x := e`, `have`, `if`, `unless`, `match`, `for`, `while`, `break`, `continue` and `return`, and a program `m` runs with `let x ← m`
+error: this is not a statement of an `inplace` program: a write is written `a[i] := e`. The
+statements are reads `let x := a[i]`, writes `a[i] := e`, `let`, `let mut`, assignments `x := e`,
+`have`, `if`, `unless`, `match`, `for`, `while`, `break`, `continue` and `return`, and a program `m`
+runs with `let x ← m`
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) (h : 0 < a.size) : Unit × UInt8Array :=
   inplace a do
     a[0] = 1
@@ -991,9 +1006,10 @@ example (a : UInt8Array) (h : 1 < a.size) : Unit × UInt8Array :=
     a[0] := (← a[1])
 
 /--
-error: the indices of an `inplace` program are `USize`s, but this one is a `Nat`: convert it with `toUSize`, with a bound on its `toNat`, or loop over a `USize` range
+error: the indices of an `inplace` program are `USize`s, but this one is a `Nat`: convert it with
+`toUSize`, with a bound on its `toNat`, or loop over a `USize` range
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) (k : Nat) (h : k < a.size) : Unit × UInt8Array :=
   inplace a do
     a[k] := 1
@@ -1012,9 +1028,10 @@ example (a : UInt8Array) (h : 0 < a.size) : Unit × UInt8Array :=
     a[0] := (300 : Nat)
 
 /--
-error: `inplace` loops over indices, not elements: write `for j in 0...a.usize do`, and read the element with `let x := a[j]`
+error: `inplace` loops over indices, not elements: write `for j in 0...a.usize do`, and read the
+element with `let x := a[j]`
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 example (a : UInt8Array) : Nat × UInt8Array :=
   inplace a do
     for x in a with (s := 0) do
