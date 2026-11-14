@@ -303,10 +303,29 @@ loop specifications that name no element type: strides and the models `iterRange
 
 `lake exe bench` times the main operations of `UInt8Array`, `UInt32Array`, `UInt64Array` and
 `Float64Array`, and compares each with the same operation on core's `ByteArray`, `Array` or
-`FloatArray`. `lake build` compiles it so that it keeps up with the API, but CI doesn't run it.
-To run it on GitHub, add the `benchmark` label to a pull request, which compares the pull request
-with its base, or start the Benchmarks workflow from the Actions tab. The results are in the run's
-summary.
+`FloatArray`. Its `call` rows time the probes of `ScalarArrayBench.Probes`: short calls on inputs
+of 4 and 137 elements, compiled in a module of their own as downstream code is, which show a fixed
+charge per call that large inputs hide. `lake build` compiles both, so that they keep up with the
+API, but CI doesn't run them.
+
+To check a pull request for slowdowns, add the `benchmark` label to it, or start the Benchmarks
+workflow from the Actions tab. It builds the pull request and its base with the same benchmarks
+and reports, in the run's summary:
+
+- the times, with the median ratio of 5 alternate runs (GitHub's runners vary by about 25%);
+- the instructions and allocations of each probe call, counted with valgrind, which are the same
+  on every run and so don't depend on the runner (`scripts/bench_counts.py`);
+- the closures, constructors, closure calls and unspecialized library calls in the C code of each
+  probe (`scripts/codegen_check.py`).
+
+It only reports: a few more instructions can come from the C compiler's choice of registers, so
+read the C code before deciding. The counts work locally too, with valgrind:
+`python3 scripts/bench_counts.py run .lake/build/bin/probes > head.tsv` in each checkout, then
+`python3 scripts/bench_counts.py compare base.tsv head.tsv`.
+
+Times need a quiet machine: `scripts/bench_ab.sh BASE` builds this checkout and the revision
+`BASE` with the same benchmarks, runs them alternately, and marks the rows whose median ratio is
+above 1.05. On Linux, `CPU=3 scripts/bench_ab.sh BASE` pins them to one core.
 
 The source and test files for the twelve types are generated from the `UInt16` versions, in
 `ScalarArray/UInt16/` and `ScalarArrayTest/UInt16/`. Make changes there, then regenerate the other
