@@ -183,8 +183,10 @@ public def byteSwap (a : {A}) : {A} :=
             spec_shift = f'8 * ({n - 1} - j % {n})'
         byte = to_u.format('s[j / ' + str(n) + ']')
         stores = ''.join(
-            f'\n        |>.setUnsafe (j + {k}) (u >>> {shift(order, n, k)}).toUInt8' if k else
-            f'\n        |>.setUnsafe j (u >>> {shift(order, n, 0)}).toUInt8'
+            f'\n        |> (UInt8Array.Internal.setUnsafe · (j + {k}) '
+            f'(u >>> {shift(order, n, k)}).toUInt8)'
+            if k else
+            f'\n        |> (UInt8Array.Internal.setUnsafe · j (u >>> {shift(order, n, 0)}).toUInt8)'
             for k in range(n))
         stores = stores.replace('(u >>> 0).toUInt8', 'u.toUInt8')
         def element(src):

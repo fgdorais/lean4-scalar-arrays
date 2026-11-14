@@ -129,7 +129,7 @@ public theorem toNat_add_lt_of_window {off len j : USize} (hw : off.toNat + len.
 @[inline]
 private unsafe def writeImpl (i : USize) (_h : i.toNat < n) (v : ISize) :
     InPlace.{u} n PUnit :=
-  ⟨fun s => (⟨⟩, ⟨setUnsafe s.array i v, lcProof⟩)⟩
+  ⟨fun s => (⟨⟩, ⟨Internal.setUnsafe s.array i v, lcProof⟩)⟩
 
 /--
 Stores `v` at index `i`. It compiles to one store, without checking that the array is exclusive:

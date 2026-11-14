@@ -139,8 +139,8 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j u.toUInt8
-        |>.setUnsafe (j + 1) (u >>> 8).toUInt8) (i + 1) (j + 2)
+        |> (UInt8Array.Internal.setUnsafe · j u.toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 8).toUInt8)) (i + 1) (j + 2)
     else
       r
 
@@ -281,8 +281,8 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j (u >>> 8).toUInt8
-        |>.setUnsafe (j + 1) u.toUInt8) (i + 1) (j + 2)
+        |> (UInt8Array.Internal.setUnsafe · j (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) u.toUInt8)) (i + 1) (j + 2)
     else
       r
 
@@ -452,10 +452,10 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j u.toUInt8
-        |>.setUnsafe (j + 1) (u >>> 8).toUInt8
-        |>.setUnsafe (j + 2) (u >>> 16).toUInt8
-        |>.setUnsafe (j + 3) (u >>> 24).toUInt8) (i + 1) (j + 4)
+        |> (UInt8Array.Internal.setUnsafe · j u.toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 2) (u >>> 16).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 3) (u >>> 24).toUInt8)) (i + 1) (j + 4)
     else
       r
 
@@ -602,10 +602,10 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j (u >>> 24).toUInt8
-        |>.setUnsafe (j + 1) (u >>> 16).toUInt8
-        |>.setUnsafe (j + 2) (u >>> 8).toUInt8
-        |>.setUnsafe (j + 3) u.toUInt8) (i + 1) (j + 4)
+        |> (UInt8Array.Internal.setUnsafe · j (u >>> 24).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 16).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 2) (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 3) u.toUInt8)) (i + 1) (j + 4)
     else
       r
 
@@ -781,14 +781,14 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j u.toUInt8
-        |>.setUnsafe (j + 1) (u >>> 8).toUInt8
-        |>.setUnsafe (j + 2) (u >>> 16).toUInt8
-        |>.setUnsafe (j + 3) (u >>> 24).toUInt8
-        |>.setUnsafe (j + 4) (u >>> 32).toUInt8
-        |>.setUnsafe (j + 5) (u >>> 40).toUInt8
-        |>.setUnsafe (j + 6) (u >>> 48).toUInt8
-        |>.setUnsafe (j + 7) (u >>> 56).toUInt8) (i + 1) (j + 8)
+        |> (UInt8Array.Internal.setUnsafe · j u.toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 2) (u >>> 16).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 3) (u >>> 24).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 4) (u >>> 32).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 5) (u >>> 40).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 6) (u >>> 48).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 7) (u >>> 56).toUInt8)) (i + 1) (j + 8)
     else
       r
 
@@ -947,14 +947,14 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j (u >>> 56).toUInt8
-        |>.setUnsafe (j + 1) (u >>> 48).toUInt8
-        |>.setUnsafe (j + 2) (u >>> 40).toUInt8
-        |>.setUnsafe (j + 3) (u >>> 32).toUInt8
-        |>.setUnsafe (j + 4) (u >>> 24).toUInt8
-        |>.setUnsafe (j + 5) (u >>> 16).toUInt8
-        |>.setUnsafe (j + 6) (u >>> 8).toUInt8
-        |>.setUnsafe (j + 7) u.toUInt8) (i + 1) (j + 8)
+        |> (UInt8Array.Internal.setUnsafe · j (u >>> 56).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 48).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 2) (u >>> 40).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 3) (u >>> 32).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 4) (u >>> 24).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 5) (u >>> 16).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 6) (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 7) u.toUInt8)) (i + 1) (j + 8)
     else
       r
 
@@ -1142,8 +1142,8 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j u.toUInt8
-        |>.setUnsafe (j + 1) (u >>> 8).toUInt8) (i + 1) (j + 2)
+        |> (UInt8Array.Internal.setUnsafe · j u.toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 8).toUInt8)) (i + 1) (j + 2)
     else
       r
 
@@ -1286,8 +1286,8 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j (u >>> 8).toUInt8
-        |>.setUnsafe (j + 1) u.toUInt8) (i + 1) (j + 2)
+        |> (UInt8Array.Internal.setUnsafe · j (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) u.toUInt8)) (i + 1) (j + 2)
     else
       r
 
@@ -1459,10 +1459,10 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j u.toUInt8
-        |>.setUnsafe (j + 1) (u >>> 8).toUInt8
-        |>.setUnsafe (j + 2) (u >>> 16).toUInt8
-        |>.setUnsafe (j + 3) (u >>> 24).toUInt8) (i + 1) (j + 4)
+        |> (UInt8Array.Internal.setUnsafe · j u.toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 2) (u >>> 16).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 3) (u >>> 24).toUInt8)) (i + 1) (j + 4)
     else
       r
 
@@ -1611,10 +1611,10 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j (u >>> 24).toUInt8
-        |>.setUnsafe (j + 1) (u >>> 16).toUInt8
-        |>.setUnsafe (j + 2) (u >>> 8).toUInt8
-        |>.setUnsafe (j + 3) u.toUInt8) (i + 1) (j + 4)
+        |> (UInt8Array.Internal.setUnsafe · j (u >>> 24).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 16).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 2) (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 3) u.toUInt8)) (i + 1) (j + 4)
     else
       r
 
@@ -1792,14 +1792,14 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j u.toUInt8
-        |>.setUnsafe (j + 1) (u >>> 8).toUInt8
-        |>.setUnsafe (j + 2) (u >>> 16).toUInt8
-        |>.setUnsafe (j + 3) (u >>> 24).toUInt8
-        |>.setUnsafe (j + 4) (u >>> 32).toUInt8
-        |>.setUnsafe (j + 5) (u >>> 40).toUInt8
-        |>.setUnsafe (j + 6) (u >>> 48).toUInt8
-        |>.setUnsafe (j + 7) (u >>> 56).toUInt8) (i + 1) (j + 8)
+        |> (UInt8Array.Internal.setUnsafe · j u.toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 2) (u >>> 16).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 3) (u >>> 24).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 4) (u >>> 32).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 5) (u >>> 40).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 6) (u >>> 48).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 7) (u >>> 56).toUInt8)) (i + 1) (j + 8)
     else
       r
 
@@ -1960,14 +1960,14 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j (u >>> 56).toUInt8
-        |>.setUnsafe (j + 1) (u >>> 48).toUInt8
-        |>.setUnsafe (j + 2) (u >>> 40).toUInt8
-        |>.setUnsafe (j + 3) (u >>> 32).toUInt8
-        |>.setUnsafe (j + 4) (u >>> 24).toUInt8
-        |>.setUnsafe (j + 5) (u >>> 16).toUInt8
-        |>.setUnsafe (j + 6) (u >>> 8).toUInt8
-        |>.setUnsafe (j + 7) u.toUInt8) (i + 1) (j + 8)
+        |> (UInt8Array.Internal.setUnsafe · j (u >>> 56).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 48).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 2) (u >>> 40).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 3) (u >>> 32).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 4) (u >>> 24).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 5) (u >>> 16).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 6) (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 7) u.toUInt8)) (i + 1) (j + 8)
     else
       r
 
@@ -2132,10 +2132,10 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j u.toUInt8
-        |>.setUnsafe (j + 1) (u >>> 8).toUInt8
-        |>.setUnsafe (j + 2) (u >>> 16).toUInt8
-        |>.setUnsafe (j + 3) (u >>> 24).toUInt8) (i + 1) (j + 4)
+        |> (UInt8Array.Internal.setUnsafe · j u.toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 2) (u >>> 16).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 3) (u >>> 24).toUInt8)) (i + 1) (j + 4)
     else
       r
 
@@ -2260,10 +2260,10 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j (u >>> 24).toUInt8
-        |>.setUnsafe (j + 1) (u >>> 16).toUInt8
-        |>.setUnsafe (j + 2) (u >>> 8).toUInt8
-        |>.setUnsafe (j + 3) u.toUInt8) (i + 1) (j + 4)
+        |> (UInt8Array.Internal.setUnsafe · j (u >>> 24).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 16).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 2) (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 3) u.toUInt8)) (i + 1) (j + 4)
     else
       r
 
@@ -2392,14 +2392,14 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j u.toUInt8
-        |>.setUnsafe (j + 1) (u >>> 8).toUInt8
-        |>.setUnsafe (j + 2) (u >>> 16).toUInt8
-        |>.setUnsafe (j + 3) (u >>> 24).toUInt8
-        |>.setUnsafe (j + 4) (u >>> 32).toUInt8
-        |>.setUnsafe (j + 5) (u >>> 40).toUInt8
-        |>.setUnsafe (j + 6) (u >>> 48).toUInt8
-        |>.setUnsafe (j + 7) (u >>> 56).toUInt8) (i + 1) (j + 8)
+        |> (UInt8Array.Internal.setUnsafe · j u.toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 2) (u >>> 16).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 3) (u >>> 24).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 4) (u >>> 32).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 5) (u >>> 40).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 6) (u >>> 48).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 7) (u >>> 56).toUInt8)) (i + 1) (j + 8)
     else
       r
 
@@ -2532,14 +2532,14 @@ where
       -- `r` is a fresh array, so the stores need no exclusivity checks, and they combine into one
       -- word store.
       loop a stop (r
-        |>.setUnsafe j (u >>> 56).toUInt8
-        |>.setUnsafe (j + 1) (u >>> 48).toUInt8
-        |>.setUnsafe (j + 2) (u >>> 40).toUInt8
-        |>.setUnsafe (j + 3) (u >>> 32).toUInt8
-        |>.setUnsafe (j + 4) (u >>> 24).toUInt8
-        |>.setUnsafe (j + 5) (u >>> 16).toUInt8
-        |>.setUnsafe (j + 6) (u >>> 8).toUInt8
-        |>.setUnsafe (j + 7) u.toUInt8) (i + 1) (j + 8)
+        |> (UInt8Array.Internal.setUnsafe · j (u >>> 56).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 1) (u >>> 48).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 2) (u >>> 40).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 3) (u >>> 32).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 4) (u >>> 24).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 5) (u >>> 16).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 6) (u >>> 8).toUInt8)
+        |> (UInt8Array.Internal.setUnsafe · (j + 7) u.toUInt8)) (i + 1) (j + 8)
     else
       r
 
