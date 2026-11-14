@@ -78,6 +78,23 @@ public def usize (a : @& Int8Array) : USize :=
 public theorem toNat_usize_le (a : Int8Array) : a.usize.toNat ≤ a.size := by
   simp [Nat.mod_le]
 
+/-- For internal use only. -/
+@[inline]
+public unsafe def decSizeLtImpl (a : @& Int8Array) : Decidable (a.size < USize.size) :=
+  .isTrue lcProof
+
+/--
+Decides `a.size < USize.size`, which holds for every array in memory, as for `usize`. The safe loops
+index with `USize`, so their `csimp` proofs test the bound, with a fallback for the other case. At
+runtime this instance is `isTrue` without a test, so the compiler removes the test and the fallback,
+which would otherwise cost a `Nat` comparison and, when the fallback calls a fold, a closure for its
+function. This is the one unchecked fact behind those proofs.
+-/
+@[implemented_by decSizeLtImpl]
+public instance (priority := high) decSizeLt (a : @& Int8Array) :
+    Decidable (a.size < USize.size) :=
+  Nat.decLt ..
+
 /-- The element at the `USize` index `i`. It compiles to an inline load. -/
 @[extern c inline "((uint8_t*)lean_sarray_cptr(#1))[#2]", expose]
 public def uget (a : @& Int8Array) (i : USize) (h : i.toNat < a.size := by get_elem_tactic) :
@@ -203,10 +220,9 @@ private theorem toNat_toUSize_of_le {a : Int8Array} (hsize : a.size < USize.size
 -- `csimp` theorems, which make the compiler call them instead. A `csimp` theorem must be public,
 -- and so must the functions it names. The loops index with `USize`, so the proofs need
 -- `a.size < USize.size`: the `else` branches are never taken, since no array in memory has
--- `USize.size` elements. Elsewhere they call a `Slow` function that is neither inlined nor
--- specialized, so that the dead branch stays a single call; here the compiled body of `toArray`
--- would treat the scalar array as an `Array`, so the `else` branch reads the elements with `get`
--- instead.
+-- `USize.size` elements, and the test is decided by `decSizeLt`, which is `isTrue` at runtime, so
+-- the compiler removes them. Here the compiled body of `toArray` would treat the scalar array as an
+-- `Array`, so the `else` branch reads the elements with `get` instead.
 public def toArrayImpl (a : @& Int8Array) : Array Int8 :=
   if a.size < USize.size then
     loop a.usize a.toNat_usize_le 0 (Array.replicate a.size default) Array.size_replicate

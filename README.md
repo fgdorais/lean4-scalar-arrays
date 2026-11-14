@@ -246,8 +246,11 @@ they are not part of the API; the rest of that module is private.
 
 The implementations written in safe Lean, such as the loops behind `toArray`, `foldlM` and
 `forIn`, and the in-place folds, which run as in-place programs, are proved equal to their
-specifications by `csimp` theorems. The `extern` and unsafe `implemented_by` code is connected to
-the model only by testing, so the test suite runs against the compiled code.
+specifications by `csimp` theorems. Those loops index with `USize`, so the proofs rely on one
+unchecked fact, that an array's size is less than `USize.size`: its test, `XArray.decSizeLt`, is
+`isTrue` at runtime, so the compiled loops neither test the bound nor keep the fallback for it.
+The `extern` and unsafe `implemented_by` code is connected to the model only by testing, so the
+test suite runs against the compiled code.
 
 ## Stability
 
