@@ -98,8 +98,8 @@ instance : Ops FloatArray Float where
   extract := none
 
 /-- An `Ops` instance for core's `Array`. -/
-@[inline, instance_reducible] def arrayOps {X : Type} [Inhabited X] (ofNat : Nat → X) (toU64 : X → UInt64) :
-    Ops (Array X) X where
+@[inline, instance_reducible] def arrayOps {X : Type} [Inhabited X] (ofNat : Nat → X)
+    (toU64 : X → UInt64) : Ops (Array X) X where
   ofNat := ofNat
   toUInt64 := toU64
   emptyWithCapacity := Array.emptyWithCapacity
@@ -213,7 +213,8 @@ passes, one `foldlInPlace2Then` for each result.
     let r := a.runInPlace <| UInt64Array.InPlace.forIn2 0 len (0 : UInt64) (0 : UInt64)
       fun j _ hj c b => do
         let x ← UInt64Array.InPlace.read (0 + j) (UInt64Array.InPlace.toNat_add_lt_of_window hx hj)
-        let y ← UInt64Array.InPlace.read (len + j) (UInt64Array.InPlace.toNat_add_lt_of_window hy hj)
+        let y ← UInt64Array.InPlace.read (len + j)
+          (UInt64Array.InPlace.toNat_add_lt_of_window hy hj)
         let s := x + y + c
         UInt64Array.InPlace.write (0 + j) (UInt64Array.InPlace.toNat_add_lt_of_window hx hj) s
         UInt64Array.InPlace.write (2 * len + j) (UInt64Array.InPlace.toNat_add_lt_of_window ht hj)

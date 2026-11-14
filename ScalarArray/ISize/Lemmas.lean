@@ -48,7 +48,8 @@ public theorem size_eq_toArray_size (a : ISizeArray) : a.size = a.toArray.size :
     (a ++ b).toArray = a.toArray ++ b.toArray := by
   cases a; cases b; rfl
 
-@[simp, grind =] public theorem size_append (a b : ISizeArray) : (a ++ b).size = a.size + b.size := by
+@[simp, grind =] public theorem size_append (a b : ISizeArray) :
+    (a ++ b).size = a.size + b.size := by
   simp [-size_toArray, size_eq_toArray_size]
 
 @[ext] public theorem ext {a b : ISizeArray} (h : a.toArray = b.toArray) : a = b :=
@@ -112,7 +113,8 @@ public theorem ext_getElem {a b : ISizeArray} (h₁ : a.size = b.size)
     (a.extract start stop).size = min stop a.size - start := by
   simp [-size_toArray, size_eq_toArray_size]
 
-@[simp, grind =] public theorem size_replicate (n : Nat) (v : ISize) : (replicate n v).size = n := by
+@[simp, grind =] public theorem size_replicate (n : Nat) (v : ISize) :
+    (replicate n v).size = n := by
   simp [-size_toArray, size_eq_toArray_size]
 
 @[simp] public theorem size_ofFn {n : Nat} (f : Fin n → ISize) : (ofFn f).size = n := by
@@ -120,7 +122,8 @@ public theorem ext_getElem {a b : ISizeArray} (h₁ : a.size = b.size)
 
 @[simp, grind =] public theorem size_empty : (empty : ISizeArray).size = 0 := rfl
 
-@[simp, grind =] public theorem getElem_set (a : ISizeArray) (i : Nat) (v : ISize) (h) (j : Nat) (hj) :
+@[simp, grind =] public theorem getElem_set (a : ISizeArray) (i : Nat) (v : ISize) (h) (j : Nat)
+    (hj) :
     (a.set i v h)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_set]
 
@@ -286,11 +289,13 @@ public theorem copySlice_eq_append (src : ISizeArray) (srcOff : Nat) (dest : ISi
 @[simp, grind =] public theorem length_toList (a : ISizeArray) : a.toList.length = a.size := by
   simp [← toList_toArray]
 
-@[simp, grind =] public theorem getElem_toList (a : ISizeArray) (i : Nat) (h : i < a.toList.length) :
+@[simp, grind =] public theorem getElem_toList (a : ISizeArray) (i : Nat)
+    (h : i < a.toList.length) :
     a.toList[i] = a[i]'(by simpa using h) := by
   simp [← toList_toArray]
 
-@[simp, grind =] public theorem getElem?_toList (a : ISizeArray) (i : Nat) : a.toList[i]? = a[i]? := by
+@[simp, grind =] public theorem getElem?_toList (a : ISizeArray) (i : Nat) :
+    a.toList[i]? = a[i]? := by
   by_cases h : i < a.size <;> simp [h, ← toList_toArray]
 
 @[simp] public theorem toList_inj {a b : ISizeArray} : a.toList = b.toList ↔ a = b :=
@@ -401,11 +406,13 @@ public theorem back_eq_getElem (a : ISizeArray) (h : 0 < a.size) :
 
 /-! ## Writes -/
 
-@[simp, grind =] public theorem getElem_uset (a : ISizeArray) (i : USize) (v : ISize) (h) (j : Nat)
-    (hj) : (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
+@[simp, grind =] public theorem getElem_uset (a : ISizeArray) (i : USize) (v : ISize) (h)
+    (j : Nat) (hj) :
+    (a.uset i v h)[j]'hj = if i.toNat = j then v else a[j]'(by simpa using hj) := by
   simp [-getElem_toArray, getElem_eq_getElem_toArray, Array.getElem_set]
 
-@[simp, grind =] public theorem getElem_set! (a : ISizeArray) (i : Nat) (v : ISize) (j : Nat) (hj) :
+@[simp, grind =] public theorem getElem_set! (a : ISizeArray) (i : Nat) (v : ISize) (j : Nat)
+    (hj) :
     (a.set! i v)[j]'hj = if i = j then v else a[j]'(by simpa using hj) := by
   simp only [getElem_eq_getElem_toArray, toArray_set!, Array.set!_eq_setIfInBounds]
   rw [Array.getElem_setIfInBounds]

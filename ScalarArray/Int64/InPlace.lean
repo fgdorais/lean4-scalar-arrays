@@ -285,7 +285,8 @@ private theorem run_foldlInPlaceProg {β : Type v} (start len : USize) (N m : Na
     (s : Int64Array.Slice) (hs : s.size = m) (hstart : s.start = start.toNat) (c : Int64Array)
     (hca : s.array = c) (hc : c.size = N) (j : USize) (hj : j.toNat ≤ len.toNat) (b : β) :
     (foldlInPlaceProg start len hw (fun k hk => f k (hm ▸ hk)) j b).run c hc =
-      ((foldlInPlace.loop m f s hs j.toNat b).2, (foldlInPlace.loop m f s hs j.toNat b).1.array) := by
+      ((foldlInPlace.loop m f s hs j.toNat b).2,
+        (foldlInPlace.loop m f s hs j.toNat b).1.array) := by
   subst hca
   unfold foldlInPlaceProg
   rw [InPlace.forInFrom_eq, foldlInPlace.loop]
@@ -482,9 +483,11 @@ private theorem run_reverseProg (lo m : USize) (N : Nat) (hN : N < USize.size)
       (by simpa using hpos) (by simpa using hstart) _ rfl
       (by simp only [swap_eq, array_set, Int64Array.size_set]; exact hc) (k + 1) h1
     unfold reverseProg at ih
-    have hset : ∀ (h₁ : (lo + k).toNat < s.array.size) (h₂ : (lo + (m - 1 - k)).toNat < s.array.size),
+    have hset : ∀ (h₁ : (lo + k).toNat < s.array.size)
+        (h₂ : (lo + (m - 1 - k)).toNat < s.array.size),
         (s.array.set (lo + k).toNat s.array[(lo + (m - 1 - k)).toNat] h₁).set
-          (lo + (m - 1 - k)).toNat s.array[(lo + k).toNat] (by rw [Int64Array.size_set]; exact h₂) =
+          (lo + (m - 1 - k)).toNat s.array[(lo + k).toNat]
+            (by rw [Int64Array.size_set]; exact h₂) =
           (s.swap k.toNat (s.size - 1 - k.toNat) (by lia) (by lia)).array := by
       intro h₁ h₂
       simp only [swap_eq, array_set, start_set, Slice.getElem_eq, ex, ey, hstart, hr, hs]
@@ -978,7 +981,8 @@ public def foldlInPlace2 {β : Type v} (a : Int64Array) (xs ys rs len : USize)
 private theorem size_foldlInPlace2_loop {β : Type v} (xs ys rs len : Nat)
     (f : (j : USize) → j.toNat < len → Int64 → Int64 → β → Int64 × β)
     (a : Int64Array) (hx : xs + len ≤ a.size) (hy : ys + len ≤ a.size)
-    (hr : rs + len ≤ a.size) (j : Nat) (b : β) : (foldlInPlace2.loop xs ys rs len f a hx hy hr j b).1.size = a.size := by
+    (hr : rs + len ≤ a.size) (j : Nat) (b : β) :
+    (foldlInPlace2.loop xs ys rs len f a hx hy hr j b).1.size = a.size := by
   fun_induction foldlInPlace2.loop xs ys rs len f a hx hy hr j b with
   | case1 a hx hy hr j b hj hj' p ih => rw [ih, size_set]
   | case2 => rfl
@@ -1213,7 +1217,8 @@ public def foldlInPlaceRangeThen {β : Type v} {γ : Type w} (a : Int64Array) (s
 
 /-- For internal use only. -/
 @[inline]
-public def foldlInPlaceRangeThenImpl {β : Type v} {γ : Type w} (a : Int64Array) (start len : USize)
+public def foldlInPlaceRangeThenImpl {β : Type v} {γ : Type w} (a : Int64Array)
+    (start len : USize)
     (h : start.toNat + len.toNat ≤ a.size) (init : β)
     (f : (k : USize) → k.toNat < len.toNat → Int64 → β → Int64 × β)
     (g : (a' : Int64Array) → a'.size = a.size → β → γ) : γ :=
@@ -1455,7 +1460,8 @@ public def foldrInPlaceRangeThen {β : Type v} {γ : Type w} (a : Int64Array) (s
 
 /-- For internal use only. -/
 @[inline]
-public def foldrInPlaceRangeThenImpl {β : Type v} {γ : Type w} (a : Int64Array) (start len : USize)
+public def foldrInPlaceRangeThenImpl {β : Type v} {γ : Type w} (a : Int64Array)
+    (start len : USize)
     (h : start.toNat + len.toNat ≤ a.size) (init : β)
     (f : (k : USize) → k.toNat < len.toNat → Int64 → β → Int64 × β)
     (g : (a' : Int64Array) → a'.size = a.size → β → γ) : γ :=

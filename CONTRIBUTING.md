@@ -30,13 +30,15 @@ name an element type, such as `ScalarArray.Stride`, goes in a shared module inst
 
 ## Files
 
-- Every file starts with the copyright and license header, and every Lean file is a `module`.
+- Every file that allows comments starts with the copyright and license header, and every Lean file
+  is a `module`.
 - Each module has a `/-! # Title -/` docstring, with `/-! ## … -/` headers for its parts.
 - Every public declaration has a docstring (`linter.missingDocs` is on). Use `--` comments to
   explain why the code is the way it is.
 - Mark declarations `public` one at a time, and `@[expose]` only where other modules must unfold
   the body. Implementation details live in `ScalarArray.Internal`, which is not part of the API.
-- Keep lines to 100 columns.
+- Keep lines to 100 columns, except for Markdown tables and URLs. In a `#guard_msgs` docstring,
+  wrap a long message and use `#guard_msgs (whitespace := lax)`.
 
 ## Lean style
 

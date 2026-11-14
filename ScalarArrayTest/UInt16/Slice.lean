@@ -202,7 +202,8 @@ example (s : UInt16Array.Slice) : s.copy.size = s.size := by simp
   | ⟨.yield it x, _⟩ =>
     x == 1 && it.toUInt16Slice.start == 1 && it.toUInt16Slice.copy == UInt16Array.mk #[2, 3]
   | _ => false
-example (it : Std.Iter (α := UInt16Array.SliceIterator) UInt16) : it.toUInt16Slice.iter = it := by
+example (it : Std.Iter (α := UInt16Array.SliceIterator) UInt16) :
+    it.toUInt16Slice.iter = it := by
   simp
 example (it : Std.Iter (α := UInt16Array.SliceIterator) UInt16) :
     it.toList = it.toUInt16Slice.copy.toList := by

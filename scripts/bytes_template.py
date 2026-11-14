@@ -3,7 +3,8 @@
 """The template for `ScalarArray/Bytes.lean` and its tests, used by `generate.py`."""
 
 # Each entry: type name, element type, unsigned type of the same width, width in bytes, the
-# conversion to that unsigned type, the conversion back (applied to an atom or a parenthesized term), and whether the type gets `byteSwap`.
+# conversion to that unsigned type, the conversion back (applied to an atom or a parenthesized
+# term), and whether the type gets `byteSwap`.
 types = [
   ('UInt16',  'UInt16',  'UInt16', 2, '{}',          '{}',                  True),
   ('UInt32',  'UInt32',  'UInt32', 4, '{}',          '{}',                  True),
@@ -135,7 +136,8 @@ def idx(n, k):
 
 def section(name, elem, u, n, to_u, of_u, swap):
     roundtrip = swap
-    shows = ''.join(f'\n      show ({idx(n, k)}) / {n} = i by lia, show ({idx(n, k)}) % {n} = {k} by lia,'
+    shows = ''.join(f'\n      show ({idx(n, k)}) / {n} = i by lia,'
+                    f' show ({idx(n, k)}) % {n} = {k} by lia,'
                     for k in range(n)).rstrip(',')
     if of_u == '{}':
         finish = '    generalize s[i] = x\n    bv_decide'
@@ -307,7 +309,8 @@ public def Slice.ofBytes{order}! (s : UInt8Array.Slice) : {A} :=
 @[simp] public theorem Slice.getElem_toBytes{order} (s : {A}.Slice) (j : Nat)
     (h : j < s.toBytes{order}.size) :
     s.toBytes{order}[j] =
-      ({to_u.format(f"(s[j / {n}]'(by rw [Slice.size_toBytes{order}] at h; lia))")} >>> ({spec_shift}).to{u}).toUInt8 := by
+      ({to_u.format(f"(s[j / {n}]'(by rw [Slice.size_toBytes{order}] at h; lia))")}
+        >>> ({spec_shift}).to{u}).toUInt8 := by
   simp only [Slice.toBytes{order}, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn]
 ''')
         if roundtrip:

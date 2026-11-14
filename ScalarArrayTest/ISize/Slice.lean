@@ -202,7 +202,8 @@ example (s : ISizeArray.Slice) : s.copy.size = s.size := by simp
   | ⟨.yield it x, _⟩ =>
     x == 1 && it.toISizeSlice.start == 1 && it.toISizeSlice.copy == ISizeArray.mk #[2, 3]
   | _ => false
-example (it : Std.Iter (α := ISizeArray.SliceIterator) ISize) : it.toISizeSlice.iter = it := by
+example (it : Std.Iter (α := ISizeArray.SliceIterator) ISize) :
+    it.toISizeSlice.iter = it := by
   simp
 example (it : Std.Iter (α := ISizeArray.SliceIterator) ISize) :
     it.toList = it.toISizeSlice.copy.toList := by

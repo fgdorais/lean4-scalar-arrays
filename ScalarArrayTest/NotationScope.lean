@@ -37,15 +37,17 @@ private meta def printAdded (m : Name) : CommandElabM Unit := do
     match e with
     | .token t => if !known.contains t && !tokens.contains t then tokens := tokens.push t
     | .parser cat k _ =>
-      unless cat == `inplaceStmt || cat == `inplaceInternal do parsers := parsers.push s!"{cat}: {k}"
+      unless cat == `inplaceStmt || cat == `inplaceInternal do
+        parsers := parsers.push s!"{cat}: {k}"
     | _ => pure ()
   logInfo m!"tokens: {tokens.qsort (· < ·)}\nparsers: {parsers.qsort (· < ·)}"
 
 /--
 info: tokens: [`(inplaceInternal|, `(inplaceStmt|, inplace]
-parsers: [tactic: inplaceBound, term: inplaceInternal.quot, term: inplaceStmt.quot, term: inplaceTerm]
+parsers: [tactic: inplaceBound, term: inplaceInternal.quot, term: inplaceStmt.quot, term:
+inplaceTerm]
 -/
-#guard_msgs in
+#guard_msgs (whitespace := lax) in
 run_cmd printAdded `ScalarArray.Notation
 
 -- The names of the tactics and of the terms of the expansion are free for other uses.

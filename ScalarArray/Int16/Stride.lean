@@ -54,8 +54,8 @@ namespace Int16Array
 /-! ## Updates at index maps -/
 
 /-- The step `i` of `modifyAt`. -/
-private def modifyStep (idx : Nat → Nat) (g : Nat → Int16 → Int16) (i : Nat) (a : Int16Array) :
-    Int16Array :=
+private def modifyStep (idx : Nat → Nat) (g : Nat → Int16 → Int16) (i : Nat)
+    (a : Int16Array) : Int16Array :=
   if h : idx i < a.size then a.set (idx i) (g i a[idx i]) h else a
 
 /--
@@ -627,7 +627,8 @@ is the model of the inner loop.
 public theorem run_forInFrom_unit (lo hi j₀ : USize) (hlo : lo.toNat ≤ j₀.toNat)
     (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
       (Unit → Tail n γ) → Unit → Tail n γ)
-    (k : Unit → Tail n γ) (F : Nat → Int16Array → Int16Array) (hF : ∀ j a, (F j a).size = a.size)
+    (k : Unit → Tail n γ) (F : Nat → Int16Array → Int16Array)
+    (hF : ∀ j a, (F j a).size = a.size)
     (hbody : ∀ j hl hj next a (h : a.size = n),
       (body j hl hj next ()).run a h = (next ()).run (F j.toNat a) (by rw [hF]; exact h))
     (a : Int16Array) (h : a.size = n) :
@@ -703,7 +704,8 @@ public theorem run_forInFrom_write (lo hi j₀ : USize) (hlo : lo.toNat ≤ j₀
     rfl
 
 private theorem run_modify2_step (ea eb : USize) (ia ib : Nat) (hea : ea.toNat = ia)
-    (heb : eb.toNat = ib) (pa : ea.toNat < n) (pb : eb.toNat < n) (f g : Int16 → Int16 → Int16)
+    (heb : eb.toNat = ib) (pa : ea.toNat < n) (pb : eb.toNat < n)
+    (f g : Int16 → Int16 → Int16)
     (k : Tail n γ) (a : Int16Array) (h : a.size = n) :
     (readThen ea pa fun u => readThen eb pb fun v =>
         writeThen ea pa (f u v) (writeThen eb pb (g u v) k)).run a h =
@@ -790,7 +792,8 @@ array by `iterRangeRev F lo.toNat j₀.toNat`, and then runs `k`.
 public theorem run_forInRevFrom_unit (lo hi j₀ : USize) (hj₀ : j₀.toNat ≤ hi.toNat)
     (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
       (Unit → Tail n γ) → Unit → Tail n γ)
-    (k : Unit → Tail n γ) (F : Nat → Int16Array → Int16Array) (hF : ∀ j a, (F j a).size = a.size)
+    (k : Unit → Tail n γ) (F : Nat → Int16Array → Int16Array)
+    (hF : ∀ j a, (F j a).size = a.size)
     (hbody : ∀ j hl hj next a (h : a.size = n),
       (body j hl hj next ()).run a h = (next ()).run (F j.toNat a) (by rw [hF]; exact h))
     (a : Int16Array) (h : a.size = n) :
