@@ -30,8 +30,8 @@ name an element type, such as `ScalarArray.Stride`, goes in a shared module inst
 
 ## Files
 
-- Every file that allows comments starts with the copyright and license header, and every Lean file
-  is a `module`.
+- Every Lean and Python file starts with the copyright and license header (workflows, lakefiles
+  and `.git*` files don't), and every Lean file is a `module`.
 - Each module has a `/-! # Title -/` docstring, with `/-! ## … -/` headers for its parts.
 - Every public declaration has a docstring (`linter.missingDocs` is on). Use `--` comments to
   explain why the code is the way it is.
