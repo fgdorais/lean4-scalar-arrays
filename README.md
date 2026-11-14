@@ -38,7 +38,7 @@ Releases are tagged `vX.Y.Z`. Add one to your `lakefile.toml`, or `main` for the
 [[require]]
 name = "lean4-scalar-arrays"
 git = "https://github.com/fgdorais/lean4-scalar-arrays"
-rev = "v1.0.0"
+rev = "v1.5.1"
 ```
 
 Then `import ScalarArray` for every type, or `import ScalarArray.UInt32` and so on for just one.
@@ -336,6 +336,7 @@ python3 scripts/generate.py
 ```
 
 `python3 scripts/generate.py --check` changes nothing and fails if a generated file is out of date.
+CI runs it on every pull request.
 The generated files are marked `linguist-generated` in `.gitattributes`, so GitHub collapses them in
 diffs.
 

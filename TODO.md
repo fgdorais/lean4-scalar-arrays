@@ -77,7 +77,3 @@ Found by the probes of `ScalarArrayBench.Probes` (see the README):
   `==`, so they differ on NaN and ±0.
 - `decide` can't evaluate `USize` and `ISize` literals because `System.Platform.numBits` is opaque,
   so those tests skip the `decide` examples (`WORD_TEST_DECIDE` in `generate.py`).
-
-## Housekeeping
-
-- Add `python3 scripts/generate.py --check` to CI.
