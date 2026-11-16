@@ -1,5 +1,5 @@
 name = "«lean4-scalar-arrays»"
-defaultTargets = ["ScalarArray", "ScalarArrayTest", "bench", "probes"]
+defaultTargets = ["ScalarArray", "ScalarArrayTest", "ScalarArrayExamples", "bench", "probes"]
 testDriver = "ScalarArrayTest"
 
 # Linters that are off by default.
@@ -20,6 +20,11 @@ moreLeancArgs = ["-falign-loops=64"]
 
 [[lean_lib]]
 name = "ScalarArrayTest"
+precompileModules = true
+
+# Worked examples of the API, checked with `#guard` when they are built.
+[[lean_lib]]
+name = "ScalarArrayExamples"
 precompileModules = true
 
 # The probes, which `bench` and `probes` call; a library of their own, so that they are compiled
