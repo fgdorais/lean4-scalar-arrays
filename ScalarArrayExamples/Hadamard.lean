@@ -64,8 +64,8 @@ def stage (n : Nat) (usize : USize) (hn : usize.toNat ≤ n) (h : USize) :
     Int32Array.InPlace.ite (j &&& h == 0)
       (Int32Array.InPlace.dite (j + h < usize)
         (fun hb => do
-          have hj : j.toNat < n := Nat.lt_of_lt_of_le hj hn
-          have hjh : (j + h).toNat < n := Nat.lt_of_lt_of_le (USize.lt_iff_toNat_lt.mp hb) hn
+          have hj : j.toNat < n := by grind
+          have hjh : (j + h).toNat < n := by grind
           let x ← Int32Array.InPlace.read j hj
           let y ← Int32Array.InPlace.read (j + h) hjh
           Int32Array.InPlace.write j hj (x + y)
