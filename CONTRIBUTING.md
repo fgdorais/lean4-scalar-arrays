@@ -6,7 +6,7 @@ When in doubt, copy what the code nearby already does. Open work is listed in [T
 ## Building and testing
 
 ```sh
-lake build --wfail   # the library, the tests and the benchmarks, with warnings as errors
+lake build --wfail   # the library, the tests, the examples and the benchmarks, warnings as errors
 lake test            # the `#guard` tests in `ScalarArrayTest`
 lake exe bench       # the benchmarks, when a change may affect speed
 ```
