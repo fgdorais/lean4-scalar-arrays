@@ -70,6 +70,18 @@ def squares (n : Nat) : UInt32Array := Id.run do
 example (a : UInt32Array) (x : UInt32) : (a.push x).size = a.size + 1 := by simp
 ```
 
+## Examples
+
+The [`ScalarArrayExamples`](ScalarArrayExamples) library has worked examples, each checked with
+`#guard` when it is built:
+
+- [`Tutorial`](ScalarArrayExamples/Tutorial.lean): building, reading and writing arrays, slices,
+  iterators, an `inplace` loop and a proof that it meets its specification.
+- [`Image`](ScalarArrayExamples/Image.lean): grayscale images on `UInt8Array`, with `inplace`
+  loops, a histogram, writable row slices and the conversion to `ByteArray`.
+- [`Hadamard`](ScalarArrayExamples/Hadamard.lean): the fast Walsh–Hadamard transform on
+  `Int32Array`, written with the `InPlace` API and with the `inplace` notation, and XOR convolution.
+
 ## API
 
 Every type `XArray` with element type `X` has the same API, which follows core's `ByteArray`. For
