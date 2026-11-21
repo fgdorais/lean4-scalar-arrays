@@ -36,7 +36,7 @@ private meta def printAdded (m : Name) : CommandElabM Unit := do
   for e in entries idx do
     match e with
     | .token t => if !known.contains t && !tokens.contains t then tokens := tokens.push t
-    | .parser cat k _ =>
+    | .parser cat k .. =>
       unless cat == `inplaceStmt || cat == `inplaceInternal do
         parsers := parsers.push s!"{cat}: {k}"
     | _ => pure ()
