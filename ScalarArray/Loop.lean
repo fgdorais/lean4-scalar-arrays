@@ -8,10 +8,10 @@ public import Init
 import all ScalarArray.Internal
 
 /-!
-# Loops with many variables
+# Loops with several variables
 
-The loops in continuation-passing style of the arrays' tail programs with 5 to 8 variables,
-`XArray.InPlace.Tail.forIn5`, … and `XArray.InPlace.Tail.forInRev5`, …, over any state `σ`: each
+The loops in continuation-passing style of the arrays' tail programs with 2 to 8 variables,
+`XArray.InPlace.Tail.forIn2`, … and `XArray.InPlace.Tail.forInRev2`, …, over any state `σ`: each
 array's loops wrap these, with its own state. They are for internal use: the arrays' loops are the
 API. Each variable is an argument of the loop, so that scalars stay unboxed.
 
@@ -33,6 +33,238 @@ public theorem pred_lt {lo hi j : USize} (hj : j.toNat ≤ hi.toNat) (h : lo < j
 /-- The index of a step of `forDown`: `lo ≤ j - 1` when `lo < j`. -/
 public theorem le_pred {lo j : USize} (h : lo < j) : lo.toNat ≤ (j - 1).toNat := by
   grind
+
+/-! ## 2 variables -/
+
+/--
+The loop with 2 variables up from `j` to `hi - 1`: the body gets the next step as `next`, and the
+loop ends with `k`. It is specified by `forUp2_eq`.
+-/
+@[specialize]
+public def forUp2 {σ : Type u} {γ : Type w} {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → σ → γ) →
+      β₁ → β₂ → σ → γ)
+    (k : β₁ → β₂ → σ → γ)
+    (j : USize) (hlo : lo.toNat ≤ j.toNat) (b₁ : β₁) (b₂ : β₂) (s : σ) : γ :=
+  if hj : j < hi then
+    body j hlo hj (fun b₁ b₂ s =>
+        forUp2 lo hi body k (j + 1) (le_succ hlo hj) b₁ b₂ s)
+      b₁ b₂ s
+  else
+    k b₁ b₂ s
+termination_by hi.toNat - j.toNat
+decreasing_by exact sub_toNat_add_one_lt hj
+
+/-- One step of `forUp2`. -/
+public theorem forUp2_eq {σ : Type u} {γ : Type w} {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → σ → γ) →
+      β₁ → β₂ → σ → γ)
+    (k : β₁ → β₂ → σ → γ)
+    (j : USize) (hlo : lo.toNat ≤ j.toNat) (b₁ : β₁) (b₂ : β₂) (s : σ) :
+    forUp2 lo hi body k j hlo b₁ b₂ s =
+      if hj : j < hi then
+        body j hlo hj (fun b₁ b₂ s =>
+            forUp2 lo hi body k (j + 1) (le_succ hlo hj) b₁ b₂ s)
+          b₁ b₂ s
+      else k b₁ b₂ s := by
+  rw [forUp2]
+
+/--
+The loop with 2 variables down from `j - 1` to `lo`: the body gets the next step as `next`,
+and the loop ends with `k`. It is specified by `forDown2_eq`.
+-/
+@[specialize]
+public def forDown2 {σ : Type u} {γ : Type w} {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → σ → γ) →
+      β₁ → β₂ → σ → γ)
+    (k : β₁ → β₂ → σ → γ)
+    (j : USize) (hj : j.toNat ≤ hi.toNat) (b₁ : β₁) (b₂ : β₂) (s : σ) : γ :=
+  if h : lo < j then
+    body (j - 1) (le_pred h) (pred_lt hj h) (fun b₁ b₂ s =>
+        forDown2 lo hi body k (j - 1) (Nat.le_of_lt (pred_lt hj h)) b₁ b₂ s)
+      b₁ b₂ s
+  else
+    k b₁ b₂ s
+termination_by j.toNat
+decreasing_by exact toNat_sub_one_lt_of_lt h
+
+/-- One step of `forDown2`. -/
+public theorem forDown2_eq {σ : Type u} {γ : Type w} {β₁ : Type v₁} {β₂ : Type v₂}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → σ → γ) →
+      β₁ → β₂ → σ → γ)
+    (k : β₁ → β₂ → σ → γ)
+    (j : USize) (hj : j.toNat ≤ hi.toNat) (b₁ : β₁) (b₂ : β₂) (s : σ) :
+    forDown2 lo hi body k j hj b₁ b₂ s =
+      if h : lo < j then
+        body (j - 1) (le_pred h) (pred_lt hj h) (fun b₁ b₂ s =>
+            forDown2 lo hi body k (j - 1) (Nat.le_of_lt (pred_lt hj h)) b₁ b₂ s)
+          b₁ b₂ s
+      else k b₁ b₂ s := by
+  rw [forDown2]
+
+/-! ## 3 variables -/
+
+/--
+The loop with 3 variables up from `j` to `hi - 1`: the body gets the next step as `next`, and the
+loop ends with `k`. It is specified by `forUp3_eq`.
+-/
+@[specialize]
+public def forUp3 {σ : Type u} {γ : Type w} {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → σ → γ) →
+      β₁ → β₂ → β₃ → σ → γ)
+    (k : β₁ → β₂ → β₃ → σ → γ)
+    (j : USize) (hlo : lo.toNat ≤ j.toNat) (b₁ : β₁) (b₂ : β₂) (b₃ : β₃) (s : σ) : γ :=
+  if hj : j < hi then
+    body j hlo hj (fun b₁ b₂ b₃ s =>
+        forUp3 lo hi body k (j + 1) (le_succ hlo hj) b₁ b₂ b₃ s)
+      b₁ b₂ b₃ s
+  else
+    k b₁ b₂ b₃ s
+termination_by hi.toNat - j.toNat
+decreasing_by exact sub_toNat_add_one_lt hj
+
+/-- One step of `forUp3`. -/
+public theorem forUp3_eq {σ : Type u} {γ : Type w} {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → σ → γ) →
+      β₁ → β₂ → β₃ → σ → γ)
+    (k : β₁ → β₂ → β₃ → σ → γ)
+    (j : USize) (hlo : lo.toNat ≤ j.toNat) (b₁ : β₁) (b₂ : β₂) (b₃ : β₃) (s : σ) :
+    forUp3 lo hi body k j hlo b₁ b₂ b₃ s =
+      if hj : j < hi then
+        body j hlo hj (fun b₁ b₂ b₃ s =>
+            forUp3 lo hi body k (j + 1) (le_succ hlo hj) b₁ b₂ b₃ s)
+          b₁ b₂ b₃ s
+      else k b₁ b₂ b₃ s := by
+  rw [forUp3]
+
+/--
+The loop with 3 variables down from `j - 1` to `lo`: the body gets the next step as `next`,
+and the loop ends with `k`. It is specified by `forDown3_eq`.
+-/
+@[specialize]
+public def forDown3 {σ : Type u} {γ : Type w} {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → σ → γ) →
+      β₁ → β₂ → β₃ → σ → γ)
+    (k : β₁ → β₂ → β₃ → σ → γ)
+    (j : USize) (hj : j.toNat ≤ hi.toNat) (b₁ : β₁) (b₂ : β₂) (b₃ : β₃) (s : σ) : γ :=
+  if h : lo < j then
+    body (j - 1) (le_pred h) (pred_lt hj h) (fun b₁ b₂ b₃ s =>
+        forDown3 lo hi body k (j - 1) (Nat.le_of_lt (pred_lt hj h)) b₁ b₂ b₃ s)
+      b₁ b₂ b₃ s
+  else
+    k b₁ b₂ b₃ s
+termination_by j.toNat
+decreasing_by exact toNat_sub_one_lt_of_lt h
+
+/-- One step of `forDown3`. -/
+public theorem forDown3_eq {σ : Type u} {γ : Type w} {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → σ → γ) →
+      β₁ → β₂ → β₃ → σ → γ)
+    (k : β₁ → β₂ → β₃ → σ → γ)
+    (j : USize) (hj : j.toNat ≤ hi.toNat) (b₁ : β₁) (b₂ : β₂) (b₃ : β₃) (s : σ) :
+    forDown3 lo hi body k j hj b₁ b₂ b₃ s =
+      if h : lo < j then
+        body (j - 1) (le_pred h) (pred_lt hj h) (fun b₁ b₂ b₃ s =>
+            forDown3 lo hi body k (j - 1) (Nat.le_of_lt (pred_lt hj h)) b₁ b₂ b₃ s)
+          b₁ b₂ b₃ s
+      else k b₁ b₂ b₃ s := by
+  rw [forDown3]
+
+/-! ## 4 variables -/
+
+/--
+The loop with 4 variables up from `j` to `hi - 1`: the body gets the next step as `next`, and the
+loop ends with `k`. It is specified by `forUp4_eq`.
+-/
+@[specialize]
+public def forUp4 {σ : Type u} {γ : Type w} {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    {β₄ : Type v₄}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → σ → γ) →
+      β₁ → β₂ → β₃ → β₄ → σ → γ)
+    (k : β₁ → β₂ → β₃ → β₄ → σ → γ)
+    (j : USize) (hlo : lo.toNat ≤ j.toNat) (b₁ : β₁) (b₂ : β₂) (b₃ : β₃) (b₄ : β₄) (s : σ) : γ :=
+  if hj : j < hi then
+    body j hlo hj (fun b₁ b₂ b₃ b₄ s =>
+        forUp4 lo hi body k (j + 1) (le_succ hlo hj) b₁ b₂ b₃ b₄ s)
+      b₁ b₂ b₃ b₄ s
+  else
+    k b₁ b₂ b₃ b₄ s
+termination_by hi.toNat - j.toNat
+decreasing_by exact sub_toNat_add_one_lt hj
+
+/-- One step of `forUp4`. -/
+public theorem forUp4_eq {σ : Type u} {γ : Type w} {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    {β₄ : Type v₄}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → σ → γ) →
+      β₁ → β₂ → β₃ → β₄ → σ → γ)
+    (k : β₁ → β₂ → β₃ → β₄ → σ → γ)
+    (j : USize) (hlo : lo.toNat ≤ j.toNat) (b₁ : β₁) (b₂ : β₂) (b₃ : β₃) (b₄ : β₄) (s : σ) :
+    forUp4 lo hi body k j hlo b₁ b₂ b₃ b₄ s =
+      if hj : j < hi then
+        body j hlo hj (fun b₁ b₂ b₃ b₄ s =>
+            forUp4 lo hi body k (j + 1) (le_succ hlo hj) b₁ b₂ b₃ b₄ s)
+          b₁ b₂ b₃ b₄ s
+      else k b₁ b₂ b₃ b₄ s := by
+  rw [forUp4]
+
+/--
+The loop with 4 variables down from `j - 1` to `lo`: the body gets the next step as `next`,
+and the loop ends with `k`. It is specified by `forDown4_eq`.
+-/
+@[specialize]
+public def forDown4 {σ : Type u} {γ : Type w} {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    {β₄ : Type v₄}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → σ → γ) →
+      β₁ → β₂ → β₃ → β₄ → σ → γ)
+    (k : β₁ → β₂ → β₃ → β₄ → σ → γ)
+    (j : USize) (hj : j.toNat ≤ hi.toNat) (b₁ : β₁) (b₂ : β₂) (b₃ : β₃) (b₄ : β₄) (s : σ) : γ :=
+  if h : lo < j then
+    body (j - 1) (le_pred h) (pred_lt hj h) (fun b₁ b₂ b₃ b₄ s =>
+        forDown4 lo hi body k (j - 1) (Nat.le_of_lt (pred_lt hj h)) b₁ b₂ b₃ b₄ s)
+      b₁ b₂ b₃ b₄ s
+  else
+    k b₁ b₂ b₃ b₄ s
+termination_by j.toNat
+decreasing_by exact toNat_sub_one_lt_of_lt h
+
+/-- One step of `forDown4`. -/
+public theorem forDown4_eq {σ : Type u} {γ : Type w} {β₁ : Type v₁} {β₂ : Type v₂} {β₃ : Type v₃}
+    {β₄ : Type v₄}
+    (lo hi : USize)
+    (body : (j : USize) → lo.toNat ≤ j.toNat → j.toNat < hi.toNat →
+      (β₁ → β₂ → β₃ → β₄ → σ → γ) →
+      β₁ → β₂ → β₃ → β₄ → σ → γ)
+    (k : β₁ → β₂ → β₃ → β₄ → σ → γ)
+    (j : USize) (hj : j.toNat ≤ hi.toNat) (b₁ : β₁) (b₂ : β₂) (b₃ : β₃) (b₄ : β₄) (s : σ) :
+    forDown4 lo hi body k j hj b₁ b₂ b₃ b₄ s =
+      if h : lo < j then
+        body (j - 1) (le_pred h) (pred_lt hj h) (fun b₁ b₂ b₃ b₄ s =>
+            forDown4 lo hi body k (j - 1) (Nat.le_of_lt (pred_lt hj h)) b₁ b₂ b₃ b₄ s)
+          b₁ b₂ b₃ b₄ s
+      else k b₁ b₂ b₃ b₄ s := by
+  rw [forDown4]
 
 /-! ## 5 variables -/
 

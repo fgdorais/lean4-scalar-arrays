@@ -10,7 +10,7 @@ anywhere to regenerate the other types, the root import lists and `.gitattribute
 generated files so that GitHub collapses them in diffs.
 `ScalarArray/Bytes.lean` and its tests come from `bytes_template.py`. That module is experimental,
 so the root `ScalarArray.lean` does not import it. `ScalarArray/Loop.lean` and the `Loops` part of
-each array, the loops with many variables, come from `loop_template.py`, `UInt16`'s included.
+each array, the loops with several variables, come from `loop_template.py`, `UInt16`'s included.
 With `--check`, it changes nothing and exits with status 1 if any generated file is out of date.
 """
 
@@ -146,7 +146,8 @@ private theorem beq_eq_beq_toArray (a b : UInt16Array) : (a == b) = (a.toArray =
 # The parts of each array module and of its tests, in import order. The float types leave out
 # `Decidable`: the lemmas and instances that need decidable equality or hashing, and their tests.
 PARTS = ['Basic', 'Array', 'Slice', 'Lemmas', 'Program', 'Loops', 'InPlace', 'Stride', 'Decidable']
-# `Loops`, the loops with many variables, comes from `loop_template.py` and has no tests of its own:
+# `Loops`, the loops with several variables, comes from `loop_template.py` and has no tests of its
+# own:
 # the notation's tests run it.
 TEST_PARTS = [p for p in PARTS if p != 'Loops']
 # Left out of the `USize` and `ISize` tests: `decide` can't evaluate their literals, since

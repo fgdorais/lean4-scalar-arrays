@@ -3,11 +3,12 @@
 """
 The template for `ScalarArray/Loop.lean` and `ScalarArray/UInt16/Loops.lean`, used by
 `generate.py`: the loops in continuation-passing style with `MIN_ARITY` to `MAX_ARITY` variables.
-The loops with fewer variables are written by hand in the `Program` template. `maxLoopVars` in
+The loops with one variable, `Tail.forIn` and `Tail.forInRev`, are written by hand in the `Program`
+template, with the lemmas that run them. `maxLoopVars` in
 `ScalarArray/Notation.lean` is `MAX_ARITY`.
 """
 
-MIN_ARITY = 5
+MIN_ARITY = 2
 MAX_ARITY = 8
 
 SUB = '₀₁₂₃₄₅₆₇₈₉'
@@ -58,20 +59,29 @@ def wrap(prefix, items, indent, width=100):
 
 
 def fold(text, width=100):
-    """Breaks the lines of `text` longer than `width`, after an arrow if possible, else at a space."""
+    """
+    Breaks the code lines of `text` longer than `width`, after an arrow if possible, else at a
+    space. Comments are left alone.
+    """
     out = []
+    in_doc = False
     for line in text.split('\n'):
-        while len(line) > width:
-            indent = len(line) - len(line.lstrip())
-            cont = ' ' * (4 if indent == 0 else indent + 2)
-            i = line.rfind(' → ', 0, width - 1)
-            if i > indent:
-                head, rest = line[:i + 2], line[i + 3:]
-            else:
-                i = line.rfind(' ', indent + 1, width + 1)
-                head, rest = line[:i], line[i + 1:]
-            out.append(head)
-            line = cont + rest
+        if line.startswith('/-'):
+            in_doc = not line.rstrip().endswith('-/')
+        elif in_doc:
+            in_doc = not line.rstrip().endswith('-/')
+        else:
+            while len(line) > width:
+                indent = len(line) - len(line.lstrip())
+                cont = ' ' * (4 if indent == 0 else indent + 2)
+                i = line.rfind(' → ', 0, width - 1)
+                if i > indent:
+                    head, rest = line[:i + 2], line[i + 3:]
+                else:
+                    i = line.rfind(' ', indent + 1, width + 1)
+                    head, rest = line[:i], line[i + 1:]
+                out.append(head)
+                line = cont + rest
         out.append(line)
     return '\n'.join(out)
 
@@ -97,8 +107,9 @@ def kernel(n, up):
                 f'      {b} s\n')
         measure = ('termination_by hi.toNat - j.toNat\n'
                    'decreasing_by exact sub_toNat_add_one_lt hj\n')
-        doc = (f'/--\nThe loop with {n} variables up from `j` to `hi - 1`: the body gets the next '
-               f'step as `next`, and the\nloop ends with `k`. It is specified by `{name}_eq`.\n-/\n')
+        doc = (f'/--\nThe loop with {n} variables up from `j` to `hi - 1`: the body gets the '
+               f'next step as `next`, and the\nloop ends with `k`. It is specified by '
+               f'`{name}_eq`.\n-/\n')
     else:
         index = '(j : USize) (hj : j.toNat ≤ hi.toNat)'
         step = (f'  if h : lo < j then\n'
@@ -107,8 +118,9 @@ def kernel(n, up):
                 f'      {b} s\n')
         measure = ('termination_by j.toNat\n'
                    'decreasing_by exact toNat_sub_one_lt_of_lt h\n')
-        doc = (f'/--\nThe loop with {n} variables down from `j - 1` to `lo`: the body gets the next '
-               f'step as `next`,\nand the loop ends with `k`. It is specified by `{name}_eq`.\n-/\n')
+        doc = (f'/--\nThe loop with {n} variables down from `j - 1` to `lo`: the body gets the '
+               f'next step as `next`,\nand the loop ends with `k`. It is specified by '
+               f'`{name}_eq`.\n-/\n')
     args = wrap('    ', [index] + bs(n) + ['(s : σ) : γ :=' ], 4)
     return (doc + '@[specialize]\n' + binders + '\n'
             + '    (lo hi : USize)\n'
@@ -161,7 +173,7 @@ def loop_module():
 import all ScalarArray.Internal
 
 /-!
-# Loops with many variables
+# Loops with several variables
 
 The loops in continuation-passing style of the arrays' tail programs with %d to %d variables,
 `XArray.InPlace.Tail.forIn%d`, … and `XArray.InPlace.Tail.forInRev%d`, …, over any state `σ`: each
@@ -293,18 +305,23 @@ def wrapper_eq(n, up, start):
 
 
 def loops_module():
-    """`ScalarArray/UInt16/Loops.lean`, the template of each array's loops with many variables."""
+    """`ScalarArray/UInt16/Loops.lean`, the template of each array's loops with several
+    variables."""
+    lo, hi = MIN_ARITY, MAX_ARITY
+    doc = (f'The loops in continuation-passing style of `UInt16Array.InPlace.Tail` with {lo} to '
+           f'{hi} variables:\n`Tail.forIn{lo}`, … `Tail.forIn{hi}`, and `Tail.forInRev{lo}`, … '
+           f'`Tail.forInRev{hi}` downward. Like\n`Tail.forIn`, each variable is an argument of '
+           f'the loop, so scalars stay unboxed, and nested loops\nallocate nothing. They wrap '
+           f'the loops of `ScalarArray.Loop`, and they are specified by their\none-step '
+           f'equations, `Tail.forIn{lo}From_eq`, …')
     out = [HEADER, f'''public import ScalarArray.UInt16.Program
 public import ScalarArray.Loop
 import all ScalarArray.UInt16.Program
 
 /-!
-# Loops with many variables on `UInt16Array`
+# Loops with several variables on `UInt16Array`
 
-The loops in continuation-passing style of `UInt16Array.InPlace.Tail` with {MIN_ARITY} to {MAX_ARITY} variables,
-`Tail.forIn{MIN_ARITY}`, … `Tail.forIn{MAX_ARITY}` and `Tail.forInRev{MIN_ARITY}`, … `Tail.forInRev{MAX_ARITY}`, like `Tail.forIn4`: each
-variable is an argument of the loop, so scalars stay unboxed, and nested loops allocate nothing.
-They are specified by their one-step equations, `Tail.forIn{MIN_ARITY}From_eq`, …
+{doc}
 
 This module is generated by `scripts/generate.py`, from `scripts/loop_template.py`.
 -/
