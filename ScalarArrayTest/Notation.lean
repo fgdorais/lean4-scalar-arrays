@@ -574,13 +574,171 @@ private def offsetRows (a : UInt32Array) (rows : USize) : Option (UInt32 × UInt
 #guard offsetRows (UInt32Array.mk #[1, 2, 3, 4, 10, 20, 30, 40, 7]) 2 ==
   some (110, UInt32Array.mk #[1, 3, 6, 10, 20, 40, 70, 110, 7])
 
--- A loop has at most four variables.
-/-- error: a loop has at most four variables -/
+/-!
+Loops with five to eight variables, which stay unboxed too: a filter whose taps are the loop's
+variables, `a[j] := a[j] + 3 x₁ + 5 x₂ + …` with `x₁, …` the elements before `a[j]`, upward and
+downward, nested, with `break` and with `while`.
+-/
+
+/-- The filter on the list `l` with the taps `xs`, and the sum of the last taps. -/
+private def firModel (xs : List UInt64) (l : List UInt64) : UInt64 × List UInt64 :=
+  let cs : List UInt64 := [3, 5, 7, 11, 13, 17, 19, 23]
+  let (xs, out) := l.foldl (init := (xs, [])) fun (xs, out) v =>
+    (xs.tail ++ [v], out ++ [v + ((cs.zip xs).map fun (c, x) => c * x).sum])
+  (xs.sum, out)
+
+/-- The filter with five taps. -/
+private def fir5 (a : UInt64Array) : UInt64 × UInt64Array :=
+  have := a.toNat_usize_le
+  inplace a do
+    for j in 0...a.usize with (x₁ : UInt64 := 0) (x₂ : UInt64 := 1) (x₃ : UInt64 := 2)
+        (x₄ : UInt64 := 3) (x₅ : UInt64 := 4) do
+      let v := a[j]
+      a[j] := v + 3 * x₁ + 5 * x₂ + 7 * x₃ + 11 * x₄ + 13 * x₅
+      (x₁, x₂, x₃, x₄, x₅) := (x₂, x₃, x₄, x₅, v)
+    return x₁ + x₂ + x₃ + x₄ + x₅
+
+/-- The filter with six taps. -/
+private def fir6 (a : UInt64Array) : UInt64 × UInt64Array :=
+  have := a.toNat_usize_le
+  inplace a do
+    for j in 0...a.usize with (x₁ : UInt64 := 0) (x₂ : UInt64 := 1) (x₃ : UInt64 := 2)
+        (x₄ : UInt64 := 3) (x₅ : UInt64 := 4) (x₆ : UInt64 := 5) do
+      let v := a[j]
+      a[j] := v + 3 * x₁ + 5 * x₂ + 7 * x₃ + 11 * x₄ + 13 * x₅ + 17 * x₆
+      (x₁, x₂, x₃, x₄, x₅, x₆) := (x₂, x₃, x₄, x₅, x₆, v)
+    return x₁ + x₂ + x₃ + x₄ + x₅ + x₆
+
+/-- The filter with seven taps. -/
+private def fir7 (a : UInt64Array) : UInt64 × UInt64Array :=
+  have := a.toNat_usize_le
+  inplace a do
+    for j in 0...a.usize with (x₁ : UInt64 := 0) (x₂ : UInt64 := 1) (x₃ : UInt64 := 2)
+        (x₄ : UInt64 := 3) (x₅ : UInt64 := 4) (x₆ : UInt64 := 5) (x₇ : UInt64 := 6) do
+      let v := a[j]
+      a[j] := v + 3 * x₁ + 5 * x₂ + 7 * x₃ + 11 * x₄ + 13 * x₅ + 17 * x₆ + 19 * x₇
+      (x₁, x₂, x₃, x₄, x₅, x₆, x₇) := (x₂, x₃, x₄, x₅, x₆, x₇, v)
+    return x₁ + x₂ + x₃ + x₄ + x₅ + x₆ + x₇
+
+/-- The filter with eight taps. -/
+private def fir8 (a : UInt64Array) : UInt64 × UInt64Array :=
+  have := a.toNat_usize_le
+  inplace a do
+    for j in 0...a.usize with (x₁ : UInt64 := 0) (x₂ : UInt64 := 1) (x₃ : UInt64 := 2)
+        (x₄ : UInt64 := 3) (x₅ : UInt64 := 4) (x₆ : UInt64 := 5) (x₇ : UInt64 := 6)
+        (x₈ : UInt64 := 7) do
+      let v := a[j]
+      a[j] := v + 3 * x₁ + 5 * x₂ + 7 * x₃ + 11 * x₄ + 13 * x₅ + 17 * x₆ + 19 * x₇ + 23 * x₈
+      (x₁, x₂, x₃, x₄, x₅, x₆, x₇, x₈) := (x₂, x₃, x₄, x₅, x₆, x₇, x₈, v)
+    return x₁ + x₂ + x₃ + x₄ + x₅ + x₆ + x₇ + x₈
+
+/-- The filter with eight taps, from the last element down to the first. -/
+private def fir8Rev (a : UInt64Array) : UInt64 × UInt64Array :=
+  have := a.toNat_usize_le
+  inplace a do
+    for j in reverse 0...a.usize with (x₁ : UInt64 := 0) (x₂ : UInt64 := 1) (x₃ : UInt64 := 2)
+        (x₄ : UInt64 := 3) (x₅ : UInt64 := 4) (x₆ : UInt64 := 5) (x₇ : UInt64 := 6)
+        (x₈ : UInt64 := 7) do
+      let v := a[j]
+      a[j] := v + 3 * x₁ + 5 * x₂ + 7 * x₃ + 11 * x₄ + 13 * x₅ + 17 * x₆ + 19 * x₇ + 23 * x₈
+      (x₁, x₂, x₃, x₄, x₅, x₆, x₇, x₈) := (x₂, x₃, x₄, x₅, x₆, x₇, x₈, v)
+    return x₁ + x₂ + x₃ + x₄ + x₅ + x₆ + x₇ + x₈
+
+private def firInput : List UInt64 :=
+  (List.range 20).map fun i => (i * 0x9E3779B97F4A7C15 : Nat).toUInt64
+
+private def firCheck (f : UInt64Array → UInt64 × UInt64Array) (n : Nat) : Bool :=
+  let (s, a) := f (UInt64Array.mk firInput.toArray)
+  (s, a.toList) == firModel ((List.range n).map (·.toUInt64)) firInput
+
+#guard firCheck fir5 5
+#guard firCheck fir6 6
+#guard firCheck fir7 7
+#guard firCheck fir8 8
+#guard
+  let (s, a) := fir8Rev (UInt64Array.mk firInput.toArray)
+  let (s', l) := firModel ((List.range 8).map (·.toUInt64)) firInput.reverse
+  s == s' && a.toList == l.reverse
+
+/--
+The filter with eight taps on each row of `w` elements, which starts its taps at the row's sum so
+far, and stops a row at its first zero; returns the number of rows and the sum of the last taps.
+-/
+private def firRows (a : UInt64Array) (w : USize) : Option ((Nat × UInt64) × UInt64Array) :=
+  have := a.toNat_usize_le
+  let rows := a.usize / w
+  if h : rows.toNat * w.toNat ≤ a.size ∧ a.size < USize.size then
+    some <| inplace a do
+      for hr : r in 0...rows with (n := 0) (t : UInt64 := 0) do
+        for hc : c in 0...w with (x₁ : UInt64 := t) (x₂ : UInt64 := 1) (x₃ : UInt64 := 2)
+            (x₄ : UInt64 := 3) (x₅ : UInt64 := 4) (x₆ : UInt64 := 5) (x₇ : UInt64 := 6)
+            (x₈ : UInt64 := 7) do
+          have hrc : r.toNat * w.toNat + c.toNat < a.size := by
+            have := Nat.mul_le_mul_right w.toNat (show r.toNat + 1 ≤ rows.toNat by lia)
+            rw [Nat.add_mul] at this; lia
+          have hi : (r * w + c).toNat < a.size := by
+            have : r.toNat * w.toNat < USize.size := by lia
+            rw [USize.toNat_add, USize.toNat_mul, Nat.mod_eq_of_lt this, Nat.mod_eq_of_lt (by lia)]
+            exact hrc
+          let v := a[r * w + c]
+          if v = 0 then break
+          a[r * w + c] := v + 3 * x₁ + 5 * x₂ + 7 * x₃ + 11 * x₄ + 13 * x₅ + 17 * x₆ + 19 * x₇ +
+            23 * x₈
+          (x₁, x₂, x₃, x₄, x₅, x₆, x₇, x₈) := (x₂, x₃, x₄, x₅, x₆, x₇, x₈, v)
+        n := n + 1
+        t := x₁ + x₂ + x₃ + x₄ + x₅ + x₆ + x₇ + x₈
+      return (n, t)
+  else none
+
+/-- `firRows` on lists. -/
+private def firRowsModel (l : List UInt64) (w : Nat) : (Nat × UInt64) × List UInt64 :=
+  let rows := l.length / w
+  let (t, out) := (List.range rows).foldl (init := ((0 : UInt64), ([] : List UInt64)))
+    fun (t, out) r =>
+      let row := (l.drop (r * w)).take w
+      let pre := row.takeWhile (· ≠ 0)
+      let (s, row') := firModel (t :: (List.range' 1 7).map (·.toUInt64)) pre
+      (s, out ++ row' ++ row.drop pre.length)
+  ((rows, t), out ++ l.drop (rows * w))
+
+#guard
+  let l : List UInt64 := [5, 1, 0, 9, 2, 3, 4, 8, 7, 7, 6, 0, 5, 4, 3, 2, 1, 1, 9]
+  match firRows (UInt64Array.mk l.toArray) 6 with
+  | some ((n, t), a) => ((n, t), a.toList) == firRowsModel l 6
+  | none => false
+
+/--
+The sums of the first elements below `m`, which it clears, and of all but the last six of them,
+with eight variables through `while`.
+-/
+private def whileSum (a : UInt32Array) (m : UInt32) : Nat × UInt32Array :=
+  have := a.toNat_usize_le
+  inplace a do
+    while h : i.toNat < a.size with (i : USize := 0) (s₀ := 0) (s₁ := 0) (s₂ := 0) (s₃ := 0)
+        (s₄ := 0) (s₅ := 0) (s₆ := 0) do
+      have hi : i.toNat < a.size := by inplace_bound
+      let x := a[i]
+      if x < m then
+        a[i] := 0
+        (s₀, s₁, s₂, s₃, s₄, s₅, s₆) := (s₀ + x.toNat, s₀, s₁, s₂, s₃, s₄, s₅)
+        i := i + 1
+      else break
+    return s₀ + s₆
+
+#guard whileSum (UInt32Array.mk #[1, 2, 3, 4, 5, 6, 7, 8, 9, 50, 10]) 20 ==
+  (45 + 6, UInt32Array.mk #[0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 10])
+#guard whileSum (UInt32Array.mk #[1, 2, 3]) 20 == (6, UInt32Array.mk #[0, 0, 0])
+
+-- A loop has at most eight variables.
+/--
+error: a loop has at most 8 variables: carry the others in a structure, or split the loop
+-/
 #guard_msgs in
 example (a : UInt8Array) : Unit × UInt8Array :=
   inplace a do
-    for j in 0...0 with (x := 0) (y := 0) (z := 0) (u := 0) (v := 0) do
-      x := y + z + u + v
+    for j in 0...0 with (x₁ := 0) (x₂ := 0) (x₃ := 0) (x₄ := 0) (x₅ := 0) (x₆ := 0) (x₇ := 0)
+        (x₈ := 0) (x₉ := 0) do
+      x₁ := x₉
 
 -- A `let` can't shadow a mutable variable, as in `do` notation: assign it instead.
 /--
