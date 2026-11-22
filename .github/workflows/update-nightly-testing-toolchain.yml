@@ -9,6 +9,9 @@ concurrency:
   group: update-nightly-testing
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   update-nightly-testing:
     runs-on: ubuntu-latest
@@ -17,7 +20,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: nightly-testing
-          token: ${{ secrets.BATTERIES_CELL_TOKEN }}
+          persist-credentials: false
 
       - name: Gather revisions and update toolchain
         id: toolchain
@@ -56,12 +59,15 @@ jobs:
 
       - name: Commit update
         if: steps.toolchain.outputs.updated == 'true'
+        # Pushed with the token, so that the push runs the CD pipeline on nightly-testing.
         env:
           TOOLCHAIN_REV: ${{ steps.toolchain.outputs.toolchain_rev }}
+          TOKEN: ${{ secrets.BATTERIES_CELL_TOKEN }}
         run: |
           git config user.name "${{ github.actor }}"
           git config user.email \
             "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
           git add lean-toolchain lake-manifest.json
           git commit -m "chore: update toolchain to ${TOOLCHAIN_REV}"
-          git push origin nightly-testing
+          git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            HEAD:nightly-testing
