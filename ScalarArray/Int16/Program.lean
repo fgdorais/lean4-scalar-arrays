@@ -43,7 +43,7 @@ it threads two states, one for each array.
 
 Tail programs also have loops in continuation-passing style, `Tail.forIn lo hi init body k` and
 `Tail.forInRev`, with up to four variables in `Tail.forIn2`, `Tail.forIn3`, `Tail.forIn4`, and so
-on. Their body is itself a tail program, which ends by calling a continuation `next` on the next
+on, and up to eight in `Tail.forIn5`, … `Tail.forIn8` of `ScalarArray.Int16.Loops`. Their body is itself a tail program, which ends by calling a continuation `next` on the next
 variables, and the loop ends with `k`. Each variable is an argument of the loop, so scalars stay
 unboxed, and a nested loop, whose `k` calls the outer `next`, compiles to mutually recursive loops
 with no allocation. They are specified by their one-step equations (`Tail.forInFrom_eq`, …).
@@ -990,7 +990,8 @@ variables, and ends by calling `next` on the next variables, which runs the next
 the last one. So the variables are arguments of the loop, and a scalar stays unboxed, and a nested
 loop, whose `k` calls the outer `next`, allocates nothing either. A body that doesn't call `next`
 leaves the loop early. `Tail.forIn2`, `Tail.forIn3` and `Tail.forIn4` take two, three and four
-variables, each its own argument.
+variables, each its own argument, and `Tail.forIn5`, … `Tail.forIn8` of `ScalarArray.Int16.Loops`
+up to eight.
 -/
 @[inline, expose]
 public def forIn {β : Type v}
