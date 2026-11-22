@@ -8,6 +8,9 @@ concurrency:
   group: cd-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   run-cd:
     uses: ./.github/workflows/build.yml
@@ -16,13 +19,17 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: run-cd
     runs-on: ubuntu-latest
+    # Shares its group with Update Nightly Toolchain, so that the two never push at the same time.
+    concurrency:
+      group: update-nightly-testing
+      cancel-in-progress: false
     steps:
       - name: Checkout nightly-testing
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: nightly-testing
           fetch-depth: 0
-          token: ${{ secrets.BATTERIES_CELL_TOKEN }}
+          persist-credentials: false
 
       - name: Merge main into nightly-testing
         id: merge
@@ -84,7 +91,16 @@ jobs:
           lake update --keep-toolchain
           git add lake-manifest.json
 
+      # Pushed with the token, so that the push runs the CD pipeline on nightly-testing. Skipped when
+      # main brings no change to nightly-testing's files.
       - name: Commit and push
+        env:
+          TOKEN: ${{ secrets.BATTERIES_CELL_TOKEN }}
         run: |
-          git commit --allow-empty -m "chore: merge main into nightly-testing"
-          git push origin nightly-testing
+          if git diff --cached --quiet HEAD; then
+            echo "main brings no change to nightly-testing."
+            exit 0
+          fi
+          git commit -m "chore: merge main into nightly-testing"
+          git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            HEAD:nightly-testing

@@ -1,14 +1,22 @@
 name: Publish Docs
 
-# Regenerates the docs from the chosen branch or tag, without making a release.
+# Regenerates the docs from the chosen branch or tag and deploys them to the `docs` branch. Run by
+# hand, it makes no release; the Release workflow calls it with `release: true`, which also attaches
+# the docs to the tag's release.
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      release:
+        description: "Also attach the docs to the release for the tag"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
-  deploy-docs:
+  docs:
     runs-on: ubuntu-latest
     steps:
 
@@ -23,6 +31,25 @@ jobs:
       - name: Build Docs
         working-directory: docs
         run: lake build --keep-toolchain ScalarArray:docs
+
+      - name: Compress Docs
+        if: inputs.release
+        working-directory: docs
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          tar -czf "docs-${TAG_NAME}.tar.gz" doc doc-data
+          zip -rq "docs-${TAG_NAME}.zip" doc doc-data
+
+      # Creates the release for the tag, or adds the files to it if it already exists.
+      - name: Release
+        if: inputs.release
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          files: |
+            docs/docs-${{ github.ref_name }}.tar.gz
+            docs/docs-${{ github.ref_name }}.zip
+          fail_on_unmatched_files: true
 
       # GitHub Pages serves the `docs` branch. The generated files are ignored on `main`, hence
       # `-f`.

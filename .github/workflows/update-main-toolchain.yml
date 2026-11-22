@@ -9,6 +9,9 @@ concurrency:
   group: update-main-toolchain
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   update-main-toolchain:
     runs-on: ubuntu-latest
@@ -18,7 +21,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-          token: ${{ secrets.BATTERIES_CELL_TOKEN }}
+          persist-credentials: false
 
       - name: Gather revisions and update toolchain
         id: toolchain
@@ -67,7 +70,10 @@ jobs:
         if: steps.toolchain.outputs.updated == 'true'
         run: lake update --keep-toolchain
 
+      # Opened with the token, since pull requests opened with the workflow's own token don't run
+      # CI.
       - name: Create pull request
+        id: pr
         if: steps.toolchain.outputs.updated == 'true'
         uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
         with:
@@ -77,3 +83,15 @@ jobs:
           base: main
           delete-branch: true
           title: "chore: update toolchain to ${{ steps.toolchain.outputs.toolchain_rev }}"
+
+      # Squash-merges the pull request once the checks that the `main` ruleset requires pass. With
+      # the token, so that the merge runs the CD pipeline. Only warns if auto-merge can't be turned
+      # on, for example when the ruleset requires no checks.
+      - name: Enable auto-merge
+        if: steps.pr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.BATTERIES_CELL_TOKEN }}
+          PR: ${{ steps.pr.outputs.pull-request-number }}
+        run: |
+          gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --auto --squash ||
+            echo "::warning::Could not turn on auto-merge for #${PR}."
