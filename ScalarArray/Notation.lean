@@ -175,7 +175,8 @@ The bound of each index is proved by the tactic `inplace_bound`, from the hypoth
 It looks inside conjunctions. A loop body has both bounds of its index, `lo.toNat ≤ j.toNat` and
 `j.toNat < hi.toNat`, in context, and the program has `a.usize.toNat ≤ a.size`, so `a.usize`
 works as a loop bound with no other hypothesis. A bound that needs more is given by a `have`
-before the index, or by a hypothesis around the program, and a bound that `inplace_bound` can't
+before the index, or by a hypothesis around the program, about `a.size` or `a.usize` (such as
+`0 < a.usize`, so that `a.usize - 1` doesn't wrap around), and a bound that `inplace_bound` can't
 prove is reported with its goal. For example, in this left shift of 64-bit limbs by
 1111 bits:
 
@@ -1117,13 +1118,16 @@ macro_rules
     let progS ← expandSeq ps (ending true) #[] none (← ending true (← `(()))) stmts
     -- They are bound by a function application, not by `let`, which fails to elaborate when the
     -- program has metavariables left for later, such as the types of loop variables.
+    -- `usize = a.usize` is in context too, so that hypotheses about `a.usize` around the program
+    -- prove bounds inside it.
     let run ← `((fun ($size : Nat) ($p.hsize : ($a).size = $size) ($p.usize : USize)
-          (_ : ($p.usize).toNat ≤ ($a).size) => ($a).runInPlaceThenOf $size $p.hsize $prog)
-        ($a).size rfl ($a).usize ($a).toNat_usize_le)
+          (_ : ($p.usize).toNat ≤ ($a).size) (_ : $p.usize = ($a).usize) =>
+          ($a).runInPlaceThenOf $size $p.hsize $prog)
+        ($a).size rfl ($a).usize ($a).toNat_usize_le rfl)
     let runS ← `((fun ($size : Nat) ($p.hsize : ($a).size = $size) ($p.usize : USize)
-          (_ : ($p.usize).toNat ≤ ($a).size) =>
+          (_ : ($p.usize).toNat ≤ ($a).size) (_ : $p.usize = ($a).usize) =>
           ($a).runInPlaceThenOf $size $p.hsize fun $bigN $off $hw $mk $hmk => $progS)
-        ($a).size rfl ($a).usize ($a).toNat_usize_le)
+        ($a).size rfl ($a).usize ($a).toNat_usize_le rfl)
     return mkChoose a run runS
   | `(inplace $e do $_;* $[then $_]?) =>
     Lean.Macro.throwErrorAt e "`inplace` needs the array as a local variable: bind it first, as \
