@@ -72,7 +72,7 @@ inplace a do
   one for `*...hi`). `for j in lo...hi by s do …` runs over `lo`, `lo + s`, … below `hi`, for
   `s > 0`, and `reverse` runs over the same indices downward.
 * An optional `with (x := init) …` clause names the loop's variables, as `(x : t := init)` with
-  their types: up to four, which the loop keeps as separate unboxed arguments. They are mutable in
+  their types: up to eight, which the loop keeps as separate unboxed arguments. They are mutable in
   the body, and they hold their last values after the loop. Loops nest, and a nested loop
   allocates nothing either.
 * `while c do …` and `while h : c do …` loop while `c` holds, with a `with` clause like `for`. The
@@ -200,7 +200,7 @@ else UInt64Array.mk (Array.replicate a.size 0)
   may use `a`, and so may `then k`, which runs after the program, but `k` keeps the old array alive
   if it uses more than its size.
 * Reads are written `a[i]`, not `← a[i]`: `←` runs a program.
-* A loop has at most four variables.
+* A loop has at most eight variables.
 * A block has at least one statement.
 * A program makes the array exclusive before it runs, even when it only reads, so a shared array
   is copied. For a computation that only reads, use plain reads `a[i]`, `foldl` or the folds of
@@ -648,6 +648,9 @@ private def lam (j hlo hj next : Ident) (xs : Array Ident) (body : Term) : Macro
   if xs.isEmpty then `(fun $j $hlo $hj $next _ => $body) else
     `(fun $j $hlo $hj $next $xs* => $body)
 
+/-- The most variables a loop can have, which the loop keeps as separate arguments. -/
+private def maxLoopVars : Nat := 8
+
 /-- The variables of a `with` clause and their initial values, with their types. -/
 private def loopVars (vars : Option (TSyntax ``inplaceLoopVars)) :
     MacroM (Array Ident × Array Term) := do
@@ -658,13 +661,14 @@ private def loopVars (vars : Option (TSyntax ``inplaceLoopVars)) :
     | (init, none) => pure init
   return (xs, inits)
 
-/-- The loop function, `.forIn`, `.forIn2`, … or `.forInRev`, …, for `n` variables. -/
+/--
+The loop function, `.forIn`, `.forIn2`, … `.forIn8` or `.forInRev`, …, for `n` variables: up to
+`maxLoopVars`, the largest arity of the loops of `scripts/loop_template.py`.
+-/
 private def loopFn (rev : Bool) (n : Nat) : MacroM Term :=
-  match rev, n with
-  | false, 0 | false, 1 => `(.forIn) | false, 2 => `(.forIn2) | false, 3 => `(.forIn3)
-  | false, _ => `(.forIn4)
-  | true, 0 | true, 1 => `(.forInRev) | true, 2 => `(.forInRev2) | true, 3 => `(.forInRev3)
-  | true, _ => `(.forInRev4)
+  let base := if rev then "forInRev" else "forIn"
+  let f := mkIdent (Name.mkSimple (if n ≤ 1 then base else base ++ toString n))
+  `(.$f:ident)
 
 /-- The innermost loop of a statement: the calls that `continue` and `break` make. -/
 private structure InplaceLoop where
@@ -997,7 +1001,9 @@ private partial def expandLoop (p : Arr) (ending : Term → MacroM Term) (rest :
     (xs : Array Ident) (b : List (TSyntax `inplaceStmt)) (brk : Bool)
     (mkBody : Ident → Term → Term → MacroM Term) (mkLoop : Term → Term → MacroM Term) :
     MacroM Term := do
-  if xs.size > 4 then Macro.throwError "a loop has at most four variables"
+  if xs.size > maxLoopVars then
+    Macro.throwError s!"a loop has at most {maxLoopVars} variables: carry the others in a \
+      structure, or split the loop"
   -- The body ends by calling `next` on the loop's variables, which runs the next step, and the
   -- loop ends by calling the rest of the program itself: the variables are arguments of both,
   -- so they stay unboxed, and a nested loop ends by calling the outer `next`.
