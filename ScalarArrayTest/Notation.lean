@@ -1033,6 +1033,39 @@ private def sumSlice (s : UInt8Array.Slice) : Nat :=
 
 #guard sumSlice (UInt8Array.mk #[1, 2, 3, 4])[1...3] == 205
 
+-- A hypothesis about `s.usize` or `a.usize` around the program proves bounds inside it (#105).
+private def firstOfSlice (s : UInt8Array.Slice) : Option UInt8 :=
+  if h : 0 < s.usize.toNat then
+    some (inplace s do
+      let x := s[0]
+      return x).1
+  else none
+
+#guard firstOfSlice (UInt8Array.mk #[7, 8, 9])[1...*] == some 8
+#guard firstOfSlice (UInt8Array.mk #[7, 8, 9])[3...*] == none
+
+/-- Shifts all elements but the last one up by one place. -/
+private def shiftUpAll (a : UInt8Array) : UInt8Array :=
+  if h : 0 < a.usize.toNat then
+    (inplace a do
+      for j in reverse 0...a.usize - 1 do
+        a[j + 1] := a[j]).2
+  else a
+
+#guard shiftUpAll (UInt8Array.mk #[1, 2, 3, 4]) == UInt8Array.mk #[1, 1, 2, 3]
+#guard shiftUpAll (UInt8Array.mk #[]) == UInt8Array.mk #[]
+
+/-- Averages each inner element of a slice with its left neighbour. -/
+private def smoothSlice (s : UInt8Array.Slice) : UInt8Array.Slice :=
+  if h : 0 < s.usize then
+    (inplace s do
+      for j in reverse 1...s.usize - 1 do
+        s[j] := s[j] / 2 + s[j - 1] / 2).2
+  else s
+
+#guard (smoothSlice (UInt8Array.mk #[0, 4, 8, 12, 16])[1...*]).toArray == #[4, 6, 10, 16]
+#guard (smoothSlice (UInt8Array.mk #[0, 4])[2...*]).toArray == #[]
+
 -- A slice of an exclusive array is written in place, and a shared one copied.
 @[noinline] def UInt32Array.inplaceSliceInPlace (x : UInt32) : Bool :=
   let a := (UInt32Array.emptyWithCapacity 4).push x |>.push 2 |>.push 3
