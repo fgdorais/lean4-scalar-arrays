@@ -234,7 +234,7 @@ passes, one `foldlInPlace2Then` for each result.
     have hx : (0 : USize).toNat + len.toNat ≤ a.size := by simp; lia
     have hy : len.toNat + len.toNat ≤ a.size := by lia
     have ht : (2 * len).toNat + len.toNat ≤ a.size := by lia
-    let r := inplace a do
+    inplace a do
       for j in 0...len with (c := 0) (b := 0) do
         let x := a[0 + j]
         let y := a[len + j]
@@ -243,8 +243,7 @@ passes, one `foldlInPlace2Then` for each result.
         a[2 * len + j] := x - y - b
         c := carry x s c
         b := borrow x y b
-      return (c, b)
-    (r.2, r.1.1 + r.1.2)
+      return (a, c + b)
   else (a, 0)
 
 /-- The same one-pass butterfly in the notation, with the carries handed to `then`. -/
@@ -281,10 +280,10 @@ passes, one `foldlInPlace2Then` for each result.
   if h : s.Fits m.toNat a.size ∧ a.size < USize.size then
     let o := s.off.toUSize
     let c := s.inc.toUSize
-    (inplace a do
+    inplace a do
       for k in 0...m do
         have hk : (o + c * k).toNat < a.size := s.toNat_idx_toUSize_lt h.1 h.2 (by assumption)
-        a[o + c * k] := 2 * a[o + c * k]).2
+        a[o + c * k] := 2 * a[o + c * k]
   else a
 
 /-- The cosine of the plane rotations. -/
@@ -335,9 +334,9 @@ termination_by x.size - i
 /-- `doubleStride` on all the elements, as a contiguous loop. -/
 @[noinline] def doubleAll (a : Float64Array) : Float64Array :=
   have := a.toNat_usize_le
-  (inplace a do
+  inplace a do
     for k in 0...a.usize do
-      a[k] := 2 * a[k]).2
+      a[k] := 2 * a[k]
 
 /-- Runs a butterfly on windows of `len` limbs `reps` times, and returns a checksum. -/
 @[inline] def butterflies (k : UInt64Array → USize → UInt64Array × UInt64) (a : UInt64Array)
@@ -393,20 +392,19 @@ def extras (rounds n : Nat) : IO (List Row) := do
     ← one "UInt64 clamp, inplace notation" w fun a _ =>
       let m : UInt64 := (1 : UInt64) <<< 63
       have := a.toNat_usize_le
-      let r := inplace a do
+      inplace a do
         for j in 0...a.usize with (k := (0 : UInt64)) do
           if a[j] > m then
             a[j] := m
             k := k + 1
-        return k
-      r.1,
+        return k,
     ← one "UInt64 rows of 4, nested inplace loops" w fun a _ =>
       have := a.toNat_usize_le
       let rows := a.usize / 4
       have : 4 * rows.toNat ≤ a.size ∧ 4 * rows.toNat < USize.size := by
         have := USize.toNat_lt_size a.usize
         simp only [rows, USize.toNat_div]; lia
-      let r := inplace a do
+      inplace a do
         for r in 0...rows with (tot := (0 : UInt64)) do
           for c in 0...4 with (acc := (0 : UInt64)) (t := tot) do
             have hc : (4 * r + c).toNat < a.size := by inplace_bound
@@ -415,8 +413,7 @@ def extras (rounds n : Nat) : IO (List Row) := do
             a[4 * r + c] := acc
             t := t + x
           tot := t
-        return tot
-      r.1,
+        return tot,
     -- Ten passes over one array, so that only the first copies it.
     ← one "Float64 double ×10, contiguous inplace loop" f fun a _ =>
       (Nat.fold 10 (fun _ _ a => doubleAll a) a).size.toUInt64,

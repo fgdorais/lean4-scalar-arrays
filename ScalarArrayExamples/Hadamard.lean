@@ -93,7 +93,7 @@ program, so the array is checked for sharing once instead of once per stage.
 
 /-- The transform, for an array whose size is `2 ^ k`. -/
 def fwht (a : Int32Array) (k : USize) : Int32Array :=
-  (inplace a do
+  inplace a do
     for s in 0...k do
       let h : USize := 1 <<< s
       for j in 0...a.usize do
@@ -102,7 +102,7 @@ def fwht (a : Int32Array) (k : USize) : Int32Array :=
             let x := a[j]
             let y := a[j + h]
             a[j] := x + y
-            a[j + h] := x - y).2
+            a[j + h] := x - y
 
 #guard fwht (.mk #[1, 2, 3, 4]) 2 == spec (.mk #[1, 2, 3, 4])
 
