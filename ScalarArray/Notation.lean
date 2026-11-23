@@ -17,8 +17,9 @@ statements are parsed only in a block, the terms of the expansion aren't terms t
 and `inplace_bound`, the tactic that proves the bounds of indices, isn't a keyword.
 
 `inplace a do …` writes an in-place program (`XArray.InPlace`) on the array `a` in a small
-imperative language, and runs it, which returns the program's result and the new array, or hands
-them to a continuation `then k`. It works for all 13 array types, and for their slices (see
+imperative language, and runs it. Its value is that of the program's `return`, where `a` is the
+new array, or the new array if the program doesn't return; a continuation `then k` gets the result
+and the new array instead. It works for all 13 array types, and for their slices (see
 [Slices](#slices)):
 
 ```
@@ -32,7 +33,7 @@ inplace a do
     a[ts + j] := d
     c := c'
     b := b'
-  return (c, b)
+  return (a, c, b)
 ```
 
 ## Statements
@@ -80,18 +81,31 @@ inplace a do
   steps at the most.
 * `break` leaves the innermost loop, and its variables keep their current values after it.
   `continue` goes on with the loop's next step.
-* `return e` ends the program with the result `e`, anywhere, even in a loop, and `return` with
-  `()`. Without it, the result is `()`. Nothing in a block can follow a `return`, a `break` or a
-  `continue`.
+* `return e` ends the program with the result `e`, anywhere, even in a loop, where `a` in `e` is
+  the array as the program leaves it, as in `return (a, c)`. `return`, and the end of the program,
+  return the array `a` (with `then k`, `()`). Nothing in a block can follow a `return`, a `break`
+  or a `continue`.
 
 A loop body can assign only its own variables: to update a variable across a loop, carry it, as
 `with (c := c)`.
 
 ## Results
 
-`inplace a do …` returns the pair of the program's result and the new array. With `then k` after
-the statements, it is `k x a' h` instead, for the result `x`, the new array `a'` and
-`h : a'.size = a.size`:
+The value of `inplace a do …` is that of the program's `return`, where `a` is the new array. A
+program that doesn't return gives the new array, so there are no pairs to take apart:
+
+```
+def double (a : UInt32Array) : UInt32Array :=
+  inplace a do
+    for j in 0...a.usize do
+      a[j] := 2 * a[j]
+```
+
+`return s` returns `s` alone, and `return (a, s)` or `return (s, a)` both, in either order. Mutable
+and loop variables are returned only if a `return` names them.
+
+With `then k` after the statements, it is `k x a' h` instead, for the result `x`, the new array
+`a'` and `h : a'.size = a.size`, where `x` is `()` if the program doesn't return:
 
 ```
 inplace a do
@@ -102,22 +116,24 @@ then fun (c, b) a' h => g c b a' h
 ```
 
 The program calls `k` where it ends, inside its last loop if it ends with one, so the result goes
-into no pair, and scalars such as the carries above reach `k` unboxed. `h` lets `k` run another
-program on `a'` with the bounds proved for `a`.
+into no pair, and scalars such as the carries above reach `k` unboxed. Without `then`, a scalar
+result such as `return c` isn't boxed either, but a tuple such as `return (a, c, b)` is built. `h`
+lets `k` run another program on `a'` with the bounds proved for `a`.
 
 ## Slices
 
 On a slice `s` of an array (an `XArray.Slice`), `inplace s do …` reads and writes the slice's
 elements, at indices counted from the start of the slice, with bounds `i.toNat < s.size`, and
 `s.usize` is its size as a `USize`. The program runs on the slice's array in place, with
-`XArray.Slice.runInPlaceThenOf`, and returns the new slice, on the new array; with `then k`, `k`
-gets the new slice and `h : s'.size = s.size`. `let x ← m` works on arrays only.
+`XArray.Slice.runInPlaceThenOf`, and `s` in a `return`, or the result of a program that doesn't
+return, is the new slice, on the new array; with `then k`, `k` gets the new slice and
+`h : s'.size = s.size`. `let x ← m` works on arrays only.
 
 ```
 def double (s : UInt32Array.Slice) : UInt32Array.Slice :=
-  (inplace s do
+  inplace s do
     for j in 0...s.usize do
-      s[j] := 2 * s[j]).2
+      s[j] := 2 * s[j]
 ```
 
 The program reads and writes the array at `off + i`, where `off` is the slice's start as a `USize`.
@@ -148,17 +164,17 @@ The program expands to a tail program (`XArray.InPlace.Tail`) on arrays of size 
 `a.runInPlaceThenOf n h`, where `n` and `a.usize` are bound to variables before the program runs,
 and the program uses them in place of `a.size` and `a.usize`. So nothing in the compiled program
 refers to `a`, which the compiler would otherwise keep alive past the point where the program makes
-the array exclusive, and the array would be copied. The program ends with `Tail.done x k`, where `k`
-is the `then` continuation or makes the pair. Its statements expand to the tail programs `readThen`,
-`writeThen`, `ite`, `dite` and the loops `Tail.forIn`, `Tail.forIn2`, … and `Tail.forInRev`, …, in
-continuation-passing style: a loop body ends by calling `next` on the loop's variables, which runs
-the next step, and the loop ends by calling the rest of the program, so the variables are arguments
-of both and stay unboxed. `continue` calls `next`, and `break` calls the rest of the program, which
-a loop that `break`s binds to a local function. A nested loop ends by calling the outer loop's
-`next`, so the two compile to mutually recursive loops with no allocation, and the program compiles
-to the same loops as a hand-written one. The rest of the program after an `if` becomes a local
-function of the mutable variables, which the compiler turns into a join point: an `if` in a loop
-allocates nothing.
+the array exclusive, and the array would be copied. The program ends with `Tail.done () k`, where
+`k` gets the new array and computes the result, and calls the `then` continuation on it if there is
+one. Its statements expand to the tail programs `readThen`, `writeThen`, `ite`, `dite` and the loops
+`Tail.forIn`, `Tail.forIn2`, … and `Tail.forInRev`, …, in continuation-passing style: a loop body
+ends by calling `next` on the loop's variables, which runs the next step, and the loop ends by
+calling the rest of the program, so the variables are arguments of both and stay unboxed. `continue`
+calls `next`, and `break` calls the rest of the program, which a loop that `break`s binds to a local
+function. A nested loop ends by calling the outer loop's `next`, so the two compile to mutually
+recursive loops with no allocation, and the program compiles to the same loops as a hand-written
+one. The rest of the program after an `if` becomes a local function of the mutable variables, which
+the compiler turns into a join point: an `if` in a loop allocates nothing.
 
 ## Bounds
 
@@ -182,12 +198,12 @@ prove is reported with its goal. For example, in this left shift of 64-bit limbs
 
 ```
 if h : 18 ≤ a.size then
-  (inplace a do
+  inplace a do
     for j in reverse 18...a.usize do
       a[j] := (a[j - 17] <<< 23) ||| (a[j - 18] >>> 41)
     a[17] := a[0] <<< 23
     for j in 0...17 do
-      a[j] := 0).2
+      a[j] := 0
 else UInt64Array.mk (Array.replicate a.size 0)
 ```
 
@@ -196,10 +212,10 @@ else UInt64Array.mk (Array.replicate a.size 0)
 * `a` is a local variable: the program's array or slice. `b[i] := e` on another array `b` is an
   error, while `b[i]` in a term is ordinary indexing of `b`, with its own bound.
 * Inside the program, `a` is the array before the program runs, so it is an error outside of the
-  reads `a[i]` and its size `a.size` or `a.usize`: `a[i]!`, `a[i]'h` or `a.toArray` would read old
-  elements, and keep the old array alive, which copies it. A `have` and the proofs in `by` blocks
-  may use `a`, and so may `then k`, which runs after the program, but `k` keeps the old array alive
-  if it uses more than its size.
+  reads `a[i]`, its size `a.size` or `a.usize`, and the value of a `return`, where it is the new
+  array: `a[i]!`, `a[i]'h` or `a.toArray` would read old elements, and keep the old array alive,
+  which copies it. A `have` and the proofs in `by` blocks may use `a`, and so may `then k`, which
+  runs after the program, but `k` keeps the old array alive if it uses more than its size.
 * Reads are written `a[i]`, not `← a[i]`: `←` runs a program.
 * A loop has at most eight variables.
 * A block has at least one statement.
@@ -420,7 +436,10 @@ syntax (name := inplaceContinue) "continue" : inplaceStmt
 syntax inplaceMatchAlt := ppDedent(ppLine) "| " sepBy1(term, ", ") " => " inplaceSeq
 /-- `match e with | p => … | q => …` runs the block of the first pattern that `e` matches. -/
 syntax (name := inplaceMatch) "match " sepBy1(term, ", ") " with" (inplaceMatchAlt)+ : inplaceStmt
-/-- `return e` ends the program with the result `e`, and `return` with `()`. -/
+/--
+`return e` ends the program with the result `e`, where `a` is the array as the program leaves it,
+and `return` returns the array (`()` with `then k`).
+-/
 syntax "return" (ppSpace colGt term)? : inplaceStmt
 /-- `x += e` isn't a statement of an `inplace` program: this reports it, with what to write. -/
 syntax (name := inplaceAddEq) (priority := low) term:max " +" noWs "= " term : inplaceStmt
@@ -435,9 +454,10 @@ it, with the statements that are, rather than a parse error.
 syntax (name := inplaceApp) (priority := low) ident (ppSpace colGt term:max)+ : inplaceStmt
 
 /--
-`inplace a do …` is the in-place program on `a` that the statements describe, run on `a`: it
-returns the program's result and the new array, or, with `then k`, `k` on them and the new array's
-size. See the module documentation of `ScalarArray.Notation`.
+`inplace a do …` is the in-place program on `a` that the statements describe, run on `a`: it gives
+the value of the program's `return`, where `a` is the new array, or the new array if the program
+doesn't return, or, with `then k`, `k` on the result, the new array and its size. See the module
+documentation of `ScalarArray.Notation`.
 -/
 syntax (name := inplaceTerm) "inplace " termBeforeDo " do" inplaceSeq
   (ppDedent(ppLine) "then " term)? : term
@@ -501,6 +521,37 @@ private structure Arr where
   `off + i`.
   -/
   window : Option (Ident × Ident) := none
+  /-- The variable that `arr` stands for in a `return`: the array as the program leaves it. -/
+  res : Ident := arr
+  /--
+  Whether the program has a continuation `then k`. Without one, a bare `return`, and the end of
+  the program, return the array; with one, they return `()`.
+  -/
+  hasThen : Bool := false
+
+/--
+Replaces `a` in the value of a `return` by `p.res`, the array as the program leaves it, leaving
+reads `a[i]` and `a.size`, `a.usize` as they are.
+-/
+private partial def replaceResult (p : Arr) (stx : Syntax) : MacroM Syntax := do
+  let a := p.arr.getId
+  match stx with
+  | .ident _ _ id _ =>
+    if id == a then return p.res
+    -- `a.f.g`, which is one identifier, is `res.f.g`.
+    if a.isAtomic && id.getRoot == a && !(id == a ++ `size || id == a ++ `usize) then
+      let fields := id.componentsRev.reverse.drop 1
+      let mut t : Term := p.res
+      for f in fields do
+        t ← `($t.$(mkIdent f):ident)
+      return t
+    return stx
+  | .node info kind args =>
+    if let `($b:ident[$_]) := stx then
+      if b.getId == a then return stx
+    if kind == ``inplaceSeq || kind == ``Lean.Parser.Term.byTactic then return stx
+    return .node info kind (← args.mapM (replaceResult p))
+  | _ => return stx
 
 /-- Checks that a read or a write is on the program's array. -/
 private def checkArray (arr a : Ident) : MacroM Unit :=
@@ -526,7 +577,7 @@ private partial def replaceArray (p : Arr) (strict : Bool) (stx : Syntax) : Macr
     if strict && (id == a || id.getRoot == a && a.isAtomic) then
       Macro.throwErrorAt stx s!"inside `inplace {a} do`, `{a}` is the array before the program \
         runs: read its current elements with `{a}[i]`, at a `USize` index `i`, and its size with \
-        `{a}.size` or `{a}.usize`"
+        `{a}.size` or `{a}.usize`, and return the new array with `return {a}`"
     return stx
   | .node info kind args =>
     -- Nested blocks are statements of their own, and proofs run nothing.
@@ -835,9 +886,11 @@ private partial def expandSeq (p : Arr) (ending : Term → MacroM Term) (mvars :
           `continue`"
     match s with
     | `(inplaceStmt| return $[$_]?) =>
-      lifting p s fun s => do
+      lifting p ⟨← replaceResult p s⟩ fun s => do
         let `(inplaceStmt| return $[$e]?) := s | Macro.throwUnsupported
-        ending (← match e with | some e => pure e | none => `(()))
+        ending (← match e with
+          | some e => pure e
+          | none => if p.hasThen then `(()) else pure p.res)
     | `(inplaceStmt| break) =>
       let some l := loop | Macro.throwError "`break` is only allowed in a loop"
       pure l.brk
@@ -1099,9 +1152,11 @@ macro_rules
     let hw := Lean.mkIdent (← Lean.Macro.addMacroScope `hw)
     let mk := Lean.mkIdent (← Lean.Macro.addMacroScope `mk)
     let hmk := Lean.mkIdent (← Lean.Macro.addMacroScope `hmk)
+    let resId := Lean.mkIdent (← Lean.Macro.addMacroScope `res)
+    let p := { p with res := resId, hasThen := k.isSome }
     let ps : Arr := { p with window := some (off, hw) }
     -- The program is a tail program, which ends by handing its result and the new array to `k`,
-    -- or by returning them as a pair.
+    -- or by returning its result, where `res` is the new array.
     let ending (slice : Bool) (e : Lean.Term) : Lean.MacroM Lean.Term := do
       let (res, hres) ← if slice then
           pure (← `($mk a' h), ← `(($hmk a' h).trans (Eq.symm $p.hsize)))
@@ -1109,13 +1164,15 @@ macro_rules
       match k with
       | some k =>
         let k : Lean.Term := ⟨← replaceArray p false k⟩
-        `(.done $e fun x a' h =>
-          ($k : _ → (a'' : type_of% $a) → a''.size = ($a).size → _) x $res $hres)
+        `(.done () fun _ a' h => let $resId := $res
+          ($k : _ → (a'' : type_of% $a) → a''.size = ($a).size → _) $e $resId $hres)
       | none =>
-        if slice then `(.done $e fun x a' h => (x, $res)) else `(.done $e fun x a' _ => (x, $res))
+        `(.done () fun _ a' h => let $resId := $res; $e)
     let stmts := stmts.getElems.toList
-    let prog ← expandSeq p (ending false) #[] none (← ending false (← `(()))) stmts
-    let progS ← expandSeq ps (ending true) #[] none (← ending true (← `(()))) stmts
+    -- Without `then`, a program that doesn't `return` returns the array; with `then k`, `()`.
+    let dflt ← if k.isSome then `(()) else pure resId
+    let prog ← expandSeq p (ending false) #[] none (← ending false dflt) stmts
+    let progS ← expandSeq ps (ending true) #[] none (← ending true dflt) stmts
     -- They are bound by a function application, not by `let`, which fails to elaborate when the
     -- program has metavariables left for later, such as the types of loop variables.
     -- `usize = a.usize` is in context too, so that hypotheses about `a.usize` around the program

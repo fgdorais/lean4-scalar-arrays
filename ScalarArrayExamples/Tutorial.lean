@@ -96,7 +96,8 @@ of its own here, and `toUInt32Array` collects the result into a new array.
 
 `ScalarArray.Notation`, which has to be imported on its own, adds `inplace a do …` for loops that
 read and write `a` in place. Its index bounds are proved by the `inplace_bound` tactic from the
-facts in context, here `h`. The program returns its result with the new array.
+facts in context, here `h`. The value of the program is that of its `return`, where `a` is the
+new array, here `(s, a)`, or the new array if it doesn't return.
 -/
 
 /-- Doubles the first `n` elements, and returns their old sum. -/
@@ -106,7 +107,7 @@ def doubleFirst (a : UInt32Array) (n : USize) (h : n.toNat ≤ a.size) : UInt32 
       let x := a[j]
       s := s + x
       a[j] := 2 * x
-    return s
+    return (s, a)
 
 #guard doubleFirst (.mk #[0, 1, 4, 9, 16]) 3 (by simp) == (5, UInt32Array.mk #[0, 2, 8, 9, 16])
 
@@ -130,9 +131,9 @@ the same updates one index at a time. Then the lemmas about `modifyAt` give the 
 
 /-- Doubles the first `n` elements. -/
 def double (a : UInt32Array) (n : USize) (h : n.toNat ≤ a.size) : UInt32Array :=
-  (inplace a do
+  inplace a do
     for j in 0...n do
-      a[j] := 2 * a[j]).2
+      a[j] := 2 * a[j]
 
 #guard double (.mk #[0, 1, 4, 9, 16]) 3 (by simp) == UInt32Array.mk #[0, 2, 8, 9, 16]
 

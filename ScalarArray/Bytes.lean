@@ -100,9 +100,9 @@ private unsafe def copyBytes (elemSize : UInt32) (a : @& Raw) (off len : USize) 
 namespace UInt16Array
 
 private def byteSwapImpl (a : UInt16Array) : UInt16Array :=
-  (inplace a do
+  inplace a do
     for i in 0...a.usize do
-      a[i] := a[i].byteSwap).2
+      a[i] := a[i].byteSwap
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
@@ -413,9 +413,9 @@ end UInt16Array
 namespace UInt32Array
 
 private def byteSwapImpl (a : UInt32Array) : UInt32Array :=
-  (inplace a do
+  inplace a do
     for i in 0...a.usize do
-      a[i] := a[i].byteSwap).2
+      a[i] := a[i].byteSwap
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
@@ -742,9 +742,9 @@ end UInt32Array
 namespace UInt64Array
 
 private def byteSwapImpl (a : UInt64Array) : UInt64Array :=
-  (inplace a do
+  inplace a do
     for i in 0...a.usize do
-      a[i] := a[i].byteSwap).2
+      a[i] := a[i].byteSwap
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
@@ -1103,9 +1103,9 @@ end UInt64Array
 namespace Int16Array
 
 private def byteSwapImpl (a : Int16Array) : Int16Array :=
-  (inplace a do
+  inplace a do
     for i in 0...a.usize do
-      a[i] := a[i].byteSwap).2
+      a[i] := a[i].byteSwap
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
@@ -1420,9 +1420,9 @@ end Int16Array
 namespace Int32Array
 
 private def byteSwapImpl (a : Int32Array) : Int32Array :=
-  (inplace a do
+  inplace a do
     for i in 0...a.usize do
-      a[i] := a[i].byteSwap).2
+      a[i] := a[i].byteSwap
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]
@@ -1753,9 +1753,9 @@ end Int32Array
 namespace Int64Array
 
 private def byteSwapImpl (a : Int64Array) : Int64Array :=
-  (inplace a do
+  inplace a do
     for i in 0...a.usize do
-      a[i] := a[i].byteSwap).2
+      a[i] := a[i].byteSwap
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]

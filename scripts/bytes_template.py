@@ -150,9 +150,9 @@ def section(name, elem, u, n, to_u, of_u, swap):
     if swap:
         out.append(f'''
 private def byteSwapImpl (a : {A}) : {A} :=
-  (inplace a do
+  inplace a do
     for i in 0...a.usize do
-      a[i] := a[i].byteSwap).2
+      a[i] := a[i].byteSwap
 
 /-- Reverses the order of the bytes of each element, in place when `a` is not shared. -/
 @[implemented_by byteSwapImpl, expose]

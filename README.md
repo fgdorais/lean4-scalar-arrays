@@ -103,7 +103,7 @@ Every type `XArray` with element type `X` has the same API, which follows core's
 | Slice writes | `Slice.set`, `set!`, `modify`, `swap`, `reverse`, `foldlInPlace`, `foldrInPlace`, `foldlInPlaceThen`, `foldrInPlaceThen`, which write into the slice's array; `s.array` gives the whole array back |
 | In-place folds | `Slice.foldlInPlace`, `Slice.foldrInPlace` and their `Then` forms; `foldlInPlace2` and `foldlInPlace2Then`, which write one window of an array from two others; `foldlInPlaceRange`, `foldrInPlaceRange` and their `Then` forms, the slice folds over `USize` bounds; `foldlInPlaceRangeWith2Acc` and its `Then` form, with two accumulators that stay unboxed |
 | In-place programs | `XArray.InPlace n α`, a monad of programs that read and write an array of size `n` in place: `InPlace.read`, `readThen`, `write`, `InPlace.ite`, `InPlace.dite`; the loops `forIn lo hi` and `forInRev lo hi` (from `hi - 1` down to `lo`), whose bodies get both `lo ≤ j` and `j < hi`, `forIn2` and `forInRev2` with two unboxed accumulators, and their `Bind` forms (`forInBind`, …), which run straight into the rest of the program; run with `a.runInPlace m` or `m.run a h`, or a single loop with `runForInThen`, `runForInRevThen` and `runForIn2Then`. Tail programs `InPlace.Tail n γ` end by handing their result and the new array to a continuation, without a result pair: `Tail.bind`, `readThen`, `writeThen`, `Tail.ite`, `Tail.dite`, the `Bind` loops and `Tail.done x k`, and loops in continuation-passing style `Tail.forIn`, `Tail.forInRev` and their forms with two to eight variables (`Tail.forIn2`, … `Tail.forIn8`), whose body ends by calling `next`, so that nested loops allocate nothing; run with `a.runInPlaceThen t`, or on a slice's window with `s.runInPlaceThenOf n h t`. For kernels that no fold shape covers, such as a butterfly that writes two windows with two carries |
-| `inplace` notation | In `ScalarArray.Notation`: `inplace a do …`, an in-place program on an array or a slice `a` written with reads `let x := a[i]` (or `a[i]` in any term), writes `a[i] := e`, `let`, `let mut` and `x := e`, `have`, `if … then … else …` and `if let`, loops `for j in lo...hi with (x := init) … do …` with up to eight unboxed variables and `for j in reverse lo...hi …`, with `for h : j in …` naming the bounds of `j`, and `return e`, and an optional `then k` that hands the result and the new array to `k` with no result pair; it compiles to the same loops as hand-written programs, and the tactic `inplace_bound` proves the index bounds, including `USize` arithmetic such as `j - 17` |
+| `inplace` notation | In `ScalarArray.Notation`: `inplace a do …`, an in-place program on an array or a slice `a` written with reads `let x := a[i]` (or `a[i]` in any term), writes `a[i] := e`, `let`, `let mut` and `x := e`, `have`, `if … then … else …` and `if let`, loops `for j in lo...hi with (x := init) … do …` with up to eight unboxed variables and `for j in reverse lo...hi …`, with `for h : j in …` naming the bounds of `j`, and `return e`, which returns `e` with `a` as the new array (a program that doesn't return returns the new array), and an optional `then k` that hands the result and the new array to `k` with no tuple; it compiles to the same loops as hand-written programs, and the tactic `inplace_bound` proves the index bounds, including `USize` arithmetic such as `j - 17` |
 | Loop specifications | `modifyAt idx lo hi g`, which writes `g i a[idx i]` at the index `idx i` for each step `i` of a range, the model of a loop over a map of indices, with `getElem_modifyAt_idx` and `getElem_modifyAt_of_forall_ne`; `ScalarArray.Stride`, the strides `off + inc * i`, with `Stride.Fits` and `toNat_idx_toUSize` for their `USize` indices; `ScalarArray.iterRange` and `iterRangeRev`, the models of loops up and down, with `iterRange_prod_of_snd` for a loop that only reads; whole-loop lemmas for tail programs, `Tail.run_forInFrom` and `Tail.run_forInRevFrom` for a loop whose step maps its variable and the array, `_unit` for a loop with no variable, such as a loop of loops, and `_modify` and `_write` for the loops `for j in lo...hi do a[e j] := …` of the `inplace` notation; `modifyAt2` and `zipModifyAt`, two updates at a time on two index maps of one array or on two arrays, with `modifyAt2_eq` and `zipModifyAt_eq`, and `Stride.idx_ne_idx_of_same_inc` and `idx_ne_idx_of_lt_off` for strides that never meet |
 | Strided loops | `modifyStride`, `modifyStride2` and `zipModifyStride`, loops that run `modifyAt`, `modifyAt2` and `zipModifyAt` on strides, such as a BLAS `scal` or a plane rotation (`drot`) of two vectors or of two rows of a matrix, with one exclusivity check per array |
 | Iterators    | `a.iter` and `s.iter` for the `Std.Iterators` API, `Std.Iter.toXArray` and `Std.Iter.toXArrayWithCapacity` to collect an iterator into an array, and `Std.Iter.toXSlice` for the rest of a slice iterator as a slice, whose `start` is its position |
@@ -177,7 +177,7 @@ open ScalarArray
 
 def addSub (a : UInt64Array) (x y t len : USize) (hx : x.toNat + len.toNat ≤ a.size)
     (hy : y.toNat + len.toNat ≤ a.size) (ht : t.toNat + len.toNat ≤ a.size) :
-    (UInt64 × UInt64) × UInt64Array :=
+    UInt64Array × UInt64 × UInt64 :=
   inplace a do
     for j in 0...len with (c := 0) (b := 0) do
       let u := a[x + j]
@@ -188,15 +188,16 @@ def addSub (a : UInt64Array) (x y t len : USize) (hx : x.toNat + len.toNat ≤ a
       a[t + j] := d
       c := if s < u || (s == u && c == 1) then 1 else 0
       b := if u < v || (u == v && b == 1) then 1 else 0
-    return (c, b)
+    return (a, c, b)
 ```
 
 The index bounds are proved by the tactic `inplace_bound`, here from the window hypotheses.
 
-The result is a pair of the program's result and the new array. A program can instead end with
-`then k`, which hands them to `k`, with the new array's size, where the loop ends: no pair is
-built, and the carries reach `k` unboxed. With `return (c, b)` above,
-`then fun (c, b) a' h => g c b a' h` calls `g` with `h : a'.size = a.size`.
+The result is what the program returns, where `a` in a `return` is the new array, and a program
+that doesn't return returns the new array. A program can instead end with `then k`, which hands
+its result to `k`, with the new array and its size, where the loop ends: no tuple is built, and
+the carries reach `k` unboxed. With `return (c, b)` above, `then fun (c, b) a' h => g c b a' h`
+calls `g` with `h : a'.size = a.size`.
 
 The whole-loop lemmas of `InPlace.Tail` prove what such a loop does. Here a loop doubles the
 elements at the first `n` steps of a stride `s`, such as a column of a matrix, and
@@ -207,10 +208,10 @@ def double (a : Float64Array) (s : Stride) (n : USize) (h : s.Fits n.toNat a.siz
     (hs : a.size < USize.size) : Float64Array :=
   let o := s.off.toUSize
   let c := s.inc.toUSize
-  (inplace a do
+  inplace a do
     for k in 0...n do
       have hk : (o + c * k).toNat < a.size := s.toNat_idx_toUSize_lt h hs (by assumption)
-      a[o + c * k] := 2 * a[o + c * k]).2
+      a[o + c * k] := 2 * a[o + c * k]
 
 theorem double_eq (a : Float64Array) (s : Stride) (n : USize) (h : s.Fits n.toNat a.size)
     (hs : a.size < USize.size) :
