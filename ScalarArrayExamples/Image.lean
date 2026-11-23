@@ -61,7 +61,7 @@ def brighten (d : UInt8) (img : Image) : Image :=
   { img with pixels := (inplace img.pixels do
       for j in 0...img.pixels.usize do
         let x := img.pixels[j]
-        img.pixels[j] := if x > 255 - d then 255 else x + d).2 }
+        img.pixels[j] := if x > 255 - d then 255 else x + d) }
 
 #guard (brighten 50 test).rows.head! == [50, 130, 210, 255]
 
@@ -128,12 +128,12 @@ are in `UInt16`, so that nothing overflows. The hypothesis `h` proves the bounds
 `s[1]`, and the loop range those of `s[j]` and `s[j - 1]`.
 -/
 def blurRow (s : UInt8Array.Slice) (h : 2 ≤ s.size) : UInt8Array.Slice :=
-  (inplace s do
+  inplace s do
     for j in 2...s.usize with (l := s[0]) (m := s[1]) do
       let r := s[j]
       s[j - 1] := ((l.toUInt16 + m.toUInt16 + r.toUInt16) / 3).toUInt8
       l := m
-      m := r).2
+      m := r
 
 /-- Blurs every row of the image. -/
 def blur (img : Image) : Image := Id.run do

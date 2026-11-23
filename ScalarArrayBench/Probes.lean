@@ -229,13 +229,12 @@ public instance : Limbs UInt64Array where
 /-- An `inplace` loop over the whole array. -/
 @[noinline] public def inplaceForW (a : UInt64Array) (w : UInt64) : UInt64Array × UInt64 :=
   have := a.toNat_usize_le
-  let r := inplace a do
+  inplace a do
     for j in 0...a.usize with (c := (0 : UInt64)) do
       let p := mulStep w a[j] c
       a[j] := p.1
       c := p.2
-    return c
-  (r.2, r.1)
+    return (a, c)
 
 /-- An `inplace` loop handing its result to `then`. -/
 @[noinline] public def inplaceThenW (a : UInt64Array) (w : UInt64) : UInt64Array × UInt64 :=
@@ -251,13 +250,12 @@ public instance : Limbs UInt64Array where
 /-- An `inplace` loop that stops at the first element equal to `w`. -/
 @[noinline] public def inplaceBreakW (a : UInt64Array) (w : UInt64) : UInt64Array × UInt64 :=
   have := a.toNat_usize_le
-  let r := inplace a do
+  inplace a do
     for j in 0...a.usize with (k := (0 : UInt64)) do
       if a[j] = w then break
       a[j] := a[j] + 1
       k := k + 1
-    return k
-  (r.2, r.1)
+    return (a, k)
 
 /-- Nested `inplace` loops over rows of 4. -/
 @[noinline] public def inplaceNestedW (a : UInt64Array) (w : UInt64) : UInt64Array × UInt64 :=
@@ -266,7 +264,7 @@ public instance : Limbs UInt64Array where
   have : 4 * rows.toNat ≤ a.size ∧ 4 * rows.toNat < USize.size := by
     have := USize.toNat_lt_size a.usize
     simp only [rows, USize.toNat_div]; lia
-  let r := inplace a do
+  inplace a do
     for r in 0...rows with (tot := w) do
       for c in 0...4 with (acc := (0 : UInt64)) (t := tot) do
         have hc : (4 * r + c).toNat < a.size := by inplace_bound
@@ -275,8 +273,7 @@ public instance : Limbs UInt64Array where
         a[4 * r + c] := acc
         t := t + x
       tot := t
-    return tot
-  (r.2, r.1)
+    return (a, tot)
 
 /-- An `inplace` loop on a slice of all but the first element. -/
 @[noinline] public def inplaceSliceW (a : UInt64Array) (w : UInt64) : UInt64Array × UInt64 :=
@@ -285,7 +282,7 @@ public instance : Limbs UInt64Array where
   let r := inplace s do
     for j in 0...s.usize do
       s[j] := s[j] * w
-  (r.2.array, 0)
+  (r.array, 0)
 
 /-! ## Strides and two-array loops -/
 
